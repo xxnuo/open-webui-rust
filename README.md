@@ -26,7 +26,7 @@ Rust 后端是 Python 后端的直接替代品, 有这些好处:
    4. 赞助¥501-¥2000更新10个文件，添加赞助者至项目共建列表带指定链接和指定图片，例如：<br/>
    <a href="https://knox.chat" target="_blank" rel="noopener noreferrer">
     <img width="80" src="./img/logo99.png" alt="名称">
-  </a>
+  </a><br/>
    5. 赞助¥10,000直接更新所有文件并列入项目合伙人，添加赞助者至项目共建列表带指定链接和指定图片并提供使用和部署支持。
 
 - **赞助者请直接通过以下二维码进行支付宝扫码赞助并微信联系：knoxsale**
