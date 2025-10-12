@@ -2,6 +2,10 @@
 
 Open WebUI Rust后端,比原 Python 后端性能更优、可靠性和可扩展性。
 
+<video width="600" controls controlslist="nodownload" style="max-width: 100%; height: auto;" allowfullscreen>
+  <source src="./img/preview.mp4" type="video/mp4">
+</video>
+
 ## 概述
 
 Rust 后端是 Python 后端的直接替代品, 有这些好处:
