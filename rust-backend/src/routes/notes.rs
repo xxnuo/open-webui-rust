@@ -4,7 +4,7 @@ use serde::Deserialize;
 use crate::{
     error::{AppError, AppResult},
     middleware::{AuthMiddleware, AuthUser},
-    models::note::{NoteForm, NoteModel, NoteTitleIdResponse, NoteUserResponse},
+    models::note::{NoteForm, NoteModel, NoteTitleIdResponse, NoteUpdateForm, NoteUserResponse},
     services::{group::GroupService, note::NoteService, user::UserService},
     utils::misc::{has_access, has_permission},
     AppState,
@@ -219,7 +219,6 @@ async fn get_note_by_id(
     drop(config);
 
     let note_service = NoteService::new(&state.db);
-    let user_service = UserService::new(&state.db);
     let mut note = note_service
         .get_note_by_id(&note_id)
         .await?
@@ -248,19 +247,7 @@ async fn get_note_by_id(
         }
     }
 
-    // Get user information
-    let user = user_service.get_user_by_id(&note.user_id).await?;
-    let user_json = user.map(|u| {
-        serde_json::json!({
-            "id": u.id,
-            "name": u.name,
-            "email": u.email,
-            "role": u.role,
-            "profile_image_url": u.profile_image_url
-        })
-    });
-
-    Ok(HttpResponse::Ok().json(NoteUserResponse::from_note_and_user(note, user_json)))
+    Ok(HttpResponse::Ok().json(NoteModel::from(note)))
 }
 
 /// POST /{id}/update - Update note by ID
@@ -268,7 +255,7 @@ async fn update_note_by_id(
     state: web::Data<AppState>,
     auth_user: AuthUser,
     path: web::Path<String>,
-    mut form_data: web::Json<NoteForm>,
+    mut form_data: web::Json<NoteUpdateForm>,
 ) -> AppResult<HttpResponse> {
     let note_id = path.into_inner();
 
