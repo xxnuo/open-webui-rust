@@ -80,3 +80,12 @@ impl From<Channel> for ChannelResponse {
         }
     }
 }
+
+// Channel Member structures
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct ChannelMember {
+    pub id: String,
+    pub channel_id: String,
+    pub user_id: String,
+    pub created_at: i64,
+}

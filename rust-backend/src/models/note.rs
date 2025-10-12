@@ -47,6 +47,18 @@ pub struct NoteForm {
     pub access_control: Option<serde_json::Value>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct NoteUpdateForm {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub meta: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub access_control: Option<serde_json::Value>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct NoteModel {
     pub id: String,
