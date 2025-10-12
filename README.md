@@ -2,9 +2,7 @@
 
 Open WebUI Rust后端,比原 Python 后端性能更优、可靠性和可扩展性。
 
-<p align="center">
-   <img width="800" src="./img/preview.gif" alt="名称">
-</p>
+https://github.com/user-attachments/assets/d1bf00a3-1838-4658-84da-d8bfc84a9ec3
 
 ## 概述
 
