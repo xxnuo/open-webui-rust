@@ -2,9 +2,9 @@
 
 Open WebUI Rust后端,比原 Python 后端性能更优、可靠性和可扩展性。
 
-<video width="600" controls controlslist="nodownload" style="max-width: 100%; height: auto;" allowfullscreen>
-  <source src="./img/preview.mp4" type="video/mp4">
-</video>
+<p align="center">
+   <img width="800" src="./img/preview.gif" alt="名称">
+</p>
 
 ## 概述
 
@@ -30,12 +30,12 @@ Rust 后端是 Python 后端的直接替代品, 有这些好处:
    4. 赞助¥501-¥2000更新10个文件，添加赞助者至项目共建列表带指定链接和指定图片，例如：<br/>
    <a href="https://knox.chat" target="_blank" rel="noopener noreferrer">
     <img width="80" src="./img/logo99.png" alt="名称">
-  </a><br/>
+   </a><br/>
    5. 赞助¥10,000直接更新所有文件并列入项目合伙人，添加赞助者至项目共建列表带指定链接和指定图片并提供使用和部署支持。
 
 - **赞助者请直接通过以下二维码进行支付宝扫码赞助并微信联系：knoxsale**
 <p align="center">
-    <img width="200" src="./img/ali.png" alt="名称">
+   <img width="200" src="./img/ali.png" alt="名称">
 </p>
 
 ## 赞助者列表
