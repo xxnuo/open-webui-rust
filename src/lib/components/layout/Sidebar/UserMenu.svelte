@@ -1,10 +1,8 @@
 <script lang="ts">
 	import { DropdownMenu } from 'bits-ui';
-	import { createEventDispatcher, getContext, onMount, tick } from 'svelte';
+	import { createEventDispatcher, getContext, tick } from 'svelte';
 
-	import { flyAndScale } from '$lib/utils/transitions';
-	import { goto } from '$app/navigation';
-	import { fade, slide } from 'svelte/transition';
+	import { fade } from 'svelte/transition';
 
 	import { getUsage } from '$lib/apis';
 	import { userSignOut } from '$lib/apis/auths';
@@ -13,8 +11,6 @@
 
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import ArchiveBox from '$lib/components/icons/ArchiveBox.svelte';
-	import QuestionMarkCircle from '$lib/components/icons/QuestionMarkCircle.svelte';
-	import Map from '$lib/components/icons/Map.svelte';
 	import Keyboard from '$lib/components/icons/Keyboard.svelte';
 	import ShortcutsModal from '$lib/components/chat/ShortcutsModal.svelte';
 	import Settings from '$lib/components/icons/Settings.svelte';
@@ -148,39 +144,6 @@
 
 			{#if help}
 				<hr class=" border-gray-50 dark:border-gray-800 my-1 p-0" />
-
-				<!-- {$i18n.t('Help')} -->
-
-				{#if $user?.role === 'admin'}
-					<DropdownMenu.Item
-						as="a"
-						target="_blank"
-						class="flex gap-2 items-center py-1.5 px-3 text-sm select-none w-full cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl transition"
-						id="chat-share-button"
-						on:click={() => {
-							show = false;
-						}}
-						href="https://docs.openwebui.com"
-					>
-						<QuestionMarkCircle className="size-5" />
-						<div class="flex items-center">{$i18n.t('Documentation')}</div>
-					</DropdownMenu.Item>
-
-					<!-- Releases -->
-					<DropdownMenu.Item
-						as="a"
-						target="_blank"
-						class="flex gap-2 items-center py-1.5 px-3 text-sm select-none w-full cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl transition"
-						id="chat-share-button"
-						on:click={() => {
-							show = false;
-						}}
-						href="https://github.com/open-webui/open-webui/releases"
-					>
-						<Map className="size-5" />
-						<div class="flex items-center">{$i18n.t('Releases')}</div>
-					</DropdownMenu.Item>
-				{/if}
 
 				<DropdownMenu.Item
 					class="flex gap-2 items-center py-1.5 px-3 text-sm select-none w-full  hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl transition cursor-pointer"

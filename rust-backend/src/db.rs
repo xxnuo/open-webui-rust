@@ -12,6 +12,9 @@ pub struct Database {
 
 impl Database {
     pub async fn new(database_url: &str) -> anyhow::Result<Self> {
+        // First, ensure the database exists
+        Self::ensure_database_exists(database_url).await?;
+
         let connect_options = PgConnectOptions::from_str(database_url)?;
 
         let pool = PgPoolOptions::new()
@@ -26,36 +29,96 @@ impl Database {
         Ok(Database { pool })
     }
 
+    async fn ensure_database_exists(database_url: &str) -> anyhow::Result<()> {
+        // Parse the database URL to extract database name and connection info
+        let parsed_url = url::Url::parse(database_url)?;
+        let db_name = parsed_url.path().trim_start_matches('/');
+        
+        if db_name.is_empty() {
+            return Err(anyhow::anyhow!("Database name not specified in DATABASE_URL"));
+        }
+
+        // Create connection URL to postgres database (default database)
+        let mut default_url = parsed_url.clone();
+        default_url.set_path("/postgres");
+        
+        tracing::info!("Checking if database '{}' exists...", db_name);
+        
+        // Connect to default postgres database
+        let default_pool = PgPoolOptions::new()
+            .max_connections(1)
+            .connect(default_url.as_str())
+            .await?;
+
+        // Check if database exists
+        let row: (bool,) = sqlx::query_as(
+            "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)"
+        )
+        .bind(db_name)
+        .fetch_one(&default_pool)
+        .await?;
+
+        if !row.0 {
+            tracing::info!("Database '{}' does not exist, creating...", db_name);
+            
+            // Create database (cannot use parameterized query for CREATE DATABASE)
+            let create_db_query = format!("CREATE DATABASE \"{}\"", db_name);
+            sqlx::query(&create_db_query)
+                .execute(&default_pool)
+                .await?;
+            
+            tracing::info!("Database '{}' created successfully", db_name);
+        } else {
+            tracing::info!("Database '{}' already exists", db_name);
+        }
+
+        default_pool.close().await;
+        Ok(())
+    }
+
     pub async fn run_migrations(&self) -> anyhow::Result<()> {
+        use sqlx::Executor;
+        
         // Run PostgreSQL migrations in order
         let migrations = vec![
-            include_str!("../migrations/postgres/001_initial.sql"),
-            include_str!("../migrations/postgres/002_add_missing_columns.sql"),
-            include_str!("../migrations/postgres/003_add_config_table.sql"),
-            include_str!("../migrations/postgres/004_add_channel_messages.sql"),
-            include_str!("../migrations/postgres/005_add_note_feedback_tables.sql"),
+            ("001_initial.sql", include_str!("../migrations/postgres/001_initial.sql")),
+            ("002_add_missing_columns.sql", include_str!("../migrations/postgres/002_add_missing_columns.sql")),
+            ("003_add_config_table.sql", include_str!("../migrations/postgres/003_add_config_table.sql")),
+            ("004_add_channel_messages.sql", include_str!("../migrations/postgres/004_add_channel_messages.sql")),
+            ("005_add_note_feedback_tables.sql", include_str!("../migrations/postgres/005_add_note_feedback_tables.sql")),
+            ("006_add_folder_data_column.sql", include_str!("../migrations/postgres/006_add_folder_data_column.sql")),
         ];
         
-        for (idx, migration_sql) in migrations.iter().enumerate() {
-            tracing::info!("Running migration {}", idx + 1);
+        for (name, migration_sql) in migrations.iter() {
+            tracing::info!("Running migration: {}", name);
             
-            // Split SQL by semicolons and execute each statement separately
-            for statement in migration_sql.split(';') {
-                let trimmed = statement.trim();
-                if !trimmed.is_empty() && !trimmed.starts_with("--") {
-                    match sqlx::query(trimmed).execute(&self.pool).await {
-                        Ok(_) => {},
-                        Err(e) => {
-                            // Log error but continue if it's a "already exists" error
-                            if e.to_string().contains("already exists") {
-                                tracing::debug!("Skipping existing object in migration {}: {}", idx + 1, e);
-                            } else {
-                                tracing::warn!("Error in migration {} statement: {} - Error: {}", idx + 1, trimmed, e);
-                            }
+            // Use execute_many to handle multiple statements including DO $$ blocks
+            // This properly handles procedural SQL blocks
+            let mut stream = self.pool.execute_many(*migration_sql);
+            
+            let mut statement_count = 0;
+            use futures::stream::StreamExt;
+            
+            while let Some(result) = stream.next().await {
+                statement_count += 1;
+                match result {
+                    Ok(_) => {
+                        tracing::debug!("Migration {} statement {} executed", name, statement_count);
+                    },
+                    Err(e) => {
+                        // Log error but continue if it's a "already exists" error
+                        if e.to_string().contains("already exists") || 
+                           e.to_string().contains("duplicate") {
+                            tracing::debug!("Skipping already existing object in migration {}: {}", name, e);
+                        } else {
+                            tracing::warn!("Error in migration {} statement {}: {}", name, statement_count, e);
+                            // Continue with other statements
                         }
                     }
                 }
             }
+            
+            tracing::info!("Migration {} completed ({} statements)", name, statement_count);
         }
 
         tracing::info!("All migrations completed");

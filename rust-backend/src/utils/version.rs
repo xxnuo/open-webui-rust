@@ -35,7 +35,7 @@ pub async fn check_for_updates(current_version: &str) -> AppResult<VersionInfo> 
         .build()?;
 
     // Fetch latest release from GitHub API
-    let url = "https://api.github.com/repos/open-webui/open-webui/releases/latest";
+    let url = "https://api.github.com/repos/knoxchat/open-webui-rust/releases/latest";
     
     let response = client.get(url).send().await;
 

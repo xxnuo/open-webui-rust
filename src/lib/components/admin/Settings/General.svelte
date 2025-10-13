@@ -141,7 +141,7 @@
 
 									{#if $config?.features?.enable_version_update_check}
 										<a
-											href="https://github.com/open-webui/open-webui/releases/tag/v{version.latest}"
+											href="https://github.com/knoxchat/open-webui-rust/releases/tag/v{version.latest}"
 											target="_blank"
 										>
 											{updateAvailable === null
@@ -165,52 +165,6 @@
 									{$i18n.t('Check for updates')}
 								</button>
 							{/if}
-						</div>
-					</div>
-
-					<div class="mb-2.5">
-						<div class="flex w-full justify-between items-center">
-							<div class="text-xs pr-2">
-								<div class="">
-									{$i18n.t('Help')}
-								</div>
-								<div class=" text-xs text-gray-500">
-									{$i18n.t('Discover how to use Open WebUI and seek support from the community.')}
-								</div>
-							</div>
-
-							<a
-								class="flex-shrink-0 text-xs font-medium underline"
-								href="https://docs.openwebui.com/"
-								target="_blank"
-							>
-								{$i18n.t('Documentation')}
-							</a>
-						</div>
-
-						<div class="mt-1">
-							<div class="flex space-x-1">
-								<a href="https://discord.gg/5rJgQTnV4s" target="_blank">
-									<img
-										alt="Discord"
-										src="https://img.shields.io/badge/Discord-Open_WebUI-blue?logo=discord&logoColor=white"
-									/>
-								</a>
-
-								<a href="https://twitter.com/OpenWebUI" target="_blank">
-									<img
-										alt="X (formerly Twitter) Follow"
-										src="https://img.shields.io/twitter/follow/OpenWebUI"
-									/>
-								</a>
-
-								<a href="https://github.com/open-webui/open-webui" target="_blank">
-									<img
-										alt="Github Repo"
-										src="https://img.shields.io/github/stars/open-webui/open-webui?style=social&label=Star us on Github"
-									/>
-								</a>
-							</div>
 						</div>
 					</div>
 

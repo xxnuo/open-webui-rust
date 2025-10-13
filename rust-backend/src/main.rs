@@ -110,11 +110,19 @@ async fn main() -> anyhow::Result<()> {
 
     HttpServer::new(move || {
         // Create CORS middleware
+        // NOTE: When credentials are needed (cookies/auth), we cannot use allow_any_origin()
+        // Instead, we need to allow specific origins or use allowed_origin_fn to dynamically allow
         let cors = if cors_allow_origin == "*" {
+            // When "*" is specified, allow any origin dynamically while supporting credentials
             Cors::default()
-                .allow_any_origin()
+                .allowed_origin_fn(|_origin, _req_head| {
+                    // Allow all origins when * is configured
+                    true
+                })
                 .allow_any_method()
                 .allow_any_header()
+                .expose_headers(vec![header::SET_COOKIE])
+                .supports_credentials()
                 .max_age(3600)
         } else {
             let origins: Vec<&str> = cors_allow_origin.split(',').map(|s| s.trim()).collect();
@@ -212,8 +220,8 @@ async fn main() -> anyhow::Result<()> {
             .route("/cache/{path:.*}", web::get().to(serve_cache_file))
             // Serve default user avatar at root (for backward compatibility)
             .route("/user.png", web::get().to(serve_user_avatar))
-            // Serve static files from backend/open_webui/static directory
-            .service(Files::new("/static", "../backend/open_webui/static"))
+            // Serve static files from static directory
+            .service(Files::new("/static", "../static/static"))
     })
     // CRITICAL: Disable keep-alive buffering for real-time streaming
     .keep_alive(actix_web::http::KeepAlive::Timeout(std::time::Duration::from_secs(75)))
@@ -228,14 +236,14 @@ async fn main() -> anyhow::Result<()> {
 
 // Serve default user avatar
 async fn serve_user_avatar() -> Result<actix_files::NamedFile, crate::error::AppError> {
-    let path = std::path::Path::new("../backend/open_webui/static/user.png");
+    let path = std::path::Path::new("../static/static/user.png");
     actix_files::NamedFile::open(path)
         .map_err(|_| crate::error::AppError::NotFound("User avatar not found".to_string()))
 }
 
 // Serve favicon
 async fn serve_favicon() -> Result<actix_files::NamedFile, crate::error::AppError> {
-    let path = std::path::Path::new("../backend/open_webui/static/favicon.png");
+    let path = std::path::Path::new("../static/static/favicon.png");
     actix_files::NamedFile::open(path)
         .map_err(|_| crate::error::AppError::NotFound("Favicon not found".to_string()))
 }

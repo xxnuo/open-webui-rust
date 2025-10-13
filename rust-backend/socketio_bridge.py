@@ -23,15 +23,33 @@ log = logging.getLogger(__name__)
 RUST_BACKEND_URL = os.getenv('RUST_BACKEND_URL', 'http://localhost:8080')
 SOCKETIO_PORT = int(os.getenv('SOCKETIO_PORT', '8081'))
 CORS_ORIGINS = os.getenv('CORS_ORIGINS', '*')
+REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379')
+USE_REDIS = os.getenv('USE_REDIS', 'true').lower() == 'true'
 
-# Create Socket.IO server
-sio = socketio.AsyncServer(
-    cors_allowed_origins=CORS_ORIGINS if CORS_ORIGINS != '*' else [],
-    async_mode='aiohttp',
-    transports=['websocket', 'polling'],
-    allow_upgrades=True,
-    always_connect=True,
-)
+# Create Socket.IO server with optional Redis support
+socketio_kwargs = {
+    'cors_allowed_origins': CORS_ORIGINS if CORS_ORIGINS != '*' else [],
+    'async_mode': 'aiohttp',
+    'transports': ['websocket', 'polling'],
+    'allow_upgrades': True,
+    'always_connect': True,
+}
+
+# Add Redis manager if enabled
+if USE_REDIS:
+    try:
+        import redis.asyncio as redis_async
+        # Use Redis as the message queue for scaling across multiple instances
+        mgr = socketio.AsyncRedisManager(REDIS_URL)
+        socketio_kwargs['client_manager'] = mgr
+        log.info(f"Socket.IO using Redis manager: {REDIS_URL}")
+    except ImportError:
+        log.warning("Redis not available, using in-memory manager")
+    except Exception as e:
+        log.error(f"Failed to initialize Redis manager: {e}")
+        log.warning("Falling back to in-memory manager")
+
+sio = socketio.AsyncServer(**socketio_kwargs)
 
 # Create AIOHTTP app
 app = aiohttp.web.Application()
