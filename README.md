@@ -42,7 +42,8 @@ Rust 后端是 Python 后端的直接替代品, 有这些好处:
 |------|----------|---------|
 | [Bestming](https://www.mingagent.com) | 100 | 6 |
 | KingZ | 50 | 2 |
-
+| JimLi | 66 | 2 |
+| shanwu | 50 | 2 |
 
 ## 目录
 

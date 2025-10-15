@@ -41,9 +41,7 @@ services:
 
   # Rust Backend
   rust-backend:
-    build:
-      context: ./rust-backend
-      dockerfile: Dockerfile
+    image: public.ecr.aws/o3p7x2f5/knoxchat/open-webui-rust-backend:latest
     container_name: open-webui-rust-backend
     environment:
       # Server
@@ -127,9 +125,7 @@ services:
 
   # Socket.IO Bridge (Python)
   socketio-bridge:
-    build:
-      context: ./rust-backend
-      dockerfile: Dockerfile.socketio
+    image: public.ecr.aws/o3p7x2f5/knoxchat/open-webui-socketio-bridge:latest
     container_name: open-webui-socketio-bridge
     environment:
       RUST_BACKEND_URL: http://rust-backend:8080
@@ -156,19 +152,20 @@ services:
 
   # Frontend (SvelteKit)
   frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        BUILD_HASH: ${BUILD_HASH:-dev-build}
-        USE_CUDA: ${USE_CUDA:-false}
-        USE_SLIM: ${USE_SLIM:-false}
-        USE_PERMISSION_HARDENING: ${USE_PERMISSION_HARDENING:-false}
-        USE_CUDA_VER: ${USE_CUDA_VER:-cu128}
-        USE_EMBEDDING_MODEL: ${USE_EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
-        USE_RERANKING_MODEL: ${USE_RERANKING_MODEL:-}
-        UID: ${UID:-0}
-        GID: ${GID:-0}
+    image: public.ecr.aws/o3p7x2f5/knoxchat/open-webui-frontend:latest
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    #   args:
+    #     BUILD_HASH: ${BUILD_HASH:-dev-build}
+    #     USE_CUDA: ${USE_CUDA:-false}
+    #     USE_SLIM: ${USE_SLIM:-false}
+    #     USE_PERMISSION_HARDENING: ${USE_PERMISSION_HARDENING:-false}
+    #     USE_CUDA_VER: ${USE_CUDA_VER:-cu128}
+    #     USE_EMBEDDING_MODEL: ${USE_EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
+    #     USE_RERANKING_MODEL: ${USE_RERANKING_MODEL:-}
+    #     UID: ${UID:-0}
+    #     GID: ${GID:-0}
     container_name: open-webui-frontend
     environment:
       # Backend URLs

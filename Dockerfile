@@ -23,15 +23,78 @@ FROM nginx:alpine
 # Copy built static files from builder
 COPY --from=frontend-builder /app/build /usr/share/nginx/html
 
-# Create nginx configuration for SPA
+# Create nginx configuration for SPA with backend proxy
 RUN echo 'server { \
     listen 8080; \
     server_name localhost; \
     root /usr/share/nginx/html; \
     index index.html; \
+    client_max_body_size 100M; \
+    \
+    # Proxy API requests to Rust backend \
+    location /api/ { \
+        proxy_pass http://rust-backend:8080/api/; \
+        proxy_http_version 1.1; \
+        proxy_set_header Host $host; \
+        proxy_set_header X-Real-IP $remote_addr; \
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; \
+        proxy_set_header X-Forwarded-Proto $scheme; \
+        proxy_buffering off; \
+        proxy_request_buffering off; \
+    } \
+    \
+    # Proxy OpenAI API requests to Rust backend \
+    location /openai/ { \
+        proxy_pass http://rust-backend:8080/openai/; \
+        proxy_http_version 1.1; \
+        proxy_set_header Host $host; \
+        proxy_set_header X-Real-IP $remote_addr; \
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; \
+        proxy_set_header X-Forwarded-Proto $scheme; \
+        proxy_buffering off; \
+        proxy_request_buffering off; \
+    } \
+    \
+    # Proxy OAuth requests to Rust backend \
+    location /oauth/ { \
+        proxy_pass http://rust-backend:8080/oauth/; \
+        proxy_http_version 1.1; \
+        proxy_set_header Host $host; \
+        proxy_set_header X-Real-IP $remote_addr; \
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; \
+        proxy_set_header X-Forwarded-Proto $scheme; \
+    } \
+    \
+    # Proxy cache files to Rust backend \
+    location /cache/ { \
+        proxy_pass http://rust-backend:8080/cache/; \
+        proxy_http_version 1.1; \
+        proxy_set_header Host $host; \
+        proxy_set_header X-Real-IP $remote_addr; \
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; \
+        proxy_set_header X-Forwarded-Proto $scheme; \
+    } \
+    \
+    # Socket.IO WebSocket proxy \
+    location /socket.io/ { \
+        proxy_pass http://socketio-bridge:8081/socket.io/; \
+        proxy_http_version 1.1; \
+        proxy_set_header Upgrade $http_upgrade; \
+        proxy_set_header Connection "upgrade"; \
+        proxy_set_header Host $host; \
+        proxy_set_header X-Real-IP $remote_addr; \
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; \
+        proxy_set_header X-Forwarded-Proto $scheme; \
+        proxy_buffering off; \
+        proxy_read_timeout 86400; \
+    } \
+    \
+    # SPA fallback \
     location / { \
         try_files $uri $uri/ /index.html; \
     } \
+    \
+    # Health check \
     location /health { \
         access_log off; \
         return 200 "healthy\\n"; \

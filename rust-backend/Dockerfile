@@ -32,6 +32,7 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     libssl3 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -45,9 +46,23 @@ COPY --from=builder /app/migrations /app/migrations
 # Create data directory
 RUN mkdir -p /app/data/uploads
 
+# Create a wrapper script to ensure errors are visible
+RUN echo '#!/bin/sh\n\
+set -e\n\
+echo "Starting Open WebUI Rust Backend..."\n\
+echo "DATABASE_URL: $DATABASE_URL"\n\
+echo "ENABLE_REDIS: $ENABLE_REDIS"\n\
+echo "REDIS_URL: $REDIS_URL"\n\
+echo "RUST_LOG: $RUST_LOG"\n\
+# Disable output buffering\n\
+export RUST_BACKTRACE=1\n\
+export RUST_LOG=${RUST_LOG:-info}\n\
+echo "Executing binary..."\n\
+/app/open-webui-rust 2>&1 || { echo "Binary exited with code $?"; exit $?; }' > /app/start.sh && chmod +x /app/start.sh
+
 # Expose port
 EXPOSE 8080
 
-# Run the binary
-CMD ["/app/open-webui-rust"]
+# Run the wrapper script
+CMD ["/app/start.sh"]
 
