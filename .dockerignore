@@ -76,7 +76,6 @@ Dockerfile.dev
 # Rust specific
 rust-backend/target/
 **/*.rs.bk
-Cargo.lock
 
 # Python specific
 **/__pycache__/
