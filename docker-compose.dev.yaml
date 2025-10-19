@@ -41,39 +41,6 @@ services:
     networks:
       - open-webui-network
 
-  # Socket.IO Bridge (for development with hot reload)
-  socketio-bridge:
-    build:
-      context: ./rust-backend
-      dockerfile: Dockerfile.socketio
-    container_name: open-webui-socketio-bridge-dev
-    environment:
-      RUST_BACKEND_URL: ${RUST_BACKEND_URL:-http://host.docker.internal:8080}
-      SOCKETIO_PORT: ${SOCKETIO_PORT:-8081}
-      CORS_ORIGINS: ${CORS_ORIGINS:-*}
-      REDIS_URL: redis://redis:6379
-      USE_REDIS: ${USE_REDIS:-true}
-      PYTHONUNBUFFERED: "1"
-    volumes:
-      # Mount source code for hot reload in development
-      - ./rust-backend/socketio_bridge.py:/app/socketio_bridge.py:ro
-    ports:
-      - "${SOCKETIO_PORT:-8081}:8081"
-    depends_on:
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8081/health || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-    restart: unless-stopped
-    networks:
-      - open-webui-network
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
   # Optional: Database Admin UI (pgAdmin)
   pgadmin:
     image: dpage/pgadmin4:latest
