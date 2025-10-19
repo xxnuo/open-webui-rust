@@ -75,9 +75,9 @@ RUN echo 'server { \
         proxy_set_header X-Forwarded-Proto $scheme; \
     } \
     \
-    # Socket.IO WebSocket proxy \
+    # Socket.IO WebSocket proxy (native Rust implementation) \
     location /socket.io/ { \
-        proxy_pass http://socketio-bridge:8081/socket.io/; \
+        proxy_pass http://rust-backend:8080/socket.io/; \
         proxy_http_version 1.1; \
         proxy_set_header Upgrade $http_upgrade; \
         proxy_set_header Connection "upgrade"; \

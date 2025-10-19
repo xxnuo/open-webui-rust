@@ -100,7 +100,7 @@ restore: ## Restore database (use FILE=path/to/backup.sql)
 health: ## Check health of all services
 	@echo "$(BLUE)Checking service health...$(NC)"
 	@echo ""
-	@for service in postgres redis rust-backend socketio-bridge frontend; do \
+	@for service in postgres redis rust-backend frontend; do \
 		if docker-compose ps -q $$service > /dev/null 2>&1; then \
 			if docker-compose ps $$service | grep -q "Up"; then \
 				echo "$(GREEN)✓$(NC) $$service: Running"; \
@@ -116,7 +116,7 @@ health: ## Check health of all services
 shell: ## Open shell in service (use SERVICE=name)
 	@if [ -z "$(SERVICE)" ]; then \
 		echo "$(YELLOW)Usage: make shell SERVICE=service_name$(NC)"; \
-		echo "Available: postgres, redis, rust-backend, socketio-bridge, frontend"; \
+		echo "Available: postgres, redis, rust-backend, frontend"; \
 		exit 1; \
 	fi
 	@if [ "$(SERVICE)" = "postgres" ]; then \
@@ -126,7 +126,7 @@ shell: ## Open shell in service (use SERVICE=name)
 	fi
 
 # Development targets
-dev-start: ## Start development infrastructure (PostgreSQL, Redis, Socket.IO)
+dev-start: ## Start development infrastructure (PostgreSQL, Redis)
 	@echo "$(BLUE)Starting development infrastructure...$(NC)"
 	@docker-compose -f docker-compose.dev.yaml up -d
 	@echo "$(GREEN)Development infrastructure started!$(NC)"
@@ -159,9 +159,6 @@ build: rebuild ## Alias for rebuild
 logs-rust: ## View Rust backend logs
 	@make logs SERVICE=rust-backend
 
-logs-socketio: ## View Socket.IO logs
-	@make logs SERVICE=socketio-bridge
-
 logs-frontend: ## View frontend logs
 	@make logs SERVICE=frontend
 
@@ -180,8 +177,4 @@ shell-postgres: ## Shell into PostgreSQL
 restart-rust: ## Restart Rust backend
 	@docker-compose restart rust-backend
 	@echo "$(GREEN)Rust backend restarted!$(NC)"
-
-restart-socketio: ## Restart Socket.IO bridge
-	@docker-compose restart socketio-bridge
-	@echo "$(GREEN)Socket.IO bridge restarted!$(NC)"
 

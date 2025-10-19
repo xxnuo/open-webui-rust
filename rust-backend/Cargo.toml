@@ -105,8 +105,11 @@ urlencoding = "2.1"
 regex = "1.11"
 url = "2.5"
 
-# Socket.IO - Using Python bridge for production-ready Socket.IO support
-# No Rust Socket.IO dependencies needed
+# Socket.IO - Native Rust implementation
+# WebSocket support (actix-ws already included above)
+# For Socket.IO protocol parsing and encoding
+serde_bytes = "0.11.19"
+base64-simd = "0.8.0"
 
 # Optional features
 [features]

@@ -69,8 +69,8 @@
 	const BREAKPOINT = 768;
 
 	const setupSocket = async (enableWebsocket) => {
-		// Use Socket.IO bridge port (8081) instead of main backend port (8080)
-		const SOCKETIO_URL = import.meta.env.VITE_SOCKETIO_URL || `http://localhost:8081`;
+		// Native Rust Socket.IO on main backend port (8080)
+		const SOCKETIO_URL = import.meta.env.VITE_SOCKETIO_URL || `http://localhost:8080`;
 		const _socket = io(SOCKETIO_URL, {
 			reconnection: true,
 			reconnectionDelay: 1000,

@@ -6,6 +6,7 @@ mod models;
 mod routes;
 mod services;
 mod socket;
+mod socketio;
 mod utils;
 mod websocket_chat;
 
@@ -34,6 +35,8 @@ pub struct AppState {
     pub models_cache: Arc<RwLock<std::collections::HashMap<String, serde_json::Value>>>,
     // Socket state for tracking sessions and users (Socket.IO-like functionality)
     pub socket_state: Option<socket::SocketState>,
+    // Socket.IO event handler (native Rust implementation)
+    pub socketio_handler: Option<Arc<socketio::EventHandler>>,
 }
 
 #[actix_web::main]
@@ -84,10 +87,39 @@ async fn main() -> anyhow::Result<()> {
         None
     };
 
-    // Create Socket state if WebSocket support is enabled
-    let socket_state = if config.enable_websocket_support {
+    // Initialize native Rust Socket.IO
+    let socketio_enabled = std::env::var("ENABLE_SOCKETIO")
+        .unwrap_or_else(|_| "true".to_string())
+        .to_lowercase() == "true";
+    
+    let socketio_handler = if socketio_enabled {
+        use crate::socketio::{SocketIOManager, EventHandler};
+        
+        let manager = SocketIOManager::new();
+        let auth_endpoint = format!("http://{}:{}", config.host, config.port);
+        let handler = EventHandler::new(manager.clone(), auth_endpoint);
+        
+        // Spawn a background task to clean up stale sessions periodically
+        let manager_cleanup = manager.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
+                // Clean up sessions that haven't pinged in 60 seconds (3x ping interval + timeout)
+                manager_cleanup.cleanup_stale_sessions(60).await;
+            }
+        });
+        
+        info!("✅ Native Rust Socket.IO initialized with periodic cleanup");
+        Some(Arc::new(handler))
+    } else {
+        info!("⚠️  Socket.IO disabled");
+        None
+    };
+
+    // Create Socket state with native handler
+    let socket_state = if config.enable_websocket_support && socketio_handler.is_some() {
         use crate::socket::SocketState;
-        Some(SocketState::new())
+        Some(SocketState::new(socketio_handler.as_ref().unwrap().clone()))
     } else {
         None
     };
@@ -99,6 +131,7 @@ async fn main() -> anyhow::Result<()> {
         redis: redis.clone(),
         models_cache: Arc::new(RwLock::new(std::collections::HashMap::new())),
         socket_state,
+        socketio_handler: socketio_handler.clone(),
     });
 
 
@@ -180,10 +213,8 @@ async fn main() -> anyhow::Result<()> {
                 web::resource("/api/ws/chat")
                     .route(web::get().to(websocket_chat::websocket_chat_handler))
             )
-            // Socket.IO bridge authentication endpoint
-            .route("/api/socketio/auth", web::post().to(socketio_auth))
-            // Socket.IO emit endpoint for hybrid mode
-            .route("/api/socketio/emit", web::post().to(socketio_emit))
+            // Native Rust Socket.IO endpoints
+            .configure(configure_socketio_routes)
             .service(
                 web::resource("/api/chat/actions/{action_id}")
                     .wrap(middleware::AuthMiddleware)
@@ -452,51 +483,164 @@ async fn chat_completions(
     routes::openai::handle_chat_completions(state, auth_user, payload).await
 }
 
-// Socket.IO bridge endpoints
-async fn socketio_auth(
+// Configure Socket.IO routes
+fn configure_socketio_routes(cfg: &mut web::ServiceConfig) {
+    // Register Socket.IO endpoints
+    // Note: NormalizePath middleware strips trailing slashes, so we need both variants
+    cfg
+        // With trailing slash (before normalization)
+        .route("/socket.io/", web::get().to(socketio_connection_get))
+        .route("/socket.io/", web::post().to(socketio_connection_post))
+        // Without trailing slash (after normalization)
+        .route("/socket.io", web::get().to(socketio_connection_get))
+        .route("/socket.io", web::post().to(socketio_connection_post))
+        // Other endpoints
+        .route("/api/socketio/emit", web::post().to(socketio_native_emit))
+        .route("/api/socketio/health", web::get().to(socketio_health))
+        .route("/api/socketio/auth", web::post().to(socketio_auth));
+}
+
+// Socket.IO GET connection handler (WebSocket upgrade or polling GET)
+async fn socketio_connection_get(
+    req: HttpRequest,
+    stream: web::Payload,
     state: web::Data<AppState>,
-    payload: web::Json<serde_json::Value>,
-) -> HttpResponse {
-    use crate::utils::auth::verify_jwt;
-    
-    let token = match payload.get("token").and_then(|t| t.as_str()) {
-        Some(t) => t,
-        None => return HttpResponse::BadRequest().json(serde_json::json!({"error": "Missing token"})),
-    };
-    
-    let webui_secret_key = {
-        let config = state.config.read().unwrap();
-        config.webui_secret_key.clone()
-    };
-    
-    match verify_jwt(token, &webui_secret_key) {
-        Ok(claims) => {
-            // Get user from database
-            let user_service = services::user::UserService::new(&state.db);
-            match user_service.get_user_by_id(&claims.sub).await {
-                Ok(Some(user)) => {
-                    HttpResponse::Ok().json(serde_json::json!({
-                        "id": user.id,
-                        "email": user.email,
-                        "name": user.name,
-                        "role": user.role,
-                    }))
-                }
-                _ => HttpResponse::Unauthorized().json(serde_json::json!({"error": "User not found"})),
-            }
+) -> Result<HttpResponse, actix_web::Error> {
+    // Check if Socket.IO is enabled
+    let handler = match &state.socketio_handler {
+        Some(h) => h,
+        None => {
+            tracing::error!("Socket.IO not enabled but connection attempted");
+            return Ok(HttpResponse::ServiceUnavailable()
+                .json(serde_json::json!({"error": "Socket.IO not enabled"})));
         }
-        Err(_) => HttpResponse::Unauthorized().json(serde_json::json!({"error": "Invalid token"})),
+    };
+
+    // Check transport type from query parameters
+    let query = web::Query::<std::collections::HashMap<String, String>>::from_query(req.query_string())
+        .unwrap_or(web::Query(std::collections::HashMap::new()));
+    
+    let transport = query.get("transport").map(|s| s.as_str());
+    let eio = query.get("EIO");
+    let sid = query.get("sid");
+    
+    tracing::info!(
+        "Socket.IO GET request - transport: {:?}, EIO: {:?}, sid: {:?}, path: {}, headers: {:?}",
+        transport, eio, sid, req.path(), req.headers()
+    );
+
+    // Check if this is a WebSocket upgrade request
+    let is_websocket_upgrade = req.headers()
+        .get("upgrade")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.eq_ignore_ascii_case("websocket"))
+        .unwrap_or(false);
+
+    if is_websocket_upgrade || transport == Some("websocket") {
+        // WebSocket transport
+        tracing::info!("Handling WebSocket upgrade for Socket.IO");
+        let handler_data = web::Data::new(handler.as_ref().clone());
+        socketio::transport::websocket_handler(req, stream, handler_data).await
+    } else {
+        // HTTP polling transport (GET - initial connection or polling for messages)
+        tracing::info!("Handling HTTP polling GET for Socket.IO");
+        let manager_data = web::Data::new(handler.manager().clone());
+        let handler_data = Some(web::Data::new(handler.as_ref().clone()));
+        socketio::transport::polling_handler(req, web::Bytes::new(), manager_data, handler_data).await
     }
 }
 
-async fn socketio_emit(
-    _state: web::Data<AppState>,
-    _payload: web::Json<serde_json::Value>,
-) -> HttpResponse {
-    // This endpoint is for the Python bridge to emit events
-    // In hybrid mode, the Rust backend calls the Python bridge's /emit endpoint instead
-    HttpResponse::Ok().json(serde_json::json!({"status": "ok"}))
+// Socket.IO POST connection handler (polling POST - client sending messages)
+async fn socketio_connection_post(
+    req: HttpRequest,
+    body: web::Bytes,
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, actix_web::Error> {
+    // Check if Socket.IO is enabled
+    let handler = match &state.socketio_handler {
+        Some(h) => h,
+        None => {
+            return Ok(HttpResponse::ServiceUnavailable()
+                .json(serde_json::json!({"error": "Socket.IO not enabled"})));
+        }
+    };
+
+    // HTTP polling POST transport (client sending messages)
+    let manager_data = web::Data::new(handler.manager().clone());
+    let handler_data = Some(web::Data::new(handler.as_ref().clone()));
+    socketio::transport::polling_handler(req, body, manager_data, handler_data).await
 }
+
+// Native Socket.IO emit endpoint (for Rust backend to emit events)
+async fn socketio_native_emit(
+    state: web::Data<AppState>,
+    payload: web::Json<socketio::events::EmitRequest>,
+) -> Result<web::Json<socketio::events::EmitResponse>, actix_web::Error> {
+    if let Some(ref handler) = state.socketio_handler {
+        let handler_data = web::Data::new(handler.as_ref().clone());
+        socketio::events::handle_emit_request(handler_data, payload).await
+    } else {
+        Err(actix_web::error::ErrorServiceUnavailable("Socket.IO not enabled"))
+    }
+}
+
+// Native Socket.IO health check
+async fn socketio_health(
+    state: web::Data<AppState>,
+) -> Result<web::Json<socketio::events::HealthResponse>, actix_web::Error> {
+    if let Some(ref handler) = state.socketio_handler {
+        let handler_data = web::Data::new(handler.as_ref().clone());
+        socketio::events::handle_health_check(handler_data).await
+    } else {
+        Err(actix_web::error::ErrorServiceUnavailable("Socket.IO not enabled"))
+    }
+}
+
+// Socket.IO authentication endpoint
+async fn socketio_auth(
+    state: web::Data<AppState>,
+    payload: web::Json<serde_json::Value>,
+) -> Result<HttpResponse, actix_web::Error> {
+    use serde_json::json;
+    
+    // Extract token from request
+    let token = payload
+        .get("token")
+        .and_then(|t| t.as_str())
+        .ok_or_else(|| actix_web::error::ErrorBadRequest("Missing token"))?;
+    
+    // Verify JWT token
+    let config = state.config.read().unwrap();
+    let claims = match crate::utils::auth::verify_jwt(token, &config.webui_secret_key) {
+        Ok(claims) => claims,
+        Err(_) => {
+            return Ok(HttpResponse::Unauthorized().json(json!({
+                "error": "Invalid token"
+            })));
+        }
+    };
+    
+    // Get user from database
+    let user_service = services::user::UserService::new(&state.db);
+    let user = match user_service.get_user_by_id(&claims.sub).await {
+        Ok(Some(user)) => user,
+        _ => {
+            return Ok(HttpResponse::NotFound().json(json!({
+                "error": "User not found"
+            })));
+        }
+    };
+    
+    // Return user data
+    Ok(HttpResponse::Ok().json(json!({
+        "id": user.id,
+        "email": user.email,
+        "name": user.name,
+        "role": user.role,
+        "profile_image_url": user.profile_image_url,
+    })))
+}
+
 
 async fn chat_completed(
     _state: web::Data<AppState>,
@@ -557,8 +701,7 @@ async fn stop_task(
         // This will trigger the frontend to stop listening for streaming events
         tracing::info!("Sending stop signal for chat: {}", task_id.as_str());
         
-        // Note: In the current Socket.IO bridge implementation,
-        // we emit a chat:tasks:cancel event that the frontend listens for
+        // Emit a chat:tasks:cancel event that the frontend listens for
         let event_emitter = crate::socket::get_event_emitter(
             socket_state.clone(),
             "system".to_string(),  // system user for admin actions

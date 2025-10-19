@@ -838,6 +838,7 @@ async fn process_streaming_via_socketio(
     message_id: Option<String>,
     session_id: Option<String>,
     should_generate_title: bool,
+    model_item: serde_json::Value,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Get socket state
     let socket_state = match &state.socket_state {
@@ -1003,6 +1004,8 @@ async fn process_streaming_via_socketio(
         let model_id_clone = model_id.clone();
         let messages_clone = messages.clone();
         let chat_id_clone = chat_id.clone().unwrap();
+        let user_id_clone = user_id.to_string();
+        let model_item_clone = model_item.clone();
         
         tokio::spawn(async move {
             if let Err(e) = generate_and_update_title(
@@ -1010,6 +1013,8 @@ async fn process_streaming_via_socketio(
                 &model_id_clone,
                 &messages_clone,
                 &chat_id_clone,
+                &user_id_clone,
+                &model_item_clone,
             ).await {
                 tracing::error!("Failed to generate title: {}", e);
             }
@@ -1099,11 +1104,19 @@ async fn generate_and_update_title(
     model_id: &str,
     messages: &[serde_json::Value],
     chat_id: &str,
+    user_id: &str,
+    model_item: &serde_json::Value,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use crate::services::chat::ChatService;
+    use crate::services::user::UserService;
     
-    // Get configuration and build request in a scoped block to ensure lock is dropped
-    let (endpoint_url, endpoint_key, title_payload) = {
+    tracing::info!("Title generation starting - model: {}, user: {}, is_direct: {:?}, urlIdx: {:?}", 
+        model_id, user_id, 
+        model_item.get("is_direct"),
+        model_item.get("urlIdx"));
+    
+    // Check if title generation is enabled
+    let (enable_title_generation, enable_direct_connections, prompt) = {
         let config = state.config.read().unwrap();
         
         if !config.enable_title_generation {
@@ -1136,28 +1149,130 @@ async fn generate_and_update_title(
         
         let prompt = template.replace("{{MESSAGES:END:2}}", &messages_text);
         
-        // Get endpoint
-        let (endpoint_url, endpoint_key, _) = get_openai_endpoint(&config, model_id)?;
-        
-        // Build request
-        let title_payload = json!({
-            "model": model_id,
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": 50,
-            "temperature": 0.1,
-            "stream": false
-        });
-        
-        (endpoint_url, endpoint_key, title_payload)
-    }; // config is dropped here
+        (config.enable_title_generation, config.enable_direct_connections, prompt)
+    }; // config lock is dropped here
+    
+    // Check if this is a direct connection and get user-specific settings
+    let is_direct = model_item.get("is_direct")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    
+    let (endpoint_url, endpoint_key) = {
+        if is_direct && enable_direct_connections {
+            // Get urlIdx from model_item - if not present, fall back to regular routing
+            let url_idx_opt = if let Some(idx_str) = model_item.get("urlIdx").and_then(|v| v.as_str()) {
+                Some(idx_str.to_string())
+            } else if let Some(idx_num) = model_item.get("urlIdx").and_then(|v| v.as_u64()) {
+                Some(idx_num.to_string())
+            } else {
+                None
+            };
+            
+            if let Some(url_idx) = url_idx_opt {
+                // Get user to access their settings
+                let user_service = UserService::new(&state.db);
+                match user_service.get_user_by_id(user_id).await {
+                    Ok(Some(user)) => {
+                        // Try to get direct connections from user settings
+                        if let Some(user_settings) = user.settings.as_ref() {
+                            let direct_connections = user_settings.get("directConnections")
+                                .or_else(|| user_settings.get("ui").and_then(|ui| ui.get("directConnections")));
+                            
+                            if let Some(dc) = direct_connections {
+                                // Extract URL and key arrays
+                                if let (Some(urls), Some(keys)) = (
+                                    dc.get("OPENAI_API_BASE_URLS").and_then(|v| v.as_array()),
+                                    dc.get("OPENAI_API_KEYS").and_then(|v| v.as_array())
+                                ) {
+                                    // Parse urlIdx as number
+                                    if let Ok(idx) = url_idx.parse::<usize>() {
+                                        // Get URL and key at that index
+                                        if let (Some(url), Some(key)) = (
+                                            urls.get(idx).and_then(|v| v.as_str()),
+                                            keys.get(idx).and_then(|v| v.as_str())
+                                        ) {
+                                            tracing::info!("Using direct connection for title generation: {} (idx: {})", url, idx);
+                                            (url.to_string(), key.to_string())
+                                        } else {
+                                            tracing::warn!("URL or key not found at index {}, falling back to default", idx);
+                                            let config = state.config.read().unwrap();
+                                            let (url, key, _) = get_openai_endpoint(&config, model_id)?;
+                                            (url, key)
+                                        }
+                                    } else {
+                                        tracing::warn!("Invalid urlIdx format, falling back to default");
+                                        let config = state.config.read().unwrap();
+                                        let (url, key, _) = get_openai_endpoint(&config, model_id)?;
+                                        (url, key)
+                                    }
+                                } else {
+                                    tracing::warn!("Direct connection URLs or keys not found in user settings, falling back to default");
+                                    let config = state.config.read().unwrap();
+                                    let (url, key, _) = get_openai_endpoint(&config, model_id)?;
+                                    (url, key)
+                                }
+                            } else {
+                                tracing::warn!("Direct connections not configured in user settings, falling back to default");
+                                let config = state.config.read().unwrap();
+                                let (url, key, _) = get_openai_endpoint(&config, model_id)?;
+                                (url, key)
+                            }
+                        } else {
+                            tracing::warn!("User settings not found, falling back to default");
+                            let config = state.config.read().unwrap();
+                            let (url, key, _) = get_openai_endpoint(&config, model_id)?;
+                            (url, key)
+                        }
+                    }
+                    _ => {
+                        tracing::warn!("User not found, falling back to default");
+                        let config = state.config.read().unwrap();
+                        let (url, key, _) = get_openai_endpoint(&config, model_id)?;
+                        (url, key)
+                    }
+                }
+            } else {
+                tracing::warn!("Direct connection model missing urlIdx, falling back to default");
+                let config = state.config.read().unwrap();
+                let (url, key, _) = get_openai_endpoint(&config, model_id)?;
+                (url, key)
+            }
+        } else {
+            // Regular routing - use global config
+            let config = state.config.read().unwrap();
+            let (url, key, _) = get_openai_endpoint(&config, model_id)?;
+            (url, key)
+        }
+    };
+    
+    // Build request payload
+    let title_payload = json!({
+        "model": model_id,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 50,
+        "temperature": 0.1,
+        "stream": false
+    });
+    
+    let url = format!("{}/chat/completions", endpoint_url.trim_end_matches('/'));
+    tracing::info!("Title generation - URL: {}, has_key: {}, model: {}", 
+        url, !endpoint_key.is_empty(), model_id);
     
     let client = reqwest::Client::new();
     let mut request_builder = client
-        .post(format!("{}/chat/completions", endpoint_url.trim_end_matches('/')))
+        .post(&url)
         .header("Content-Type", "application/json");
     
     if !endpoint_key.is_empty() {
+        let key_preview = if endpoint_key.len() > 10 {
+            format!("{}...{}", &endpoint_key[..5], &endpoint_key[endpoint_key.len()-5..])
+        } else {
+            "***".to_string()
+        };
+        tracing::info!("Title generation - Using API key: {}", key_preview);
         request_builder = request_builder.header("Authorization", format!("Bearer {}", endpoint_key));
+    } else {
+        tracing::warn!("Title generation - No API key provided!");
     }
     
     match request_builder.json(&title_payload).send().await {
@@ -1472,6 +1587,7 @@ pub async fn handle_chat_completions(
                     let model_id_owned = model_id.clone();
                     let messages_owned = messages.clone();
                     let should_generate_title_owned = should_generate_title;
+                    let model_item_owned = model_item.clone();
                     
                     tokio::spawn(async move {
                         if let Err(e) = process_streaming_via_socketio(
@@ -1484,6 +1600,7 @@ pub async fn handle_chat_completions(
                             message_id,
                             session_id_owned,
                             should_generate_title_owned,
+                            model_item_owned,
                         ).await {
                             tracing::error!("Error processing Socket.IO stream: {}", e);
                         }

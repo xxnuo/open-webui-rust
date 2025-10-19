@@ -211,7 +211,7 @@ shell() {
     COMPOSE_CMD=$(get_compose_cmd)
     if [ -z "$1" ]; then
         error "Please specify service: $0 shell <service_name>"
-        info "Available services: postgres, redis, rust-backend, socketio-bridge, frontend"
+        info "Available services: postgres, redis, rust-backend, frontend"
         exit 1
     fi
     
@@ -230,7 +230,7 @@ health() {
     echo ""
     
     # Check each service
-    for service in postgres redis rust-backend socketio-bridge frontend; do
+    for service in postgres redis rust-backend frontend; do
         STATUS=$($COMPOSE_CMD ps -q "$service" 2>/dev/null)
         if [ -z "$STATUS" ]; then
             error "$service: Not running"
@@ -250,15 +250,9 @@ health() {
     # Check URLs
     info "Checking endpoints..."
     if curl -s http://localhost:${RUST_PORT:-8080}/health > /dev/null 2>&1; then
-        success "Rust Backend API: http://localhost:${RUST_PORT:-8080}"
+        success "Rust Backend API (+ Socket.IO): http://localhost:${RUST_PORT:-8080}"
     else
         error "Rust Backend API: Not responding"
-    fi
-    
-    if curl -s http://localhost:${SOCKETIO_PORT:-8081}/health > /dev/null 2>&1; then
-        success "Socket.IO Bridge: http://localhost:${SOCKETIO_PORT:-8081}"
-    else
-        error "Socket.IO Bridge: Not responding"
     fi
     
     if curl -s http://localhost:${OPEN_WEBUI_PORT:-3000}/health > /dev/null 2>&1; then
@@ -294,15 +288,14 @@ ${YELLOW}Commands:${NC}
 ${YELLOW}Services:${NC}
   - postgres          PostgreSQL database
   - redis             Redis cache
-  - rust-backend      Rust API server
-  - socketio-bridge   Socket.IO server
+  - rust-backend      Rust API server (with native Socket.IO)
   - frontend          SvelteKit frontend
 
 ${YELLOW}Examples:${NC}
   $0 setup                    # Setup environment file
   $0 start                    # Start all services
   $0 logs rust-backend        # View Rust backend logs
-  $0 restart socketio-bridge  # Restart Socket.IO bridge
+  $0 restart rust-backend     # Restart Rust backend
   $0 shell postgres           # Open PostgreSQL shell
   $0 backup                   # Backup database and files
   $0 health                   # Check service health
