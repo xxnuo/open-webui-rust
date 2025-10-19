@@ -41,8 +41,8 @@ services:
 
   # Rust Backend
   rust-backend:
-    # image: public.ecr.aws/o3p7x2f5/knoxchat/open-webui-rust-backend:latest
-    image: open-webui-rust-backend:latest
+    image: public.ecr.aws/o3p7x2f5/knoxchat/open-webui-rust-backend:latest
+    # image: open-webui-rust-backend:latest
     container_name: open-webui-rust-backend
     environment:
       # Server
@@ -126,8 +126,8 @@ services:
 
   # Frontend (SvelteKit)
   frontend:
-    # image: public.ecr.aws/o3p7x2f5/knoxchat/open-webui-frontend:latest
-    image: open-webui-frontend:latest
+    image: public.ecr.aws/o3p7x2f5/knoxchat/open-webui-frontend:latest
+    # image: open-webui-frontend:latest
     # build:
     #   context: .
     #   dockerfile: Dockerfile
