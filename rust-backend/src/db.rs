@@ -36,6 +36,7 @@ impl Database {
             include_str!("../migrations/postgres/005_add_note_feedback_tables.sql"),
             include_str!("../migrations/postgres/006_add_folder_data_column.sql"),
             include_str!("../migrations/postgres/007_add_file_columns.sql"),
+            include_str!("../migrations/postgres/008_add_group_data_column.sql"),
         ];
         
         for (idx, migration_sql) in migrations.iter().enumerate() {

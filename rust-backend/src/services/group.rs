@@ -26,10 +26,12 @@ impl<'a> GroupService<'a> {
             .map(|p| serde_json::to_string(p).ok())
             .flatten();
 
+        // Initialize all JSONB fields with proper defaults to match Python backend behavior
+        // Python GroupModel defaults: user_ids=[], data=None, meta=None
         sqlx::query(
             r#"
-            INSERT INTO "group" (id, user_id, name, description, permissions, user_ids, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5::jsonb, '[]'::jsonb, $6, $7)
+            INSERT INTO "group" (id, user_id, name, description, data, meta, permissions, user_ids, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, NULL, NULL, $5::jsonb, '[]'::jsonb, $6, $7)
             "#,
         )
         .bind(&id)
@@ -51,9 +53,10 @@ impl<'a> GroupService<'a> {
         let result = sqlx::query_as::<_, Group>(
             r#"
             SELECT id, user_id, name, description,
+                   CAST(data AS TEXT) as data_str,
                    CAST(meta AS TEXT) as meta_str,
                    CAST(permissions AS TEXT) as permissions_str,
-                   CAST(user_ids AS TEXT) as user_ids_str,
+                   COALESCE(CAST(user_ids AS TEXT), '[]') as user_ids_str,
                    created_at, updated_at
             FROM "group"
             WHERE id = $1
@@ -70,9 +73,10 @@ impl<'a> GroupService<'a> {
         let groups = sqlx::query_as::<_, Group>(
             r#"
             SELECT id, user_id, name, description,
+                   CAST(data AS TEXT) as data_str,
                    CAST(meta AS TEXT) as meta_str,
                    CAST(permissions AS TEXT) as permissions_str,
-                   CAST(user_ids AS TEXT) as user_ids_str,
+                   COALESCE(CAST(user_ids AS TEXT), '[]') as user_ids_str,
                    created_at, updated_at
             FROM "group"
             ORDER BY updated_at DESC
@@ -88,12 +92,14 @@ impl<'a> GroupService<'a> {
         let groups = sqlx::query_as::<_, Group>(
             r#"
             SELECT id, user_id, name, description,
+                   CAST(data AS TEXT) as data_str,
                    CAST(meta AS TEXT) as meta_str,
                    CAST(permissions AS TEXT) as permissions_str,
-                   CAST(user_ids AS TEXT) as user_ids_str,
+                   COALESCE(CAST(user_ids AS TEXT), '[]') as user_ids_str,
                    created_at, updated_at
             FROM "group"
-            WHERE jsonb_array_length(user_ids) > 0
+            WHERE user_ids IS NOT NULL
+              AND jsonb_array_length(user_ids) > 0
               AND CAST(user_ids AS TEXT) LIKE $1
             ORDER BY updated_at DESC
             "#,

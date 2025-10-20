@@ -219,9 +219,10 @@ CREATE TABLE IF NOT EXISTS "group" (
     user_id VARCHAR(255) NOT NULL,
     name VARCHAR(255) NOT NULL,
     description TEXT,
+    data JSONB,
+    meta JSONB,
     permissions JSONB,
     user_ids JSONB,
-    meta JSONB,
     created_at BIGINT NOT NULL,
     updated_at BIGINT NOT NULL,
     FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE

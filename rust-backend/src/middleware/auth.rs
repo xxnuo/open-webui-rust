@@ -194,16 +194,65 @@ where
         let service = self.service.clone();
 
         Box::pin(async move {
-            // Check if user is authenticated and is admin
-            let auth_user = req
-                .extensions()
-                .get::<AuthUser>()
-                .cloned()
-                .ok_or_else(|| AppError::Unauthorized("Not authenticated".to_string()))?;
+            // Extract state
+            let state = req
+                .app_data::<web::Data<AppState>>()
+                .ok_or_else(|| AppError::InternalServerError("App state not found".to_string()))?;
 
-            if auth_user.user.role != "admin" {
+            // Try to extract token from Authorization header first
+            let token = if let Some(auth_header) = req.headers().get(header::AUTHORIZATION) {
+                if let Ok(auth_str) = auth_header.to_str() {
+                    auth_str.strip_prefix("Bearer ").map(|s| s.to_string())
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            // If no Authorization header, try to get token from cookie
+            let token = token.or_else(|| {
+                req.cookie("token").map(|c| c.value().to_string())
+            }).ok_or_else(|| AppError::Unauthorized("Missing authorization token".to_string()))?;
+
+            // Check if it's an API key (starts with sk-)
+            let user = if token.starts_with("sk-") {
+                let config = state.config.read().unwrap();
+                if !config.enable_api_key {
+                    return Err(AppError::Forbidden("API keys are disabled".to_string()).into());
+                }
+                drop(config); // Release the lock
+
+                let user_service = UserService::new(&state.db);
+                user_service
+                    .get_user_by_api_key(&token)
+                    .await
+                    .map_err(|e| AppError::from(e))?
+                    .ok_or_else(|| AppError::Unauthorized("Invalid API key".to_string()))?
+            } else {
+                // Otherwise, verify JWT token
+                let config = state.config.read().unwrap();
+                let webui_secret_key = config.webui_secret_key.clone();
+                drop(config); // Release the lock
+                
+                let claims = verify_jwt(&token, &webui_secret_key)
+                    .map_err(|e| AppError::from(e))?;
+
+                let user_service = UserService::new(&state.db);
+                user_service
+                    .get_user_by_id(&claims.sub)
+                    .await
+                    .map_err(|e| AppError::from(e))?
+                    .ok_or_else(|| AppError::Unauthorized("User not found".to_string()))?
+            };
+
+            // Check if user is admin
+            if user.role != "admin" {
                 return Err(AppError::Forbidden("Admin access required".to_string()).into());
             }
+
+            // Insert user into request extensions
+            req.extensions_mut().insert(AuthUser { user });
 
             let res = service.call(req).await?;
             Ok(res)

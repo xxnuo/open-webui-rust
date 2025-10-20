@@ -1,4 +1,4 @@
-use actix_web::{http::StatusCode, HttpResponse, ResponseError};
+use actix_web::{http::{StatusCode, header}, HttpResponse, ResponseError};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -138,7 +138,15 @@ impl ResponseError for AppError {
             detail: error_message,
         };
 
-        HttpResponse::build(status).json(body)
+        // Build response with CORS headers to ensure they're always present
+        // even when errors occur in middleware before CORS middleware processes the response
+        HttpResponse::build(status)
+            .insert_header((header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"))
+            .insert_header((header::ACCESS_CONTROL_ALLOW_CREDENTIALS, "true"))
+            .insert_header((header::ACCESS_CONTROL_ALLOW_METHODS, "GET, POST, PUT, DELETE, PATCH, OPTIONS"))
+            .insert_header((header::ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Authorization, Accept, Cookie"))
+            .insert_header((header::ACCESS_CONTROL_EXPOSE_HEADERS, "Set-Cookie"))
+            .json(body)
     }
 
     fn status_code(&self) -> StatusCode {
