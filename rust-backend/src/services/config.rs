@@ -268,17 +268,32 @@ impl ConfigService {
         config.openai_api_base_urls = get_vec_string(&["openai", "api_base_urls"], config.openai_api_base_urls.clone());
         config.openai_api_configs = get_json(&["openai", "api_configs"], config.openai_api_configs.clone());
 
-        // Merge Features
-        config.enable_channels = get_bool(&["features", "enable_channels"], config.enable_channels);
-        config.enable_notes = get_bool(&["features", "enable_notes"], config.enable_notes);
+        // Merge Admin config
+        config.show_admin_details = get_bool(&["admin", "show_admin_details"], config.show_admin_details);
+        config.webui_url = get_string(&["admin", "webui_url"], config.webui_url.clone());
+        config.enable_signup = get_bool(&["admin", "enable_signup"], config.enable_signup);
+        config.enable_api_key = get_bool(&["admin", "enable_api_key"], config.enable_api_key);
+        config.enable_api_key_endpoint_restrictions = get_bool(&["admin", "enable_api_key_endpoint_restrictions"], config.enable_api_key_endpoint_restrictions);
+        config.api_key_allowed_endpoints = get_string(&["admin", "api_key_allowed_endpoints"], config.api_key_allowed_endpoints.clone());
+        config.default_user_role = get_string(&["admin", "default_user_role"], config.default_user_role.clone());
+        config.jwt_expires_in = get_string(&["admin", "jwt_expires_in"], config.jwt_expires_in.clone());
+        config.enable_user_webhooks = get_bool(&["admin", "enable_user_webhooks"], config.enable_user_webhooks);
+        config.pending_user_overlay_title = get_option_string(&["admin", "pending_user_overlay_title"]).or(config.pending_user_overlay_title.clone());
+        config.pending_user_overlay_content = get_option_string(&["admin", "pending_user_overlay_content"]).or(config.pending_user_overlay_content.clone());
+        config.response_watermark = get_option_string(&["admin", "response_watermark"]).or(config.response_watermark.clone());
+        
+        // Merge Features (admin settings override features)
+        config.enable_channels = get_bool(&["admin", "enable_channels"], get_bool(&["features", "enable_channels"], config.enable_channels));
+        config.enable_notes = get_bool(&["admin", "enable_notes"], get_bool(&["features", "enable_notes"], config.enable_notes));
+        config.enable_community_sharing = get_bool(&["admin", "enable_community_sharing"], get_bool(&["features", "enable_community_sharing"], config.enable_community_sharing));
+        config.enable_message_rating = get_bool(&["admin", "enable_message_rating"], get_bool(&["features", "enable_message_rating"], config.enable_message_rating));
+        
         config.enable_image_generation = get_bool(&["features", "enable_image_generation"], config.enable_image_generation);
         config.enable_code_execution = get_bool(&["features", "enable_code_execution"], config.enable_code_execution);
         config.enable_code_interpreter = get_bool(&["features", "enable_code_interpreter"], config.enable_code_interpreter);
         config.enable_web_search = get_bool(&["features", "enable_web_search"], config.enable_web_search);
         config.enable_admin_chat_access = get_bool(&["features", "enable_admin_chat_access"], config.enable_admin_chat_access);
         config.enable_admin_export = get_bool(&["features", "enable_admin_export"], config.enable_admin_export);
-        config.enable_community_sharing = get_bool(&["features", "enable_community_sharing"], config.enable_community_sharing);
-        config.enable_message_rating = get_bool(&["features", "enable_message_rating"], config.enable_message_rating);
 
         // Merge Models
         config.default_models = get_string(&["models", "default_models"], config.default_models.clone());

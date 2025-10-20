@@ -665,7 +665,35 @@ async fn update_admin_config(
     config.pending_user_overlay_content = form_data.pending_user_overlay_content.clone();
     config.response_watermark = form_data.response_watermark.clone();
 
-    // TODO: Persist to database
+    // Persist admin config to database
+    let admin_config_json = serde_json::json!({
+        "show_admin_details": config.show_admin_details,
+        "webui_url": config.webui_url,
+        "enable_signup": config.enable_signup,
+        "enable_api_key": config.enable_api_key,
+        "enable_api_key_endpoint_restrictions": config.enable_api_key_endpoint_restrictions,
+        "api_key_allowed_endpoints": config.api_key_allowed_endpoints,
+        "default_user_role": config.default_user_role,
+        "jwt_expires_in": config.jwt_expires_in,
+        "enable_community_sharing": config.enable_community_sharing,
+        "enable_message_rating": config.enable_message_rating,
+        "enable_channels": config.enable_channels,
+        "enable_notes": config.enable_notes,
+        "enable_user_webhooks": config.enable_user_webhooks,
+        "pending_user_overlay_title": config.pending_user_overlay_title,
+        "pending_user_overlay_content": config.pending_user_overlay_content,
+        "response_watermark": config.response_watermark,
+    });
+    
+    // Drop the write lock before async operations
+    drop(config);
+    
+    if let Err(e) = crate::services::ConfigService::update_section(&state.db, "admin", admin_config_json).await {
+        tracing::warn!("Failed to persist admin config to database: {}", e);
+    }
+    
+    // Re-acquire read lock for response
+    let config = state.config.read().unwrap();
 
     Ok(HttpResponse::Ok().json(AdminConfigResponse {
         show_admin_details: config.show_admin_details,
