@@ -97,6 +97,8 @@ pub struct MessageResponse {
     pub channel_id: Option<String>,
     pub user_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<crate::models::user::UserNameResponse>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub reply_to_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_id: Option<String>,
@@ -124,6 +126,7 @@ impl From<Message> for MessageResponse {
             chat_id: msg.chat_id,
             channel_id: msg.channel_id,
             user_id: msg.user_id,
+            user: None, // Will be populated by service layer
             reply_to_id: msg.reply_to_id,
             parent_id: msg.parent_id,
             content: msg.content,

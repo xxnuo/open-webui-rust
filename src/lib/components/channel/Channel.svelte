@@ -182,6 +182,13 @@
 
 		$socket?.on('channel-events', channelEventHandler);
 
+		// Join the channel room for real-time updates
+		if ($socket && id) {
+			$socket.emit('channel:join', {
+				channel_id: id
+			});
+		}
+
 		mediaQuery = window.matchMedia('(min-width: 1024px)');
 
 		const handleMediaQuery = async (e) => {
@@ -198,6 +205,13 @@
 
 	onDestroy(() => {
 		$socket?.off('channel-events', channelEventHandler);
+		
+		// Leave the channel room when component is destroyed
+		if ($socket && id) {
+			$socket.emit('channel:leave', {
+				channel_id: id
+			});
+		}
 	});
 </script>
 

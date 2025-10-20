@@ -65,6 +65,29 @@ impl From<User> for UserResponse {
     }
 }
 
+/// Lightweight user response for channel messages and other contexts
+/// where only basic user info is needed
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserNameResponse {
+    pub id: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile_image_url: Option<String>,
+}
+
+impl From<User> for UserNameResponse {
+    fn from(user: User) -> Self {
+        UserNameResponse {
+            id: user.id,
+            name: user.name,
+            email: Some(user.email),
+            profile_image_url: Some(user.profile_image_url),
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, Validate)]
 #[allow(dead_code)]
 pub struct CreateUserRequest {

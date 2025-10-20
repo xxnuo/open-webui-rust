@@ -206,6 +206,12 @@ async fn handle_socket_packet(
                     "channel-events" => {
                         event_handler.handle_channel_event(sid, data).await
                     }
+                    "channel:join" => {
+                        event_handler.handle_channel_join(sid, data).await
+                    }
+                    "channel:leave" => {
+                        event_handler.handle_channel_leave(sid, data).await
+                    }
                     "ydoc:document:join" => {
                         event_handler.handle_ydoc_join(sid, data).await
                     }

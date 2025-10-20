@@ -197,6 +197,32 @@ impl EventHandler {
         Ok(())
     }
 
+    /// Handle channel join (user joins a channel room)
+    pub async fn handle_channel_join(&self, sid: &str, data: JsonValue) -> Result<(), String> {
+        let channel_id = data.get("channel_id")
+            .and_then(|c| c.as_str())
+            .ok_or("Missing channel_id")?;
+
+        let room = format!("channel:{}", channel_id);
+        self.manager.join_room(sid, &room).await?;
+
+        tracing::info!("Session {} joined channel room: {}", sid, channel_id);
+        Ok(())
+    }
+
+    /// Handle channel leave (user leaves a channel room)
+    pub async fn handle_channel_leave(&self, sid: &str, data: JsonValue) -> Result<(), String> {
+        let channel_id = data.get("channel_id")
+            .and_then(|c| c.as_str())
+            .ok_or("Missing channel_id")?;
+
+        let room = format!("channel:{}", channel_id);
+        self.manager.leave_room(sid, &room).await?;
+
+        tracing::info!("Session {} left channel room: {}", sid, channel_id);
+        Ok(())
+    }
+
     /// Handle Yjs document join
     pub async fn handle_ydoc_join(&self, sid: &str, data: JsonValue) -> Result<(), String> {
         let doc_id = data.get("document_id")

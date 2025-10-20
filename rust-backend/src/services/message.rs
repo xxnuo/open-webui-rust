@@ -1,6 +1,8 @@
 use crate::db::Database;
 use crate::error::{AppError, AppResult};
-use crate::models::message::{Message, MessageForm, MessageReaction, Reaction};
+use crate::models::message::{Message, MessageForm, MessageReaction, Reaction, MessageResponse};
+use crate::models::user::UserNameResponse;
+use crate::services::user::UserService;
 use crate::utils::time::current_timestamp;
 use std::collections::HashMap;
 
@@ -332,6 +334,17 @@ impl<'a> MessageService<'a> {
             .await?;
 
         Ok(())
+    }
+
+    /// Convert Message to MessageResponse with user information populated
+    pub async fn to_message_response(&self, message: Message) -> AppResult<MessageResponse> {
+        let user_service = UserService::new(self.db);
+        let user = user_service.get_user_by_id(&message.user_id).await.ok().flatten();
+        
+        let mut response = MessageResponse::from(message);
+        response.user = user.map(UserNameResponse::from);
+        
+        Ok(response)
     }
 }
 

@@ -415,19 +415,18 @@ async fn get_channel_messages(
     }
     
     let message_service = MessageService::new(&state.db);
-    let user_service = UserService::new(&state.db);
     let messages = message_service.get_messages_by_channel_id(&id, query.skip, query.limit).await?;
     
     let mut response = Vec::new();
     for message in messages {
-        let user = user_service.get_user_by_id(&message.user_id).await.ok().flatten();
+        let message_response = message_service.to_message_response(message.clone()).await?;
         let reply_count = message_service.get_thread_replies_count(&message.id).await.ok();
         let latest_reply_at = message_service.get_latest_thread_reply_at(&message.id).await.ok().flatten();
         let reactions = message_service.get_reactions(&message.id).await.ok();
         
         response.push(MessageUserResponse {
-            message: MessageResponse::from(message),
-            user: user.map(UserNameResponse::from),
+            message: message_response,
+            user: None, // User is already in message_response
             reply_to_message: None,
             reply_count,
             latest_reply_at,
@@ -469,6 +468,9 @@ async fn post_new_message(
     let message_service = MessageService::new(&state.db);
     let message = message_service.create_message(&channel_id, &auth_user.user.id, &form).await?;
     
+    // Convert to MessageResponse with user information
+    let message_response = message_service.to_message_response(message.clone()).await?;
+    
     // Emit Socket.IO event for real-time updates
     if let Some(ref socketio_handler) = state.socketio_handler {
         let user_service = UserService::new(&state.db);
@@ -478,7 +480,7 @@ async fn post_new_message(
                 "message_id": &message.id,
                 "data": {
                     "type": "message",
-                    "data": MessageResponse::from(message.clone()),
+                    "data": &message_response,
                 },
                 "user": UserNameResponse::from(user.clone()),
                 "channel": {
@@ -494,12 +496,13 @@ async fn post_new_message(
             // If this is a reply to a parent message, emit a separate event for the parent
             if let Some(ref parent_id) = message.parent_id {
                 if let Some(parent_message) = message_service.get_message_by_id(parent_id).await.ok().flatten() {
+                    let parent_message_response = message_service.to_message_response(parent_message).await?;
                     let parent_event_data = json!({
                         "channel_id": &channel_id,
                         "message_id": parent_id,
                         "data": {
                             "type": "message:reply",
-                            "data": MessageResponse::from(parent_message),
+                            "data": parent_message_response,
                         },
                         "user": UserNameResponse::from(user),
                         "channel": {
@@ -513,7 +516,7 @@ async fn post_new_message(
         }
     }
     
-    Ok(HttpResponse::Ok().json(MessageResponse::from(message)))
+    Ok(HttpResponse::Ok().json(message_response))
 }
 
 async fn get_channel_message(
@@ -553,12 +556,11 @@ async fn get_channel_message(
         return Err(AppError::BadRequest("Message does not belong to this channel".to_string()));
     }
     
-    let user_service = UserService::new(&state.db);
-    let user = user_service.get_user_by_id(&message.user_id).await.ok().flatten();
+    let message_response = message_service.to_message_response(message).await?;
     
     Ok(HttpResponse::Ok().json(MessageUserResponse {
-        message: MessageResponse::from(message),
-        user: user.map(UserNameResponse::from),
+        message: message_response,
+        user: None, // User is already in message_response
         reply_to_message: None,
         reply_count: None,
         latest_reply_at: None,
@@ -598,15 +600,14 @@ async fn get_channel_thread_messages(
     let message_service = MessageService::new(&state.db);
     let messages = message_service.get_thread_messages(&id, &message_id, query.skip, query.limit).await?;
     
-    let user_service = UserService::new(&state.db);
     let mut response = Vec::new();
     for message in messages {
-        let user = user_service.get_user_by_id(&message.user_id).await.ok().flatten();
+        let message_response = message_service.to_message_response(message.clone()).await?;
         let reactions = message_service.get_reactions(&message.id).await.ok();
         
         response.push(MessageUserResponse {
-            message: MessageResponse::from(message),
-            user: user.map(UserNameResponse::from),
+            message: message_response,
+            user: None, // User is already in message_response
             reply_to_message: None,
             reply_count: Some(0),
             latest_reply_at: None,
@@ -647,6 +648,7 @@ async fn update_message_by_id(
     }
     
     let updated_message = message_service.update_message(&message_id, &form).await?;
+    let message_response = message_service.to_message_response(updated_message.clone()).await?;
     
     // Emit Socket.IO event for real-time updates
     if let Some(ref socketio_handler) = state.socketio_handler {
@@ -657,7 +659,7 @@ async fn update_message_by_id(
                 "message_id": &message_id,
                 "data": {
                     "type": "message:update",
-                    "data": MessageResponse::from(updated_message.clone()),
+                    "data": &message_response,
                 },
                 "user": UserNameResponse::from(user),
                 "channel": {
@@ -672,7 +674,7 @@ async fn update_message_by_id(
         }
     }
     
-    Ok(HttpResponse::Ok().json(MessageResponse::from(updated_message)))
+    Ok(HttpResponse::Ok().json(message_response))
 }
 
 async fn delete_message_by_id(
