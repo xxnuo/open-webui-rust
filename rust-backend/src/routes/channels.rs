@@ -444,8 +444,9 @@ async fn post_new_message(
     id: web::Path<String>,
     form: web::Json<MessageForm>,
 ) -> AppResult<HttpResponse> {
+    let channel_id = id.into_inner();
     let channel_service = ChannelService::new(&state.db);
-    let channel = channel_service.get_channel_by_id(&id)
+    let channel = channel_service.get_channel_by_id(&channel_id)
         .await?
         .ok_or_else(|| AppError::NotFound("Channel not found".to_string()))?;
     
@@ -466,10 +467,51 @@ async fn post_new_message(
     }
     
     let message_service = MessageService::new(&state.db);
-    let message = message_service.create_message(&id, &auth_user.user.id, &form).await?;
+    let message = message_service.create_message(&channel_id, &auth_user.user.id, &form).await?;
     
     // Emit Socket.IO event for real-time updates
-    // Real-time updates disabled (Socket.IO removed)
+    if let Some(ref socketio_handler) = state.socketio_handler {
+        let user_service = UserService::new(&state.db);
+        if let Some(user) = user_service.get_user_by_id(&auth_user.user.id).await.ok().flatten() {
+            let event_data = json!({
+                "channel_id": &channel_id,
+                "message_id": &message.id,
+                "data": {
+                    "type": "message",
+                    "data": MessageResponse::from(message.clone()),
+                },
+                "user": UserNameResponse::from(user.clone()),
+                "channel": {
+                    "id": channel.id,
+                    "name": channel.name,
+                }
+            });
+            
+            // Broadcast to all users in the channel room
+            let room = format!("channel:{}", channel_id);
+            let _ = socketio_handler.broadcast_to_room(&room, "channel-events", event_data, None).await;
+            
+            // If this is a reply to a parent message, emit a separate event for the parent
+            if let Some(ref parent_id) = message.parent_id {
+                if let Some(parent_message) = message_service.get_message_by_id(parent_id).await.ok().flatten() {
+                    let parent_event_data = json!({
+                        "channel_id": &channel_id,
+                        "message_id": parent_id,
+                        "data": {
+                            "type": "message:reply",
+                            "data": MessageResponse::from(parent_message),
+                        },
+                        "user": UserNameResponse::from(user),
+                        "channel": {
+                            "id": channel.id,
+                            "name": channel.name,
+                        }
+                    });
+                    let _ = socketio_handler.broadcast_to_room(&room, "channel-events", parent_event_data, None).await;
+                }
+            }
+        }
+    }
     
     Ok(HttpResponse::Ok().json(MessageResponse::from(message)))
 }
@@ -606,9 +648,8 @@ async fn update_message_by_id(
     
     let updated_message = message_service.update_message(&message_id, &form).await?;
     
-    // TODO: Re-enable Socket.IO event emission when socket support is fully integrated
-    // For now, Socket.IO events are disabled
-    if let Some(ref socket_state) = state.socket_state {
+    // Emit Socket.IO event for real-time updates
+    if let Some(ref socketio_handler) = state.socketio_handler {
         let user_service = UserService::new(&state.db);
         if let Some(user) = user_service.get_user_by_id(&auth_user.user.id).await.ok().flatten() {
             let event_data = json!({
@@ -625,10 +666,9 @@ async fn update_message_by_id(
                 }
             });
             
-            // Emit to all users in the channel (would need to track channel membership)
-            // For now, this is a placeholder
-            let _ = socket_state;
-            let _ = event_data;
+            // Broadcast to all users in the channel room
+            let room = format!("channel:{}", id);
+            let _ = socketio_handler.broadcast_to_room(&room, "channel-events", event_data, None).await;
         }
     }
     
@@ -665,8 +705,8 @@ async fn delete_message_by_id(
     
     message_service.delete_message(&message_id).await?;
     
-    // TODO: Re-enable Socket.IO event emission when socket support is fully integrated
-    if let Some(ref socket_state) = state.socket_state {
+    // Emit Socket.IO event for real-time updates
+    if let Some(ref socketio_handler) = state.socketio_handler {
         let user_service = UserService::new(&state.db);
         if let Some(user) = user_service.get_user_by_id(&auth_user.user.id).await.ok().flatten() {
             let event_data = json!({
@@ -686,9 +726,9 @@ async fn delete_message_by_id(
                 }
             });
             
-            // Placeholder for channel event emission
-            let _ = socket_state;
-            let _ = event_data;
+            // Broadcast to all users in the channel room
+            let room = format!("channel:{}", id);
+            let _ = socketio_handler.broadcast_to_room(&room, "channel-events", event_data, None).await;
         }
     }
     
@@ -724,8 +764,8 @@ async fn add_reaction_to_message(
     
     message_service.add_reaction(&message_id, &auth_user.user.id, &form.name).await?;
     
-    // TODO: Re-enable Socket.IO event emission when socket support is fully integrated
-    if let Some(ref socket_state) = state.socket_state {
+    // Emit Socket.IO event for real-time updates
+    if let Some(ref socketio_handler) = state.socketio_handler {
         let user_service = UserService::new(&state.db);
         if let Some(user) = user_service.get_user_by_id(&auth_user.user.id).await.ok().flatten() {
             let reactions = message_service.get_reactions(&message_id).await.ok();
@@ -748,9 +788,9 @@ async fn add_reaction_to_message(
                 }
             });
             
-            // Placeholder for channel event emission
-            let _ = socket_state;
-            let _ = event_data;
+            // Broadcast to all users in the channel room
+            let room = format!("channel:{}", id);
+            let _ = socketio_handler.broadcast_to_room(&room, "channel-events", event_data, None).await;
         }
     }
     
@@ -781,8 +821,8 @@ async fn remove_reaction_from_message(
     
     message_service.remove_reaction(&message_id, &auth_user.user.id, &form.name).await?;
     
-    // TODO: Re-enable Socket.IO event emission when socket support is fully integrated
-    if let Some(ref socket_state) = state.socket_state {
+    // Emit Socket.IO event for real-time updates
+    if let Some(ref socketio_handler) = state.socketio_handler {
         let user_service = UserService::new(&state.db);
         if let Some(user) = user_service.get_user_by_id(&auth_user.user.id).await.ok().flatten() {
             let reactions = message_service.get_reactions(&message_id).await.ok();
@@ -805,9 +845,9 @@ async fn remove_reaction_from_message(
                 }
             });
             
-            // Placeholder for channel event emission
-            let _ = socket_state;
-            let _ = event_data;
+            // Broadcast to all users in the channel room
+            let room = format!("channel:{}", id);
+            let _ = socketio_handler.broadcast_to_room(&room, "channel-events", event_data, None).await;
         }
     }
     
