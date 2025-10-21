@@ -7,6 +7,7 @@ mod routes;
 mod services;
 mod socket;
 mod socketio;
+mod static_files;
 mod utils;
 mod websocket_chat;
 
@@ -251,8 +252,11 @@ async fn main() -> anyhow::Result<()> {
             .route("/cache/{path:.*}", web::get().to(serve_cache_file))
             // Serve default user avatar at root (for backward compatibility)
             .route("/user.png", web::get().to(serve_user_avatar))
-            // Serve static files from static directory
+            // Serve static files from static directory (if exists, for development)
             .service(Files::new("/static", "../static/static"))
+            // Serve embedded frontend static files as default service (SPA fallback)
+            // This catches all unmatched routes and serves frontend or index.html
+            .default_service(web::get().to(static_files::serve))
     })
     // CRITICAL: Disable keep-alive buffering for real-time streaming
     .keep_alive(actix_web::http::KeepAlive::Timeout(std::time::Duration::from_secs(75)))
