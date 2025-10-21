@@ -237,16 +237,23 @@ impl<'a> UserService<'a> {
             return Ok(vec![]);
         }
 
-        let result: Vec<(String,)> = sqlx::query_as(
-            r#"
-            SELECT id
-            FROM "user"
-            WHERE id = ANY($1)
-            "#,
-        )
-        .bind(user_ids)
-        .fetch_all(&self.db.pool)
-        .await?;
+        // Build IN clause for SQLite
+        let placeholders = user_ids.iter().enumerate()
+            .map(|(i, _)| format!("${}", i + 1))
+            .collect::<Vec<_>>()
+            .join(", ");
+        
+        let query = format!(
+            r#"SELECT id FROM "user" WHERE id IN ({})"#,
+            placeholders
+        );
+
+        let mut q = sqlx::query_as(&query);
+        for id in user_ids {
+            q = q.bind(id);
+        }
+
+        let result: Vec<(String,)> = q.fetch_all(&self.db.pool).await?;
 
         Ok(result.into_iter().map(|(id,)| id).collect())
     }

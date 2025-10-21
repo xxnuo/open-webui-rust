@@ -275,10 +275,18 @@ impl<'a> FolderService<'a> {
             .await?;
 
         // Delete the folder and all its children
-        sqlx::query("DELETE FROM folder WHERE id = ANY($1)")
-            .bind(&folder_ids)
-            .execute(&self.db.pool)
-            .await?;
+        // Build IN clause for SQLite
+        let placeholders = folder_ids.iter().enumerate()
+            .map(|(i, _)| format!("${}", i + 1))
+            .collect::<Vec<_>>()
+            .join(", ");
+        
+        let query = format!("DELETE FROM folder WHERE id IN ({})", placeholders);
+        let mut q = sqlx::query(&query);
+        for id in &folder_ids {
+            q = q.bind(id);
+        }
+        q.execute(&self.db.pool).await?;
 
         Ok(folder_ids)
     }
