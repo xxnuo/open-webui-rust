@@ -1,7 +1,7 @@
 use crate::db::Database;
 use crate::error::{AppError, AppResult};
 use crate::models::file::File;
-use crate::utils::time::current_timestamp;
+use crate::utils::time::current_timestamp_seconds;
 
 #[allow(dead_code)]
 pub struct FileService<'a> {
@@ -22,7 +22,7 @@ impl<'a> FileService<'a> {
         path: &str,
         meta: Option<serde_json::Value>,
     ) -> AppResult<File> {
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
 
         sqlx::query(
             r#"
@@ -124,7 +124,7 @@ impl<'a> FileService<'a> {
         id: &str,
         meta: serde_json::Value,
     ) -> AppResult<File> {
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
         let meta_str = serde_json::to_string(&meta).unwrap_or_else(|_| "{}".to_string());
 
         sqlx::query(
@@ -190,7 +190,7 @@ impl<'a> FileService<'a> {
         id: &str,
         data: serde_json::Value,
     ) -> AppResult<File> {
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
         let data_str = serde_json::to_string(&data).unwrap_or_else(|_| "{}".to_string());
 
         sqlx::query(

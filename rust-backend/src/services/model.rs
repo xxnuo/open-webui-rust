@@ -1,7 +1,7 @@
 use crate::db::Database;
 use crate::error::{AppError, AppResult};
 use crate::models::model::{Model, ModelForm};
-use crate::utils::time::current_timestamp;
+use crate::utils::time::current_timestamp_seconds;
 use sqlx::Row;
 
 #[allow(dead_code)]
@@ -24,7 +24,7 @@ impl<'a> ModelService<'a> {
         params: serde_json::Value,
         meta: serde_json::Value,
     ) -> AppResult<Model> {
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
         let params_str = serde_json::to_string(&params).unwrap_or_else(|_| "{}".to_string());
         let meta_str = serde_json::to_string(&meta).unwrap_or_else(|_| "{}".to_string());
 
@@ -118,7 +118,7 @@ impl<'a> ModelService<'a> {
         params: Option<serde_json::Value>,
         meta: Option<serde_json::Value>,
     ) -> AppResult<Model> {
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
 
         let mut query_parts = vec!["UPDATE model SET updated_at = $2"];
         let mut bind_values: Vec<String> = vec![now.to_string()];
@@ -194,7 +194,7 @@ impl<'a> ModelService<'a> {
             .map(|row| row.get("id"))
             .collect();
 
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
 
         // Upsert models
         for model in &models {
@@ -266,7 +266,7 @@ impl<'a> ModelService<'a> {
     }
 
     pub async fn insert_new_model(&self, form: ModelForm, user_id: &str) -> AppResult<Model> {
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
         let params_str = serde_json::to_string(&form.params).unwrap_or_else(|_| "{}".to_string());
         let meta_str = serde_json::to_string(&form.meta).unwrap_or_else(|_| "{}".to_string());
         let access_control_str = form.access_control
@@ -299,7 +299,7 @@ impl<'a> ModelService<'a> {
     }
 
     pub async fn update_model_by_id(&self, id: &str, form: ModelForm) -> AppResult<Model> {
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
         let params_str = serde_json::to_string(&form.params).unwrap_or_else(|_| "{}".to_string());
         let meta_str = serde_json::to_string(&form.meta).unwrap_or_else(|_| "{}".to_string());
         let access_control_str = form.access_control

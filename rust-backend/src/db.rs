@@ -38,6 +38,7 @@ impl Database {
             include_str!("../migrations/postgres/007_add_file_columns.sql"),
             include_str!("../migrations/postgres/008_add_group_data_column.sql"),
             include_str!("../migrations/postgres/009_make_message_chat_id_nullable.sql"),
+            include_str!("../migrations/postgres/010_fix_chat_timestamps.sql"),
         ];
         
         for (idx, migration_sql) in migrations.iter().enumerate() {

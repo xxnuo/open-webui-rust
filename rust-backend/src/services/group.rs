@@ -1,7 +1,7 @@
 use crate::db::Database;
 use crate::error::{AppError, AppResult};
 use crate::models::group::{Group, GroupForm, GroupUpdateForm};
-use crate::utils::time::current_timestamp;
+use crate::utils::time::current_timestamp_seconds;
 
 pub struct GroupService<'a> {
     db: &'a Database,
@@ -18,7 +18,7 @@ impl<'a> GroupService<'a> {
         form_data: &GroupForm,
     ) -> AppResult<Group> {
         let id = uuid::Uuid::new_v4().to_string();
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
 
         let permissions_json = form_data
             .permissions
@@ -116,7 +116,7 @@ impl<'a> GroupService<'a> {
         id: &str,
         form_data: &GroupUpdateForm,
     ) -> AppResult<Group> {
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
         let group = self
             .get_group_by_id(id)
             .await?
@@ -180,7 +180,7 @@ impl<'a> GroupService<'a> {
             }
         }
 
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
         let user_ids_json = serde_json::to_string(&group_user_ids).ok();
 
         sqlx::query(
@@ -219,7 +219,7 @@ impl<'a> GroupService<'a> {
             group_user_ids.retain(|uid| uid != user_id);
         }
 
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
         let user_ids_json = serde_json::to_string(&group_user_ids).ok();
 
         sqlx::query(

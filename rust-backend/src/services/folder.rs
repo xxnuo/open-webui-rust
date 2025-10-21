@@ -1,7 +1,7 @@
 use crate::db::Database;
 use crate::error::{AppError, AppResult};
 use crate::models::folder::{Folder, FolderForm, FolderUpdateForm};
-use crate::utils::time::current_timestamp;
+use crate::utils::time::current_timestamp_seconds;
 
 pub struct FolderService<'a> {
     db: &'a Database,
@@ -18,7 +18,7 @@ impl<'a> FolderService<'a> {
         form_data: &FolderForm,
     ) -> AppResult<Folder> {
         let id = uuid::Uuid::new_v4().to_string();
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
 
         let data_json = form_data
             .data
@@ -146,7 +146,7 @@ impl<'a> FolderService<'a> {
         user_id: &str,
         form_data: &FolderUpdateForm,
     ) -> AppResult<Folder> {
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
         let folder = self
             .get_folder_by_id_and_user_id(id, user_id)
             .await?
@@ -207,7 +207,7 @@ impl<'a> FolderService<'a> {
         user_id: &str,
         parent_id: Option<&str>,
     ) -> AppResult<Folder> {
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
 
         sqlx::query(
             r#"
@@ -234,7 +234,7 @@ impl<'a> FolderService<'a> {
         user_id: &str,
         is_expanded: bool,
     ) -> AppResult<Folder> {
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
 
         sqlx::query(
             r#"

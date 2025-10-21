@@ -1,7 +1,7 @@
 use crate::db::Database;
 use crate::error::{AppError, AppResult};
 use crate::models::function::Function;
-use crate::utils::time::current_timestamp;
+use crate::utils::time::current_timestamp_seconds;
 
 #[allow(dead_code)]
 pub struct FunctionService<'a> {
@@ -25,7 +25,7 @@ impl<'a> FunctionService<'a> {
         is_active: bool,
         is_global: bool,
     ) -> AppResult<Function> {
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
         let meta_str = serde_json::to_string(&meta).unwrap_or_else(|_| "{}".to_string());
 
         sqlx::query(
@@ -122,7 +122,7 @@ impl<'a> FunctionService<'a> {
         is_active: bool,
         is_global: bool,
     ) -> AppResult<Function> {
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
 
         // Build SET clause dynamically
         let mut set_clauses = vec!["updated_at = $1"];
@@ -180,7 +180,7 @@ impl<'a> FunctionService<'a> {
             "#,
         )
         .bind(&valves_str)
-        .bind(current_timestamp())
+        .bind(current_timestamp_seconds())
         .bind(id)
         .execute(&self.db.pool)
         .await?;

@@ -1,7 +1,7 @@
 use crate::db::Database;
 use crate::error::{AppError, AppResult};
 use crate::models::feedback::{Feedback, FeedbackForm};
-use crate::utils::time::current_timestamp;
+use crate::utils::time::current_timestamp_seconds;
 use uuid::Uuid;
 
 pub struct FeedbackService<'a> {
@@ -18,7 +18,7 @@ impl<'a> FeedbackService<'a> {
         user_id: &str,
         form_data: &FeedbackForm,
     ) -> AppResult<Feedback> {
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
         let id = Uuid::new_v4().to_string();
 
         let data_json = form_data
@@ -144,7 +144,7 @@ impl<'a> FeedbackService<'a> {
         id: &str,
         form_data: &FeedbackForm,
     ) -> AppResult<Feedback> {
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
 
         let data_json = form_data
             .data
@@ -193,7 +193,7 @@ impl<'a> FeedbackService<'a> {
         user_id: &str,
         form_data: &FeedbackForm,
     ) -> AppResult<Feedback> {
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
 
         let data_json = form_data
             .data

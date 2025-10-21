@@ -2,7 +2,7 @@ use crate::db::Database;
 use crate::error::{AppError, AppResult};
 use crate::models::Auth;
 use crate::utils::password::{hash_password, verify_password};
-use crate::utils::time::current_timestamp;
+use crate::utils::time::current_timestamp_seconds;
 
 pub struct AuthService<'a> {
     db: &'a Database,
@@ -15,7 +15,7 @@ impl<'a> AuthService<'a> {
 
     pub async fn create_auth(&self, id: &str, email: &str, password: &str) -> AppResult<()> {
         let password_hash = hash_password(password)?;
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
 
         sqlx::query(
             r#"
@@ -80,7 +80,7 @@ impl<'a> AuthService<'a> {
             "#,
         )
         .bind(password_hash)
-        .bind(current_timestamp())
+        .bind(current_timestamp_seconds())
         .bind(id)
         .execute(&self.db.pool)
         .await?;

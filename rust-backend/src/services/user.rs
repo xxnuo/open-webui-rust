@@ -1,7 +1,7 @@
 use crate::db::Database;
 use crate::error::{AppError, AppResult};
 use crate::models::User;
-use crate::utils::time::current_timestamp;
+use crate::utils::time::current_timestamp_seconds;
 use sqlx::Row;
 
 pub struct UserService<'a> {
@@ -102,7 +102,7 @@ impl<'a> UserService<'a> {
         role: &str,
         profile_image_url: &str,
     ) -> AppResult<User> {
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
 
         sqlx::query(
             r#"
@@ -128,7 +128,7 @@ impl<'a> UserService<'a> {
 
     #[allow(dead_code)]
     pub async fn update_user_last_active(&self, id: &str) -> AppResult<()> {
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
 
         sqlx::query(
             r#"
@@ -185,7 +185,7 @@ impl<'a> UserService<'a> {
             "#,
         )
         .bind(role)
-        .bind(current_timestamp())
+        .bind(current_timestamp_seconds())
         .bind(id)
         .execute(&self.db.pool)
         .await?;
@@ -215,7 +215,7 @@ impl<'a> UserService<'a> {
             "#,
         )
         .bind(settings)
-        .bind(current_timestamp())
+        .bind(current_timestamp_seconds())
         .bind(id)
         .execute(&self.db.pool)
         .await?;

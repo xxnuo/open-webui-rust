@@ -1,7 +1,7 @@
 use crate::db::Database;
 use crate::error::{AppError, AppResult};
 use crate::models::prompt::{Prompt, PromptForm};
-use crate::utils::time::current_timestamp;
+use crate::utils::time::current_timestamp_seconds;
 
 pub struct PromptService<'a> {
     db: &'a Database,
@@ -17,7 +17,7 @@ impl<'a> PromptService<'a> {
         user_id: &str,
         form_data: &PromptForm,
     ) -> AppResult<Prompt> {
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
 
         let access_control_json = form_data
             .access_control
@@ -81,7 +81,7 @@ impl<'a> PromptService<'a> {
         command: &str,
         form_data: &PromptForm,
     ) -> AppResult<Prompt> {
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
 
         let access_control_json = form_data
             .access_control

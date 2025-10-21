@@ -1,7 +1,7 @@
 use crate::db::Database;
 use crate::error::{AppError, AppResult};
 use crate::models::chat::{Chat, CreateChatRequest, UpdateChatRequest};
-use crate::utils::time::current_timestamp;
+use crate::utils::time::current_timestamp_seconds;
 use sqlx::Row;
 use sqlx::types::JsonValue;
 use uuid::Uuid;
@@ -17,7 +17,7 @@ impl<'a> ChatService<'a> {
     }
 
     pub async fn create_chat(&self, user_id: &str, req: CreateChatRequest) -> AppResult<Chat> {
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
         let title = req.title.unwrap_or_else(|| "New Chat".to_string());
         let id = req.id;
 
@@ -213,7 +213,7 @@ impl<'a> ChatService<'a> {
         user_id: &str,
         req: UpdateChatRequest,
     ) -> AppResult<Chat> {
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
 
         let mut query_builder = sqlx::QueryBuilder::new("UPDATE chat SET updated_at = ");
         query_builder.push_bind(now);
@@ -252,7 +252,7 @@ impl<'a> ChatService<'a> {
     }
 
     pub async fn toggle_chat_pinned(&self, id: &str, user_id: &str) -> AppResult<Chat> {
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
         
         sqlx::query(
             r#"
@@ -274,7 +274,7 @@ impl<'a> ChatService<'a> {
     }
 
     pub async fn toggle_chat_archived(&self, id: &str, user_id: &str) -> AppResult<Chat> {
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
         
         sqlx::query(
             r#"
@@ -338,7 +338,7 @@ impl<'a> ChatService<'a> {
 
         // Create shared chat
         let share_id = Uuid::new_v4().to_string();
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
 
         let meta_value = chat.meta.unwrap_or_else(|| serde_json::json!({}));
 
@@ -517,7 +517,7 @@ impl<'a> ChatService<'a> {
         }
 
         // Update in database
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
         sqlx::query(
             r#"
             UPDATE chat
@@ -809,7 +809,7 @@ impl<'a> ChatService<'a> {
         title: Option<String>,
     ) -> AppResult<Chat> {
         let new_id = Uuid::new_v4().to_string();
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
         
         // Prepare cloned chat data
         let mut chat_data = source_chat.chat.clone();
@@ -859,7 +859,7 @@ impl<'a> ChatService<'a> {
         user_id: &str,
         folder_id: Option<String>,
     ) -> AppResult<Chat> {
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
         
         sqlx::query(
             r#"
@@ -905,7 +905,7 @@ impl<'a> ChatService<'a> {
             }
         }
 
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
         sqlx::query(
             r#"
             UPDATE chat
@@ -956,7 +956,7 @@ impl<'a> ChatService<'a> {
             meta["tags"] = serde_json::Value::Array(new_tags);
         }
 
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
         sqlx::query(
             r#"
             UPDATE chat
@@ -995,7 +995,7 @@ impl<'a> ChatService<'a> {
             });
         }
 
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
         sqlx::query(
             r#"
             UPDATE chat
@@ -1027,7 +1027,7 @@ impl<'a> ChatService<'a> {
         let mut meta = chat.meta.unwrap_or_else(|| serde_json::json!({}));
         meta["tags"] = serde_json::Value::Array(vec![]);
 
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
         sqlx::query(
             r#"
             UPDATE chat

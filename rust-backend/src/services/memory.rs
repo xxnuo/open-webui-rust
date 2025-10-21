@@ -1,7 +1,7 @@
 use crate::db::Database;
 use crate::error::{AppError, AppResult};
 use crate::models::memory::Memory;
-use crate::utils::time::current_timestamp;
+use crate::utils::time::current_timestamp_seconds;
 
 #[allow(dead_code)]
 pub struct MemoryService<'a> {
@@ -21,7 +21,7 @@ impl<'a> MemoryService<'a> {
         content: &str,
         meta: Option<serde_json::Value>,
     ) -> AppResult<Memory> {
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
         let meta_str = meta.as_ref().map(|v| serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string()));
 
         sqlx::query(
@@ -95,7 +95,7 @@ impl<'a> MemoryService<'a> {
         content: Option<&str>,
         meta: Option<serde_json::Value>,
     ) -> AppResult<Memory> {
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
 
         let mut query_parts = vec!["UPDATE memory SET updated_at = $2"];
         let mut bind_values: Vec<String> = vec![now.to_string()];

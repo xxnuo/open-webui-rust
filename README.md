@@ -41,7 +41,9 @@ Rust 后端是 Python 后端的直接替代品, 有这些好处:
 | 名称 | 赞助金额 | 贡献文件 | 享有特权 |
 |------|----------|---------|---------|
 | [![栢田医疗](./img/baitian.png)](https://baitianjituan.com) | 5000 | 300 | [![栢田医疗](./img/btyl.png)](https://baitianjituan.com) |
+| Knox用户匿名赞助 | 300 | 18 | 微信服务 |
 | [Bestming](https://www.mingagent.com) | 100 | 6 | 微信服务 |
+| HJPING | 100 | 6 | 微信服务 |
 | KingZ | 50 | 2 | 电邮服务 |
 | JimLi | 66 | 2 | 电邮服务 |
 | shanwu | 50 | 2 | 电邮服务 |

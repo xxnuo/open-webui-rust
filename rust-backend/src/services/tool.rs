@@ -1,7 +1,7 @@
 use crate::db::Database;
 use crate::error::{AppError, AppResult};
 use crate::models::tool::Tool;
-use crate::utils::time::current_timestamp;
+use crate::utils::time::current_timestamp_seconds;
 
 #[allow(dead_code)]
 pub struct ToolService<'a> {
@@ -24,7 +24,7 @@ impl<'a> ToolService<'a> {
         meta: serde_json::Value,
         access_control: Option<serde_json::Value>,
     ) -> AppResult<Tool> {
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
         
         let specs_str = serde_json::to_string(&specs).unwrap();
         let meta_str = serde_json::to_string(&meta).unwrap();
@@ -145,7 +145,7 @@ impl<'a> ToolService<'a> {
         meta: Option<serde_json::Value>,
         access_control: Option<serde_json::Value>,
     ) -> AppResult<Tool> {
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
 
         // Build dynamic query parts
         let mut updates = vec!["updated_at = $1".to_string()];
@@ -207,7 +207,7 @@ impl<'a> ToolService<'a> {
     }
 
     pub async fn update_tool_valves(&self, id: &str, valves: serde_json::Value) -> AppResult<()> {
-        let now = current_timestamp();
+        let now = current_timestamp_seconds();
         let valves_str = serde_json::to_string(&valves).unwrap();
 
         sqlx::query("UPDATE tool SET valves = $1, updated_at = $2 WHERE id = $3")
