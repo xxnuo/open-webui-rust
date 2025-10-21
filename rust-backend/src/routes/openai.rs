@@ -1386,34 +1386,67 @@ pub async fn handle_chat_completions(
             // Get user settings to find their direct connections
             tracing::debug!("User settings: {:?}", auth_user.user.settings);
             let user_settings = auth_user.user.settings.as_ref()
-                .ok_or_else(|| AppError::BadRequest("User settings not found".to_string()))?;
+                .ok_or_else(|| AppError::BadRequest(
+                    "User settings not found. Please configure your direct connections in Settings > Connections.".to_string()
+                ))?;
             
             // Direct connections can be at settings.directConnections OR settings.ui.directConnections
             let direct_connections = user_settings.get("directConnections")
-                .or_else(|| user_settings.get("ui").and_then(|ui| ui.get("directConnections")))
-                .ok_or_else(|| AppError::BadRequest("Direct connections not configured in user settings".to_string()))?;
+                .or_else(|| user_settings.get("ui").and_then(|ui| ui.get("directConnections")));
+            
+            if direct_connections.is_none() {
+                tracing::warn!(
+                    "Direct connections not configured for user {}. User settings structure: {:?}", 
+                    auth_user.user.email,
+                    user_settings
+                );
+                return Err(AppError::BadRequest(
+                    "Direct connections not configured. Please add your OpenAI API connections in Settings > Connections.".to_string()
+                ));
+            }
+            
+            let direct_connections = direct_connections.unwrap();
             
             // Extract URL and key arrays from settings
+            tracing::debug!("Direct connections object: {:?}", direct_connections);
+            
             let urls = direct_connections.get("OPENAI_API_BASE_URLS")
                 .and_then(|v| v.as_array())
-                .ok_or_else(|| AppError::BadRequest("OPENAI_API_BASE_URLS not found in user settings".to_string()))?;
+                .ok_or_else(|| {
+                    tracing::error!("OPENAI_API_BASE_URLS missing or not an array in direct connections");
+                    AppError::BadRequest("Direct connections configuration is invalid. Please check your Settings > Connections.".to_string())
+                })?;
             
             let keys = direct_connections.get("OPENAI_API_KEYS")
                 .and_then(|v| v.as_array())
-                .ok_or_else(|| AppError::BadRequest("OPENAI_API_KEYS not found in user settings".to_string()))?;
+                .ok_or_else(|| {
+                    tracing::error!("OPENAI_API_KEYS missing or not an array in direct connections");
+                    AppError::BadRequest("Direct connections configuration is invalid. Please check your Settings > Connections.".to_string())
+                })?;
             
             let configs = direct_connections.get("OPENAI_API_CONFIGS")
                 .and_then(|v| v.as_object())
-                .ok_or_else(|| AppError::BadRequest("OPENAI_API_CONFIGS not found in user settings".to_string()))?;
+                .ok_or_else(|| {
+                    tracing::error!("OPENAI_API_CONFIGS missing or not an object in direct connections");
+                    AppError::BadRequest("Direct connections configuration is invalid. Please check your Settings > Connections.".to_string())
+                })?;
             
             // Parse urlIdx as number
             let idx: usize = url_idx.parse()
                 .map_err(|_| AppError::BadRequest(format!("Invalid urlIdx: {}", url_idx)))?;
             
+            tracing::debug!("Looking up connection at index {} from {} total URLs", idx, urls.len());
+            
             // Get URL and key at that index
             let connection_url = urls.get(idx)
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| AppError::BadRequest(format!("No URL found at index {}", idx)))?;
+                .ok_or_else(|| {
+                    tracing::error!("No URL found at index {}. Available URLs: {} total", idx, urls.len());
+                    AppError::BadRequest(format!(
+                        "Connection not found at index {}. You have {} connection(s) configured. Please check your Settings > Connections.", 
+                        idx, urls.len()
+                    ))
+                })?;
             
             let connection_key = keys.get(idx)
                 .and_then(|v| v.as_str())
