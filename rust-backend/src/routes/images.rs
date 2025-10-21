@@ -1,7 +1,11 @@
 use actix_web::{web, HttpResponse};
 use serde::{Deserialize, Serialize};
 
-use crate::{error::AppError, middleware::{AuthMiddleware, AuthUser}, AppState};
+use crate::{
+    error::AppError,
+    middleware::{AuthMiddleware, AuthUser},
+    AppState,
+};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct OpenAIConfigForm {
@@ -88,7 +92,7 @@ async fn generate_image(
     _form_data: web::Json<GenerateImageForm>,
 ) -> Result<HttpResponse, AppError> {
     let config = state.config.read().unwrap();
-    
+
     if !config.enable_image_generation {
         return Err(AppError::Forbidden(
             "Image generation is not enabled".to_string(),
@@ -100,7 +104,7 @@ async fn generate_image(
     // - Automatic1111
     // - ComfyUI
     // - Gemini
-    
+
     Err(AppError::NotImplemented(
         "Image generation not yet implemented".to_string(),
     ))
@@ -112,7 +116,7 @@ async fn get_models(
     _auth_user: AuthUser,
 ) -> Result<HttpResponse, AppError> {
     let config = state.config.read().unwrap();
-    
+
     if !config.enable_image_generation {
         return Err(AppError::Forbidden(
             "Image generation is not enabled".to_string(),
@@ -125,15 +129,11 @@ async fn get_models(
             serde_json::json!({"id": "dall-e-2", "name": "DALL-E 2"}),
             serde_json::json!({"id": "dall-e-3", "name": "DALL-E 3"}),
         ],
-        "automatic1111" => vec![
-            serde_json::json!({"id": "stable-diffusion", "name": "Stable Diffusion"}),
-        ],
-        "comfyui" => vec![
-            serde_json::json!({"id": "comfyui", "name": "ComfyUI Workflow"}),
-        ],
-        "gemini" => vec![
-            serde_json::json!({"id": "imagen", "name": "Imagen"}),
-        ],
+        "automatic1111" => {
+            vec![serde_json::json!({"id": "stable-diffusion", "name": "Stable Diffusion"})]
+        }
+        "comfyui" => vec![serde_json::json!({"id": "comfyui", "name": "ComfyUI Workflow"})],
+        "gemini" => vec![serde_json::json!({"id": "imagen", "name": "Imagen"})],
         _ => vec![],
     };
 

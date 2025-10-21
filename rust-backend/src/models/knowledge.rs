@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
 use sqlx::types::JsonValue;
+use sqlx::FromRow;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 #[allow(dead_code)]

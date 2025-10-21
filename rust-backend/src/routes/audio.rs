@@ -2,7 +2,11 @@ use actix_web::{web, HttpResponse};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::{error::AppError, middleware::{AuthMiddleware, AuthUser}, AppState};
+use crate::{
+    error::AppError,
+    middleware::{AuthMiddleware, AuthUser},
+    AppState,
+};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct TTSConfigForm {
@@ -218,7 +222,7 @@ async fn speech(
     // Forward to configured TTS engine (OpenAI-compatible endpoint)
     if config.tts_engine == "openai" {
         let client = reqwest::Client::new();
-        
+
         let tts_payload = json!({
             "model": payload.model.as_ref().unwrap_or(&config.tts_model),
             "input": payload.input,
@@ -228,7 +232,10 @@ async fn speech(
 
         let response = client
             .post(format!("{}/audio/speech", config.tts_openai_api_base_url))
-            .header("Authorization", format!("Bearer {}", config.tts_openai_api_key))
+            .header(
+                "Authorization",
+                format!("Bearer {}", config.tts_openai_api_key),
+            )
             .json(&tts_payload)
             .send()
             .await
@@ -236,13 +243,15 @@ async fn speech(
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(AppError::ExternalServiceError(format!("TTS engine error: {}", error_text)));
+            return Err(AppError::ExternalServiceError(format!(
+                "TTS engine error: {}",
+                error_text
+            )));
         }
 
-        let audio_bytes = response
-            .bytes()
-            .await
-            .map_err(|e| AppError::ExternalServiceError(format!("Failed to read TTS response: {}", e)))?;
+        let audio_bytes = response.bytes().await.map_err(|e| {
+            AppError::ExternalServiceError(format!("Failed to read TTS response: {}", e))
+        })?;
 
         return Ok(HttpResponse::Ok()
             .content_type("audio/mpeg")
@@ -250,7 +259,10 @@ async fn speech(
     }
 
     // TODO: Implement other TTS engines (elevenlabs, azure, transformers)
-    Err(AppError::NotImplemented(format!("TTS engine '{}' not yet implemented", config.tts_engine)))
+    Err(AppError::NotImplemented(format!(
+        "TTS engine '{}' not yet implemented",
+        config.tts_engine
+    )))
 }
 
 // Transcriptions (STT) endpoint - proxies to configured STT engine
@@ -268,10 +280,15 @@ async fn transcriptions(
     if config.stt_engine == "openai" {
         // Forward to OpenAI-compatible STT endpoint
         // This requires proper multipart form handling
-        return Err(AppError::NotImplemented("STT endpoint not fully implemented yet".to_string()));
+        return Err(AppError::NotImplemented(
+            "STT endpoint not fully implemented yet".to_string(),
+        ));
     }
 
-    Err(AppError::NotImplemented(format!("STT engine '{}' not yet implemented", config.stt_engine)))
+    Err(AppError::NotImplemented(format!(
+        "STT engine '{}' not yet implemented",
+        config.stt_engine
+    )))
 }
 
 // Get available TTS models
@@ -286,7 +303,10 @@ async fn get_models(
     match config.tts_engine.as_str() {
         "openai" => {
             // Try to fetch from custom endpoint if not official OpenAI
-            if !config.tts_openai_api_base_url.starts_with("https://api.openai.com") {
+            if !config
+                .tts_openai_api_base_url
+                .starts_with("https://api.openai.com")
+            {
                 let client = reqwest::Client::new();
                 if let Ok(response) = client
                     .get(format!("{}/audio/models", config.tts_openai_api_base_url))
@@ -312,8 +332,14 @@ async fn get_models(
             // Fallback to defaults if no models found
             if models.is_empty() {
                 models = vec![
-                    ModelInfo { id: "tts-1".to_string(), name: None },
-                    ModelInfo { id: "tts-1-hd".to_string(), name: None },
+                    ModelInfo {
+                        id: "tts-1".to_string(),
+                        name: None,
+                    },
+                    ModelInfo {
+                        id: "tts-1-hd".to_string(),
+                        name: None,
+                    },
                 ];
             }
         }
@@ -362,7 +388,10 @@ async fn get_voices(
     match config.tts_engine.as_str() {
         "openai" => {
             // Try to fetch from custom endpoint if not official OpenAI
-            if !config.tts_openai_api_base_url.starts_with("https://api.openai.com") {
+            if !config
+                .tts_openai_api_base_url
+                .starts_with("https://api.openai.com")
+            {
                 let client = reqwest::Client::new();
                 if let Ok(response) = client
                     .get(format!("{}/audio/voices", config.tts_openai_api_base_url))
@@ -388,12 +417,30 @@ async fn get_voices(
             // Fallback to defaults if no voices found
             if voices.is_empty() {
                 voices = vec![
-                    VoiceInfo { id: "alloy".to_string(), name: "alloy".to_string() },
-                    VoiceInfo { id: "echo".to_string(), name: "echo".to_string() },
-                    VoiceInfo { id: "fable".to_string(), name: "fable".to_string() },
-                    VoiceInfo { id: "onyx".to_string(), name: "onyx".to_string() },
-                    VoiceInfo { id: "nova".to_string(), name: "nova".to_string() },
-                    VoiceInfo { id: "shimmer".to_string(), name: "shimmer".to_string() },
+                    VoiceInfo {
+                        id: "alloy".to_string(),
+                        name: "alloy".to_string(),
+                    },
+                    VoiceInfo {
+                        id: "echo".to_string(),
+                        name: "echo".to_string(),
+                    },
+                    VoiceInfo {
+                        id: "fable".to_string(),
+                        name: "fable".to_string(),
+                    },
+                    VoiceInfo {
+                        id: "onyx".to_string(),
+                        name: "onyx".to_string(),
+                    },
+                    VoiceInfo {
+                        id: "nova".to_string(),
+                        name: "nova".to_string(),
+                    },
+                    VoiceInfo {
+                        id: "shimmer".to_string(),
+                        name: "shimmer".to_string(),
+                    },
                 ];
             }
         }
@@ -429,7 +476,10 @@ async fn get_voices(
             let url = if !base_url.is_empty() {
                 format!("{}/cognitiveservices/voices/list", base_url)
             } else {
-                format!("https://{}.tts.speech.microsoft.com/cognitiveservices/voices/list", region)
+                format!(
+                    "https://{}.tts.speech.microsoft.com/cognitiveservices/voices/list",
+                    region
+                )
             };
 
             let client = reqwest::Client::new();

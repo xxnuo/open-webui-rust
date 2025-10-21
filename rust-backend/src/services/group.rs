@@ -12,11 +12,7 @@ impl<'a> GroupService<'a> {
         GroupService { db }
     }
 
-    pub async fn insert_new_group(
-        &self,
-        user_id: &str,
-        form_data: &GroupForm,
-    ) -> AppResult<Group> {
+    pub async fn insert_new_group(&self, user_id: &str, form_data: &GroupForm) -> AppResult<Group> {
         let id = uuid::Uuid::new_v4().to_string();
         let now = current_timestamp_seconds();
 
@@ -31,7 +27,7 @@ impl<'a> GroupService<'a> {
         sqlx::query(
             r#"
             INSERT INTO "group" (id, user_id, name, description, data, meta, permissions, user_ids, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, NULL, NULL, $5::jsonb, '[]'::jsonb, $6, $7)
+            VALUES ($1, $2, $3, $4, NULL, NULL, $5, '[]', $6, $7)
             "#,
         )
         .bind(&id)
@@ -99,7 +95,7 @@ impl<'a> GroupService<'a> {
                    created_at, updated_at
             FROM "group"
             WHERE user_ids IS NOT NULL
-              AND jsonb_array_length(user_ids) > 0
+              AND user_ids != '[]'
               AND CAST(user_ids AS TEXT) LIKE $1
             ORDER BY updated_at DESC
             "#,
@@ -142,7 +138,7 @@ impl<'a> GroupService<'a> {
         sqlx::query(
             r#"
             UPDATE "group"
-            SET name = $1, description = $2, permissions = $3::jsonb, user_ids = $4::jsonb, updated_at = $5
+            SET name = $1, description = $2, permissions = $3, user_ids = $4, updated_at = $5
             WHERE id = $6
             "#,
         )
@@ -160,11 +156,7 @@ impl<'a> GroupService<'a> {
             .ok_or_else(|| AppError::NotFound("Group not found".to_string()))
     }
 
-    pub async fn add_users_to_group(
-        &self,
-        id: &str,
-        user_ids: &[String],
-    ) -> AppResult<Group> {
+    pub async fn add_users_to_group(&self, id: &str, user_ids: &[String]) -> AppResult<Group> {
         let mut group = self
             .get_group_by_id(id)
             .await?
@@ -186,7 +178,7 @@ impl<'a> GroupService<'a> {
         sqlx::query(
             r#"
             UPDATE "group"
-            SET user_ids = $1::jsonb, updated_at = $2
+            SET user_ids = $1, updated_at = $2
             WHERE id = $3
             "#,
         )
@@ -201,11 +193,7 @@ impl<'a> GroupService<'a> {
             .ok_or_else(|| AppError::NotFound("Group not found".to_string()))
     }
 
-    pub async fn remove_users_from_group(
-        &self,
-        id: &str,
-        user_ids: &[String],
-    ) -> AppResult<Group> {
+    pub async fn remove_users_from_group(&self, id: &str, user_ids: &[String]) -> AppResult<Group> {
         let mut group = self
             .get_group_by_id(id)
             .await?
@@ -225,7 +213,7 @@ impl<'a> GroupService<'a> {
         sqlx::query(
             r#"
             UPDATE "group"
-            SET user_ids = $1::jsonb, updated_at = $2
+            SET user_ids = $1, updated_at = $2
             WHERE id = $3
             "#,
         )

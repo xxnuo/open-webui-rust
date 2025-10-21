@@ -91,15 +91,16 @@ async fn main() -> anyhow::Result<()> {
     // Initialize native Rust Socket.IO
     let socketio_enabled = std::env::var("ENABLE_SOCKETIO")
         .unwrap_or_else(|_| "true".to_string())
-        .to_lowercase() == "true";
-    
+        .to_lowercase()
+        == "true";
+
     let socketio_handler = if socketio_enabled {
-        use crate::socketio::{SocketIOManager, EventHandler};
-        
+        use crate::socketio::{EventHandler, SocketIOManager};
+
         let manager = SocketIOManager::new();
         let auth_endpoint = format!("http://{}:{}", config.host, config.port);
         let handler = EventHandler::new(manager.clone(), auth_endpoint);
-        
+
         // Spawn a background task to clean up stale sessions periodically
         let manager_cleanup = manager.clone();
         tokio::spawn(async move {
@@ -109,7 +110,7 @@ async fn main() -> anyhow::Result<()> {
                 manager_cleanup.cleanup_stale_sessions(60).await;
             }
         });
-        
+
         info!("✅ Native Rust Socket.IO initialized with periodic cleanup");
         Some(Arc::new(handler))
     } else {
@@ -134,7 +135,6 @@ async fn main() -> anyhow::Result<()> {
         socket_state,
         socketio_handler: socketio_handler.clone(),
     });
-
 
     // Start server
     let addr = SocketAddr::from((config.host.parse::<std::net::IpAddr>()?, config.port));
@@ -188,38 +188,39 @@ async fn main() -> anyhow::Result<()> {
             // Config and version
             .route("/api/config", web::get().to(get_app_config))
             .route("/api/version", web::get().to(get_app_version))
-            .route("/api/version/updates", web::get().to(get_app_latest_version))
+            .route(
+                "/api/version/updates",
+                web::get().to(get_app_latest_version),
+            )
             // Models list endpoint (OpenAI compatible - returns {"data": [...]})
             .route("/api/models", web::get().to(get_models))
             .route("/api/models/base", web::get().to(get_base_models))
             // API routes (nested after specific routes to avoid conflicts)
             .service(web::scope("/api/v1").configure(create_routes))
             // OpenAI compatible API
-            .service(
-                web::scope("/openai").configure(routes::openai::create_routes),
-            )
+            .service(web::scope("/openai").configure(routes::openai::create_routes))
             // Chat endpoints (legacy routes without /v1 prefix)
             .service(
                 web::resource("/api/chat/completions")
                     .wrap(middleware::AuthMiddleware)
-                    .route(web::post().to(chat_completions))
+                    .route(web::post().to(chat_completions)),
             )
             .service(
                 web::resource("/api/chat/completed")
                     .wrap(middleware::AuthMiddleware)
-                    .route(web::post().to(chat_completed))
+                    .route(web::post().to(chat_completed)),
             )
             // WebSocket endpoint for real-time chat streaming
             .service(
                 web::resource("/api/ws/chat")
-                    .route(web::get().to(websocket_chat::websocket_chat_handler))
+                    .route(web::get().to(websocket_chat::websocket_chat_handler)),
             )
             // Native Rust Socket.IO endpoints
             .configure(configure_socketio_routes)
             .service(
                 web::resource("/api/chat/actions/{action_id}")
                     .wrap(middleware::AuthMiddleware)
-                    .route(web::post().to(chat_action))
+                    .route(web::post().to(chat_action)),
             )
             // Embeddings endpoint (legacy route without /v1 prefix)
             .route("/api/embeddings", web::post().to(embeddings))
@@ -259,7 +260,9 @@ async fn main() -> anyhow::Result<()> {
             .default_service(web::get().to(static_files::serve))
     })
     // CRITICAL: Disable keep-alive buffering for real-time streaming
-    .keep_alive(actix_web::http::KeepAlive::Timeout(std::time::Duration::from_secs(75)))
+    .keep_alive(actix_web::http::KeepAlive::Timeout(
+        std::time::Duration::from_secs(75),
+    ))
     // CRITICAL: Set client timeout high for long-running streams
     .client_request_timeout(std::time::Duration::from_secs(300))
     .bind(addr)?
@@ -288,7 +291,9 @@ async fn health_check() -> HttpResponse {
     HttpResponse::Ok().json(serde_json::json!({ "status": true }))
 }
 
-async fn health_check_db(state: web::Data<AppState>) -> Result<HttpResponse, crate::error::AppError> {
+async fn health_check_db(
+    state: web::Data<AppState>,
+) -> Result<HttpResponse, crate::error::AppError> {
     sqlx::query("SELECT 1")
         .execute(state.db.pool())
         .await
@@ -297,10 +302,7 @@ async fn health_check_db(state: web::Data<AppState>) -> Result<HttpResponse, cra
     Ok(HttpResponse::Ok().json(serde_json::json!({ "status": true })))
 }
 
-async fn get_app_config(
-    state: web::Data<AppState>,
-    req: HttpRequest,
-) -> HttpResponse {
+async fn get_app_config(state: web::Data<AppState>, req: HttpRequest) -> HttpResponse {
     use serde_json::json;
 
     // Get read lock on config
@@ -312,9 +314,7 @@ async fn get_app_config(
         .get(header::AUTHORIZATION)
         .and_then(|h| h.to_str().ok())
         .and_then(|s| s.strip_prefix("Bearer ").map(|s| s.to_string()))
-        .or_else(|| {
-            req.cookie("token").map(|c| c.value().to_string())
-        });
+        .or_else(|| req.cookie("token").map(|c| c.value().to_string()));
 
     // Get actual user from database if token is valid
     let user = if let Some(ref token) = token {
@@ -322,9 +322,13 @@ async fn get_app_config(
             Ok(claims) => {
                 // Get user from database (properly async)
                 let user_service = services::user::UserService::new(&state.db);
-                user_service.get_user_by_id(&claims.sub).await.ok().flatten()
+                user_service
+                    .get_user_by_id(&claims.sub)
+                    .await
+                    .ok()
+                    .flatten()
             }
-            Err(_) => None
+            Err(_) => None,
         }
     } else {
         None
@@ -333,7 +337,7 @@ async fn get_app_config(
     // Get actual user count from database (properly async)
     let user_service = services::user::UserService::new(&state.db);
     let user_count = user_service.get_user_count().await.unwrap_or(0);
-    
+
     let onboarding = user.is_none() && user_count == 0;
 
     let mut response = json!({
@@ -370,14 +374,17 @@ async fn get_app_config(
         response["features"]["enable_code_execution"] = json!(config.enable_code_execution);
         response["features"]["enable_code_interpreter"] = json!(config.enable_code_interpreter);
         response["features"]["enable_image_generation"] = json!(config.enable_image_generation);
-        response["features"]["enable_autocomplete_generation"] = json!(config.enable_autocomplete_generation);
+        response["features"]["enable_autocomplete_generation"] =
+            json!(config.enable_autocomplete_generation);
         response["features"]["enable_community_sharing"] = json!(config.enable_community_sharing);
         response["features"]["enable_message_rating"] = json!(config.enable_message_rating);
         response["features"]["enable_user_webhooks"] = json!(config.enable_user_webhooks);
         response["features"]["enable_admin_export"] = json!(config.enable_admin_export);
         response["features"]["enable_admin_chat_access"] = json!(config.enable_admin_chat_access);
-        response["features"]["enable_google_drive_integration"] = json!(config.enable_google_drive_integration);
-        response["features"]["enable_onedrive_integration"] = json!(config.enable_onedrive_integration);
+        response["features"]["enable_google_drive_integration"] =
+            json!(config.enable_google_drive_integration);
+        response["features"]["enable_onedrive_integration"] =
+            json!(config.enable_onedrive_integration);
 
         // Convert default_models to comma-separated string (or null if empty) to match Python backend
         response["default_models"] = if config.default_models.is_empty() {
@@ -521,20 +528,26 @@ async fn socketio_connection_get(
     };
 
     // Check transport type from query parameters
-    let query = web::Query::<std::collections::HashMap<String, String>>::from_query(req.query_string())
-        .unwrap_or(web::Query(std::collections::HashMap::new()));
-    
+    let query =
+        web::Query::<std::collections::HashMap<String, String>>::from_query(req.query_string())
+            .unwrap_or(web::Query(std::collections::HashMap::new()));
+
     let transport = query.get("transport").map(|s| s.as_str());
     let eio = query.get("EIO");
     let sid = query.get("sid");
-    
+
     tracing::info!(
         "Socket.IO GET request - transport: {:?}, EIO: {:?}, sid: {:?}, path: {}, headers: {:?}",
-        transport, eio, sid, req.path(), req.headers()
+        transport,
+        eio,
+        sid,
+        req.path(),
+        req.headers()
     );
 
     // Check if this is a WebSocket upgrade request
-    let is_websocket_upgrade = req.headers()
+    let is_websocket_upgrade = req
+        .headers()
         .get("upgrade")
         .and_then(|v| v.to_str().ok())
         .map(|v| v.eq_ignore_ascii_case("websocket"))
@@ -550,7 +563,8 @@ async fn socketio_connection_get(
         tracing::info!("Handling HTTP polling GET for Socket.IO");
         let manager_data = web::Data::new(handler.manager().clone());
         let handler_data = Some(web::Data::new(handler.as_ref().clone()));
-        socketio::transport::polling_handler(req, web::Bytes::new(), manager_data, handler_data).await
+        socketio::transport::polling_handler(req, web::Bytes::new(), manager_data, handler_data)
+            .await
     }
 }
 
@@ -584,7 +598,9 @@ async fn socketio_native_emit(
         let handler_data = web::Data::new(handler.as_ref().clone());
         socketio::events::handle_emit_request(handler_data, payload).await
     } else {
-        Err(actix_web::error::ErrorServiceUnavailable("Socket.IO not enabled"))
+        Err(actix_web::error::ErrorServiceUnavailable(
+            "Socket.IO not enabled",
+        ))
     }
 }
 
@@ -596,7 +612,9 @@ async fn socketio_health(
         let handler_data = web::Data::new(handler.as_ref().clone());
         socketio::events::handle_health_check(handler_data).await
     } else {
-        Err(actix_web::error::ErrorServiceUnavailable("Socket.IO not enabled"))
+        Err(actix_web::error::ErrorServiceUnavailable(
+            "Socket.IO not enabled",
+        ))
     }
 }
 
@@ -606,13 +624,13 @@ async fn socketio_auth(
     payload: web::Json<serde_json::Value>,
 ) -> Result<HttpResponse, actix_web::Error> {
     use serde_json::json;
-    
+
     // Extract token from request
     let token = payload
         .get("token")
         .and_then(|t| t.as_str())
         .ok_or_else(|| actix_web::error::ErrorBadRequest("Missing token"))?;
-    
+
     // Verify JWT token
     let config = state.config.read().unwrap();
     let claims = match crate::utils::auth::verify_jwt(token, &config.webui_secret_key) {
@@ -623,7 +641,7 @@ async fn socketio_auth(
             })));
         }
     };
-    
+
     // Get user from database
     let user_service = services::user::UserService::new(&state.db);
     let user = match user_service.get_user_by_id(&claims.sub).await {
@@ -634,7 +652,7 @@ async fn socketio_auth(
             })));
         }
     };
-    
+
     // Return user data
     Ok(HttpResponse::Ok().json(json!({
         "id": user.id,
@@ -644,7 +662,6 @@ async fn socketio_auth(
         "profile_image_url": user.profile_image_url,
     })))
 }
-
 
 async fn chat_completed(
     _state: web::Data<AppState>,
@@ -704,19 +721,20 @@ async fn stop_task(
         // Send cancel event to all connected clients for this chat
         // This will trigger the frontend to stop listening for streaming events
         tracing::info!("Sending stop signal for chat: {}", task_id.as_str());
-        
+
         // Emit a chat:tasks:cancel event that the frontend listens for
         let event_emitter = crate::socket::get_event_emitter(
             socket_state.clone(),
-            "system".to_string(),  // system user for admin actions
+            "system".to_string(), // system user for admin actions
             Some(task_id.to_string()),
             None,
             None,
         );
-        
+
         event_emitter(json!({
             "type": "chat:tasks:cancel"
-        })).await;
+        }))
+        .await;
     }
 
     Ok(HttpResponse::Ok().json(json!({
@@ -840,9 +858,7 @@ async fn get_opensearch() -> HttpResponse {
         webui_name, webui_name, webui_url, webui_url, webui_url
     );
 
-    HttpResponse::Ok()
-        .content_type("application/xml")
-        .body(xml)
+    HttpResponse::Ok().content_type("application/xml").body(xml)
 }
 
 // Cache file serving

@@ -52,88 +52,87 @@ pub fn create_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::resource("")
             .wrap(AuthMiddleware)
-            .route(web::get().to(get_channels))
+            .route(web::get().to(get_channels)),
     )
     .service(
         web::resource("/")
             .wrap(AuthMiddleware)
-            .route(web::get().to(get_channels))
+            .route(web::get().to(get_channels)),
     )
     .service(
         web::resource("/list")
             .wrap(AuthMiddleware)
-            .route(web::get().to(get_all_channels))
+            .route(web::get().to(get_all_channels)),
     )
     .service(
         web::resource("/create")
             .wrap(AuthMiddleware)
-            .route(web::post().to(create_new_channel))
+            .route(web::post().to(create_new_channel)),
     )
     .service(
         web::resource("/{id}")
             .wrap(AuthMiddleware)
-            .route(web::get().to(get_channel_by_id))
+            .route(web::get().to(get_channel_by_id)),
     )
     .service(
         web::resource("/{id}/update")
             .wrap(AuthMiddleware)
-            .route(web::post().to(update_channel_by_id))
+            .route(web::post().to(update_channel_by_id)),
     )
     .service(
         web::resource("/{id}/delete")
             .wrap(AuthMiddleware)
-            .route(web::delete().to(delete_channel_by_id))
+            .route(web::delete().to(delete_channel_by_id)),
     )
     // Message routes
     .service(
         web::resource("/{id}/messages")
             .wrap(AuthMiddleware)
-            .route(web::get().to(get_channel_messages))
+            .route(web::get().to(get_channel_messages)),
     )
     .service(
         web::resource("/{id}/messages/post")
             .wrap(AuthMiddleware)
-            .route(web::post().to(post_new_message))
+            .route(web::post().to(post_new_message)),
     )
     .service(
         web::resource("/{id}/messages/{message_id}")
             .wrap(AuthMiddleware)
-            .route(web::get().to(get_channel_message))
+            .route(web::get().to(get_channel_message)),
     )
     .service(
         web::resource("/{id}/messages/{message_id}/thread")
             .wrap(AuthMiddleware)
-            .route(web::get().to(get_channel_thread_messages))
+            .route(web::get().to(get_channel_thread_messages)),
     )
     .service(
         web::resource("/{id}/messages/{message_id}/update")
             .wrap(AuthMiddleware)
-            .route(web::post().to(update_message_by_id))
+            .route(web::post().to(update_message_by_id)),
     )
     .service(
         web::resource("/{id}/messages/{message_id}/delete")
             .wrap(AuthMiddleware)
-            .route(web::delete().to(delete_message_by_id))
+            .route(web::delete().to(delete_message_by_id)),
     )
     .service(
         web::resource("/{id}/messages/{message_id}/reactions/add")
             .wrap(AuthMiddleware)
-            .route(web::post().to(add_reaction_to_message))
+            .route(web::post().to(add_reaction_to_message)),
     )
     .service(
         web::resource("/{id}/messages/{message_id}/reactions/remove")
             .wrap(AuthMiddleware)
-            .route(web::post().to(remove_reaction_from_message))
+            .route(web::post().to(remove_reaction_from_message)),
     );
 }
 
-async fn get_channels(
-    state: web::Data<AppState>,
-    auth_user: AuthUser,
-) -> AppResult<HttpResponse> {
+async fn get_channels(state: web::Data<AppState>, auth_user: AuthUser) -> AppResult<HttpResponse> {
     let channel_service = ChannelService::new(&state.db);
-    let channels = channel_service.get_channels_by_user_id(&auth_user.user.id).await?;
-    
+    let channels = channel_service
+        .get_channels_by_user_id(&auth_user.user.id)
+        .await?;
+
     let response: Vec<ChannelResponse> = channels
         .iter()
         .map(|channel| ChannelResponse {
@@ -162,9 +161,11 @@ async fn get_all_channels(
     let channels = if auth_user.user.role == "admin" {
         channel_service.get_all_channels().await?
     } else {
-        channel_service.get_channels_by_user_id(&auth_user.user.id).await?
+        channel_service
+            .get_channels_by_user_id(&auth_user.user.id)
+            .await?
     };
-    
+
     let response: Vec<ChannelResponse> = channels
         .iter()
         .map(|channel| ChannelResponse {
@@ -194,26 +195,28 @@ async fn create_new_channel(
     if auth_user.user.role != "admin" {
         return Err(AppError::Forbidden("Admin access required".to_string()));
     }
-    
+
     form.validate()
         .map_err(|e| AppError::Validation(e.to_string()))?;
-    
+
     let channel_service = ChannelService::new(&state.db);
-    
+
     // Generate ID
     let id = uuid::Uuid::new_v4().to_string();
-    
-    let channel = channel_service.create_channel(
-        &id,
-        &auth_user.user.id,
-        &form.name.to_lowercase(),
-        form.description.as_deref(),
-        None, // type
-        form.data.clone(),
-        form.meta.clone(),
-        form.access_control.clone(),
-    ).await?;
-    
+
+    let channel = channel_service
+        .create_channel(
+            &id,
+            &auth_user.user.id,
+            &form.name.to_lowercase(),
+            form.description.as_deref(),
+            None, // type
+            form.data.clone(),
+            form.meta.clone(),
+            form.access_control.clone(),
+        )
+        .await?;
+
     let response = ChannelResponse {
         id: channel.id.clone(),
         user_id: channel.user_id.clone(),
@@ -227,7 +230,7 @@ async fn create_new_channel(
         updated_at: channel.updated_at,
         write_access: None,
     };
-    
+
     Ok(HttpResponse::Ok().json(response))
 }
 
@@ -237,10 +240,11 @@ async fn get_channel_by_id(
     id: web::Path<String>,
 ) -> AppResult<HttpResponse> {
     let channel_service = ChannelService::new(&state.db);
-    let channel = channel_service.get_channel_by_id(&id)
+    let channel = channel_service
+        .get_channel_by_id(&id)
         .await?
         .ok_or_else(|| AppError::NotFound("Channel not found".to_string()))?;
-    
+
     // Check access control
     let write_access = if auth_user.user.role == "admin" || channel.user_id == auth_user.user.id {
         true
@@ -255,7 +259,7 @@ async fn get_channel_by_id(
         .await
         .unwrap_or(false)
     };
-    
+
     let response = ChannelResponse {
         id: channel.id.clone(),
         user_id: channel.user_id.clone(),
@@ -269,7 +273,7 @@ async fn get_channel_by_id(
         updated_at: channel.updated_at,
         write_access: Some(write_access),
     };
-    
+
     Ok(HttpResponse::Ok().json(response))
 }
 
@@ -282,25 +286,28 @@ async fn update_channel_by_id(
     if auth_user.user.role != "admin" {
         return Err(AppError::Forbidden("Admin access required".to_string()));
     }
-    
+
     let channel_service = ChannelService::new(&state.db);
-    let _channel = channel_service.get_channel_by_id(&id)
+    let _channel = channel_service
+        .get_channel_by_id(&id)
         .await?
         .ok_or_else(|| AppError::NotFound("Channel not found".to_string()))?;
-    
+
     form.validate()
         .map_err(|e| AppError::Validation(e.to_string()))?;
-    
-    let updated_channel = channel_service.update_channel(
-        &id,
-        Some(&form.name.to_lowercase()),
-        form.description.as_deref(),
-        None, // type
-        form.data.clone(),
-        form.meta.clone(),
-        form.access_control.clone(),
-    ).await?;
-    
+
+    let updated_channel = channel_service
+        .update_channel(
+            &id,
+            Some(&form.name.to_lowercase()),
+            form.description.as_deref(),
+            None, // type
+            form.data.clone(),
+            form.meta.clone(),
+            form.access_control.clone(),
+        )
+        .await?;
+
     let response = ChannelResponse {
         id: updated_channel.id.clone(),
         user_id: updated_channel.user_id.clone(),
@@ -314,7 +321,7 @@ async fn update_channel_by_id(
         updated_at: updated_channel.updated_at,
         write_access: None,
     };
-    
+
     Ok(HttpResponse::Ok().json(response))
 }
 
@@ -326,14 +333,15 @@ async fn delete_channel_by_id(
     if auth_user.user.role != "admin" {
         return Err(AppError::Forbidden("Admin access required".to_string()));
     }
-    
+
     let channel_service = ChannelService::new(&state.db);
-    let _channel = channel_service.get_channel_by_id(&id)
+    let _channel = channel_service
+        .get_channel_by_id(&id)
         .await?
         .ok_or_else(|| AppError::NotFound("Channel not found".to_string()))?;
-    
+
     channel_service.delete_channel(&id).await?;
-    
+
     Ok(HttpResponse::Ok().json(true))
 }
 
@@ -394,10 +402,11 @@ async fn get_channel_messages(
     query: web::Query<PaginationQuery>,
 ) -> AppResult<HttpResponse> {
     let channel_service = ChannelService::new(&state.db);
-    let channel = channel_service.get_channel_by_id(&id)
+    let channel = channel_service
+        .get_channel_by_id(&id)
         .await?
         .ok_or_else(|| AppError::NotFound("Channel not found".to_string()))?;
-    
+
     // Check read access
     if auth_user.user.role != "admin" && channel.user_id != auth_user.user.id {
         let has_read_access = crate::utils::access_control::has_access(
@@ -408,22 +417,31 @@ async fn get_channel_messages(
             false,
         )
         .await?;
-        
+
         if !has_read_access {
             return Err(AppError::Forbidden("Access denied".to_string()));
         }
     }
-    
+
     let message_service = MessageService::new(&state.db);
-    let messages = message_service.get_messages_by_channel_id(&id, query.skip, query.limit).await?;
-    
+    let messages = message_service
+        .get_messages_by_channel_id(&id, query.skip, query.limit)
+        .await?;
+
     let mut response = Vec::new();
     for message in messages {
         let message_response = message_service.to_message_response(message.clone()).await?;
-        let reply_count = message_service.get_thread_replies_count(&message.id).await.ok();
-        let latest_reply_at = message_service.get_latest_thread_reply_at(&message.id).await.ok().flatten();
+        let reply_count = message_service
+            .get_thread_replies_count(&message.id)
+            .await
+            .ok();
+        let latest_reply_at = message_service
+            .get_latest_thread_reply_at(&message.id)
+            .await
+            .ok()
+            .flatten();
         let reactions = message_service.get_reactions(&message.id).await.ok();
-        
+
         response.push(MessageUserResponse {
             message: message_response,
             user: None, // User is already in message_response
@@ -433,7 +451,7 @@ async fn get_channel_messages(
             reactions,
         });
     }
-    
+
     Ok(HttpResponse::Ok().json(response))
 }
 
@@ -445,10 +463,11 @@ async fn post_new_message(
 ) -> AppResult<HttpResponse> {
     let channel_id = id.into_inner();
     let channel_service = ChannelService::new(&state.db);
-    let channel = channel_service.get_channel_by_id(&channel_id)
+    let channel = channel_service
+        .get_channel_by_id(&channel_id)
         .await?
         .ok_or_else(|| AppError::NotFound("Channel not found".to_string()))?;
-    
+
     // Check write access
     if auth_user.user.role != "admin" && channel.user_id != auth_user.user.id {
         let has_write_access = crate::utils::access_control::has_access(
@@ -459,22 +478,29 @@ async fn post_new_message(
             false,
         )
         .await?;
-        
+
         if !has_write_access {
             return Err(AppError::Forbidden("Write access denied".to_string()));
         }
     }
-    
+
     let message_service = MessageService::new(&state.db);
-    let message = message_service.create_message(&channel_id, &auth_user.user.id, &form).await?;
-    
+    let message = message_service
+        .create_message(&channel_id, &auth_user.user.id, &form)
+        .await?;
+
     // Convert to MessageResponse with user information
     let message_response = message_service.to_message_response(message.clone()).await?;
-    
+
     // Emit Socket.IO event for real-time updates
     if let Some(ref socketio_handler) = state.socketio_handler {
         let user_service = UserService::new(&state.db);
-        if let Some(user) = user_service.get_user_by_id(&auth_user.user.id).await.ok().flatten() {
+        if let Some(user) = user_service
+            .get_user_by_id(&auth_user.user.id)
+            .await
+            .ok()
+            .flatten()
+        {
             let event_data = json!({
                 "channel_id": &channel_id,
                 "message_id": &message.id,
@@ -488,15 +514,23 @@ async fn post_new_message(
                     "name": channel.name,
                 }
             });
-            
+
             // Broadcast to all users in the channel room
             let room = format!("channel:{}", channel_id);
-            let _ = socketio_handler.broadcast_to_room(&room, "channel-events", event_data, None).await;
-            
+            let _ = socketio_handler
+                .broadcast_to_room(&room, "channel-events", event_data, None)
+                .await;
+
             // If this is a reply to a parent message, emit a separate event for the parent
             if let Some(ref parent_id) = message.parent_id {
-                if let Some(parent_message) = message_service.get_message_by_id(parent_id).await.ok().flatten() {
-                    let parent_message_response = message_service.to_message_response(parent_message).await?;
+                if let Some(parent_message) = message_service
+                    .get_message_by_id(parent_id)
+                    .await
+                    .ok()
+                    .flatten()
+                {
+                    let parent_message_response =
+                        message_service.to_message_response(parent_message).await?;
                     let parent_event_data = json!({
                         "channel_id": &channel_id,
                         "message_id": parent_id,
@@ -510,12 +544,14 @@ async fn post_new_message(
                             "name": channel.name,
                         }
                     });
-                    let _ = socketio_handler.broadcast_to_room(&room, "channel-events", parent_event_data, None).await;
+                    let _ = socketio_handler
+                        .broadcast_to_room(&room, "channel-events", parent_event_data, None)
+                        .await;
                 }
             }
         }
     }
-    
+
     Ok(HttpResponse::Ok().json(message_response))
 }
 
@@ -525,12 +561,13 @@ async fn get_channel_message(
     path: web::Path<(String, String)>,
 ) -> AppResult<HttpResponse> {
     let (id, message_id) = path.into_inner();
-    
+
     let channel_service = ChannelService::new(&state.db);
-    let channel = channel_service.get_channel_by_id(&id)
+    let channel = channel_service
+        .get_channel_by_id(&id)
         .await?
         .ok_or_else(|| AppError::NotFound("Channel not found".to_string()))?;
-    
+
     // Check read access
     if auth_user.user.role != "admin" && channel.user_id != auth_user.user.id {
         let has_read_access = crate::utils::access_control::has_access(
@@ -541,23 +578,26 @@ async fn get_channel_message(
             false,
         )
         .await?;
-        
+
         if !has_read_access {
             return Err(AppError::Forbidden("Access denied".to_string()));
         }
     }
-    
+
     let message_service = MessageService::new(&state.db);
-    let message = message_service.get_message_by_id(&message_id)
+    let message = message_service
+        .get_message_by_id(&message_id)
         .await?
         .ok_or_else(|| AppError::NotFound("Message not found".to_string()))?;
-    
+
     if message.channel_id.as_ref() != Some(&id) {
-        return Err(AppError::BadRequest("Message does not belong to this channel".to_string()));
+        return Err(AppError::BadRequest(
+            "Message does not belong to this channel".to_string(),
+        ));
     }
-    
+
     let message_response = message_service.to_message_response(message).await?;
-    
+
     Ok(HttpResponse::Ok().json(MessageUserResponse {
         message: message_response,
         user: None, // User is already in message_response
@@ -575,12 +615,13 @@ async fn get_channel_thread_messages(
     query: web::Query<PaginationQuery>,
 ) -> AppResult<HttpResponse> {
     let (id, message_id) = path.into_inner();
-    
+
     let channel_service = ChannelService::new(&state.db);
-    let channel = channel_service.get_channel_by_id(&id)
+    let channel = channel_service
+        .get_channel_by_id(&id)
         .await?
         .ok_or_else(|| AppError::NotFound("Channel not found".to_string()))?;
-    
+
     // Check read access
     if auth_user.user.role != "admin" && channel.user_id != auth_user.user.id {
         let has_read_access = crate::utils::access_control::has_access(
@@ -591,20 +632,22 @@ async fn get_channel_thread_messages(
             false,
         )
         .await?;
-        
+
         if !has_read_access {
             return Err(AppError::Forbidden("Access denied".to_string()));
         }
     }
-    
+
     let message_service = MessageService::new(&state.db);
-    let messages = message_service.get_thread_messages(&id, &message_id, query.skip, query.limit).await?;
-    
+    let messages = message_service
+        .get_thread_messages(&id, &message_id, query.skip, query.limit)
+        .await?;
+
     let mut response = Vec::new();
     for message in messages {
         let message_response = message_service.to_message_response(message.clone()).await?;
         let reactions = message_service.get_reactions(&message.id).await.ok();
-        
+
         response.push(MessageUserResponse {
             message: message_response,
             user: None, // User is already in message_response
@@ -614,7 +657,7 @@ async fn get_channel_thread_messages(
             reactions,
         });
     }
-    
+
     Ok(HttpResponse::Ok().json(response))
 }
 
@@ -625,35 +668,49 @@ async fn update_message_by_id(
     form: web::Json<MessageForm>,
 ) -> AppResult<HttpResponse> {
     let (id, message_id) = path.into_inner();
-    
+
     let channel_service = ChannelService::new(&state.db);
-    let channel = channel_service.get_channel_by_id(&id)
+    let channel = channel_service
+        .get_channel_by_id(&id)
         .await?
         .ok_or_else(|| AppError::NotFound("Channel not found".to_string()))?;
-    
+
     let message_service = MessageService::new(&state.db);
-    let message = message_service.get_message_by_id(&message_id)
+    let message = message_service
+        .get_message_by_id(&message_id)
         .await?
         .ok_or_else(|| AppError::NotFound("Message not found".to_string()))?;
-    
+
     if message.channel_id.as_ref() != Some(&id) {
-        return Err(AppError::BadRequest("Message does not belong to this channel".to_string()));
+        return Err(AppError::BadRequest(
+            "Message does not belong to this channel".to_string(),
+        ));
     }
-    
+
     // Check permission: admin, message owner, or channel owner
-    if auth_user.user.role != "admin" 
-        && message.user_id != auth_user.user.id 
-        && channel.user_id != auth_user.user.id {
-        return Err(AppError::Forbidden("You don't have permission to update this message".to_string()));
+    if auth_user.user.role != "admin"
+        && message.user_id != auth_user.user.id
+        && channel.user_id != auth_user.user.id
+    {
+        return Err(AppError::Forbidden(
+            "You don't have permission to update this message".to_string(),
+        ));
     }
-    
+
     let updated_message = message_service.update_message(&message_id, &form).await?;
-    let message_response = message_service.to_message_response(updated_message.clone()).await?;
-    
+    let message_response = message_service
+        .to_message_response(updated_message.clone())
+        .await?;
+
     // Emit Socket.IO event for real-time updates
     if let Some(ref socketio_handler) = state.socketio_handler {
         let user_service = UserService::new(&state.db);
-        if let Some(user) = user_service.get_user_by_id(&auth_user.user.id).await.ok().flatten() {
+        if let Some(user) = user_service
+            .get_user_by_id(&auth_user.user.id)
+            .await
+            .ok()
+            .flatten()
+        {
             let event_data = json!({
                 "channel_id": &id,
                 "message_id": &message_id,
@@ -667,13 +724,15 @@ async fn update_message_by_id(
                     "name": channel.name,
                 }
             });
-            
+
             // Broadcast to all users in the channel room
             let room = format!("channel:{}", id);
-            let _ = socketio_handler.broadcast_to_room(&room, "channel-events", event_data, None).await;
+            let _ = socketio_handler
+                .broadcast_to_room(&room, "channel-events", event_data, None)
+                .await;
         }
     }
-    
+
     Ok(HttpResponse::Ok().json(message_response))
 }
 
@@ -683,34 +742,46 @@ async fn delete_message_by_id(
     path: web::Path<(String, String)>,
 ) -> AppResult<HttpResponse> {
     let (id, message_id) = path.into_inner();
-    
+
     let channel_service = ChannelService::new(&state.db);
-    let channel = channel_service.get_channel_by_id(&id)
+    let channel = channel_service
+        .get_channel_by_id(&id)
         .await?
         .ok_or_else(|| AppError::NotFound("Channel not found".to_string()))?;
-    
+
     let message_service = MessageService::new(&state.db);
-    let message = message_service.get_message_by_id(&message_id)
+    let message = message_service
+        .get_message_by_id(&message_id)
         .await?
         .ok_or_else(|| AppError::NotFound("Message not found".to_string()))?;
-    
+
     if message.channel_id.as_ref() != Some(&id) {
-        return Err(AppError::BadRequest("Message does not belong to this channel".to_string()));
+        return Err(AppError::BadRequest(
+            "Message does not belong to this channel".to_string(),
+        ));
     }
-    
+
     // Check permission
-    if auth_user.user.role != "admin" 
-        && message.user_id != auth_user.user.id 
-        && channel.user_id != auth_user.user.id {
-        return Err(AppError::Forbidden("You don't have permission to delete this message".to_string()));
+    if auth_user.user.role != "admin"
+        && message.user_id != auth_user.user.id
+        && channel.user_id != auth_user.user.id
+    {
+        return Err(AppError::Forbidden(
+            "You don't have permission to delete this message".to_string(),
+        ));
     }
-    
+
     message_service.delete_message(&message_id).await?;
-    
+
     // Emit Socket.IO event for real-time updates
     if let Some(ref socketio_handler) = state.socketio_handler {
         let user_service = UserService::new(&state.db);
-        if let Some(user) = user_service.get_user_by_id(&auth_user.user.id).await.ok().flatten() {
+        if let Some(user) = user_service
+            .get_user_by_id(&auth_user.user.id)
+            .await
+            .ok()
+            .flatten()
+        {
             let event_data = json!({
                 "channel_id": &id,
                 "message_id": &message_id,
@@ -727,13 +798,15 @@ async fn delete_message_by_id(
                     "name": channel.name,
                 }
             });
-            
+
             // Broadcast to all users in the channel room
             let room = format!("channel:{}", id);
-            let _ = socketio_handler.broadcast_to_room(&room, "channel-events", event_data, None).await;
+            let _ = socketio_handler
+                .broadcast_to_room(&room, "channel-events", event_data, None)
+                .await;
         }
     }
-    
+
     Ok(HttpResponse::Ok().json(true))
 }
 
@@ -749,29 +822,40 @@ async fn add_reaction_to_message(
     form: web::Json<ReactionForm>,
 ) -> AppResult<HttpResponse> {
     let (id, message_id) = path.into_inner();
-    
+
     let channel_service = ChannelService::new(&state.db);
-    let channel = channel_service.get_channel_by_id(&id)
+    let channel = channel_service
+        .get_channel_by_id(&id)
         .await?
         .ok_or_else(|| AppError::NotFound("Channel not found".to_string()))?;
-    
+
     let message_service = MessageService::new(&state.db);
-    let message = message_service.get_message_by_id(&message_id)
+    let message = message_service
+        .get_message_by_id(&message_id)
         .await?
         .ok_or_else(|| AppError::NotFound("Message not found".to_string()))?;
-    
+
     if message.channel_id.as_ref() != Some(&id) {
-        return Err(AppError::BadRequest("Message does not belong to this channel".to_string()));
+        return Err(AppError::BadRequest(
+            "Message does not belong to this channel".to_string(),
+        ));
     }
-    
-    message_service.add_reaction(&message_id, &auth_user.user.id, &form.name).await?;
-    
+
+    message_service
+        .add_reaction(&message_id, &auth_user.user.id, &form.name)
+        .await?;
+
     // Emit Socket.IO event for real-time updates
     if let Some(ref socketio_handler) = state.socketio_handler {
         let user_service = UserService::new(&state.db);
-        if let Some(user) = user_service.get_user_by_id(&auth_user.user.id).await.ok().flatten() {
+        if let Some(user) = user_service
+            .get_user_by_id(&auth_user.user.id)
+            .await
+            .ok()
+            .flatten()
+        {
             let reactions = message_service.get_reactions(&message_id).await.ok();
-            
+
             let event_data = json!({
                 "channel_id": &id,
                 "message_id": &message_id,
@@ -789,13 +873,15 @@ async fn add_reaction_to_message(
                     "name": channel.name,
                 }
             });
-            
+
             // Broadcast to all users in the channel room
             let room = format!("channel:{}", id);
-            let _ = socketio_handler.broadcast_to_room(&room, "channel-events", event_data, None).await;
+            let _ = socketio_handler
+                .broadcast_to_room(&room, "channel-events", event_data, None)
+                .await;
         }
     }
-    
+
     Ok(HttpResponse::Ok().json(true))
 }
 
@@ -806,29 +892,40 @@ async fn remove_reaction_from_message(
     form: web::Json<ReactionForm>,
 ) -> AppResult<HttpResponse> {
     let (id, message_id) = path.into_inner();
-    
+
     let channel_service = ChannelService::new(&state.db);
-    let channel = channel_service.get_channel_by_id(&id)
+    let channel = channel_service
+        .get_channel_by_id(&id)
         .await?
         .ok_or_else(|| AppError::NotFound("Channel not found".to_string()))?;
-    
+
     let message_service = MessageService::new(&state.db);
-    let message = message_service.get_message_by_id(&message_id)
+    let message = message_service
+        .get_message_by_id(&message_id)
         .await?
         .ok_or_else(|| AppError::NotFound("Message not found".to_string()))?;
-    
+
     if message.channel_id.as_ref() != Some(&id) {
-        return Err(AppError::BadRequest("Message does not belong to this channel".to_string()));
+        return Err(AppError::BadRequest(
+            "Message does not belong to this channel".to_string(),
+        ));
     }
-    
-    message_service.remove_reaction(&message_id, &auth_user.user.id, &form.name).await?;
-    
+
+    message_service
+        .remove_reaction(&message_id, &auth_user.user.id, &form.name)
+        .await?;
+
     // Emit Socket.IO event for real-time updates
     if let Some(ref socketio_handler) = state.socketio_handler {
         let user_service = UserService::new(&state.db);
-        if let Some(user) = user_service.get_user_by_id(&auth_user.user.id).await.ok().flatten() {
+        if let Some(user) = user_service
+            .get_user_by_id(&auth_user.user.id)
+            .await
+            .ok()
+            .flatten()
+        {
             let reactions = message_service.get_reactions(&message_id).await.ok();
-            
+
             let event_data = json!({
                 "channel_id": &id,
                 "message_id": &message_id,
@@ -846,12 +943,14 @@ async fn remove_reaction_from_message(
                     "name": channel.name,
                 }
             });
-            
+
             // Broadcast to all users in the channel room
             let room = format!("channel:{}", id);
-            let _ = socketio_handler.broadcast_to_room(&room, "channel-events", event_data, None).await;
+            let _ = socketio_handler
+                .broadcast_to_room(&room, "channel-events", event_data, None)
+                .await;
         }
     }
-    
+
     Ok(HttpResponse::Ok().json(true))
 }

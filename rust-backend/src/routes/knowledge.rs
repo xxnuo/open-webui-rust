@@ -4,8 +4,8 @@ use uuid::Uuid;
 
 use crate::error::AppResult;
 use crate::middleware::{AuthMiddleware, AuthUser};
-use crate::services::knowledge::KnowledgeService;
 use crate::models::knowledge::KnowledgeResponse;
+use crate::services::knowledge::KnowledgeService;
 use crate::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -35,12 +35,12 @@ async fn get_knowledge_bases(
     auth_user: AuthUser,
 ) -> AppResult<HttpResponse> {
     let service = KnowledgeService::new(&state.db);
-    
+
     // Check if admin should bypass access control
     let config = state.config.read().unwrap();
     let bypass_admin_access = config.bypass_admin_access_control.unwrap_or(false);
     drop(config);
-    
+
     let knowledge_bases = if auth_user.user.role == "admin" && bypass_admin_access {
         service.get_all_knowledge().await?
     } else {
@@ -48,10 +48,10 @@ async fn get_knowledge_bases(
         // For now, return user's knowledge bases
         service.get_knowledge_by_user_id(&auth_user.user.id).await?
     };
-    
+
     // TODO: Get files for each knowledge base and check integrity
     // For now, return knowledge bases without file details
-    
+
     let responses: Vec<KnowledgeResponse> = knowledge_bases.into_iter().map(|k| k.into()).collect();
     Ok(HttpResponse::Ok().json(responses))
 }
@@ -62,18 +62,18 @@ async fn get_knowledge_list(
     auth_user: AuthUser,
 ) -> AppResult<HttpResponse> {
     let service = KnowledgeService::new(&state.db);
-    
+
     let config = state.config.read().unwrap();
     let bypass_admin_access = config.bypass_admin_access_control.unwrap_or(false);
     drop(config);
-    
+
     let knowledge_bases = if auth_user.user.role == "admin" && bypass_admin_access {
         service.get_all_knowledge().await?
     } else {
         // TODO: Filter by write access
         service.get_knowledge_by_user_id(&auth_user.user.id).await?
     };
-    
+
     let responses: Vec<KnowledgeResponse> = knowledge_bases.into_iter().map(|k| k.into()).collect();
     Ok(HttpResponse::Ok().json(responses))
 }
@@ -86,18 +86,20 @@ async fn create_knowledge(
 ) -> AppResult<HttpResponse> {
     // TODO: Check workspace.knowledge permission
     // if auth_user.user.role != "admin" && !has_permission(...) { return 401; }
-    
+
     let service = KnowledgeService::new(&state.db);
-    
+
     let knowledge_id = Uuid::new_v4().to_string();
-    let knowledge = service.create_knowledge(
-        &knowledge_id,
-        &auth_user.user.id,
-        &form.name,
-        form.description.as_deref(),
-        form.data.clone(),
-    ).await?;
-    
+    let knowledge = service
+        .create_knowledge(
+            &knowledge_id,
+            &auth_user.user.id,
+            &form.name,
+            form.description.as_deref(),
+            form.data.clone(),
+        )
+        .await?;
+
     let response: KnowledgeResponse = knowledge.into();
     Ok(HttpResponse::Ok().json(response))
 }
@@ -109,17 +111,17 @@ async fn get_knowledge(
     knowledge_id: web::Path<String>,
 ) -> AppResult<HttpResponse> {
     let service = KnowledgeService::new(&state.db);
-    
+
     let knowledge = service.get_knowledge_by_id(&knowledge_id).await?;
-    
+
     if knowledge.is_none() {
         return Ok(HttpResponse::NotFound().json(serde_json::json!({
             "detail": "Knowledge not found"
         })));
     }
-    
+
     let knowledge = knowledge.unwrap();
-    
+
     // Check access: owner or admin
     if knowledge.user_id != auth_user.user.id && auth_user.user.role != "admin" {
         // TODO: Check access_control
@@ -127,7 +129,7 @@ async fn get_knowledge(
             "detail": "Knowledge not found"
         })));
     }
-    
+
     let response: KnowledgeResponse = knowledge.into();
     Ok(HttpResponse::Ok().json(response))
 }
@@ -140,17 +142,17 @@ async fn update_knowledge(
     form: web::Json<UpdateKnowledgeForm>,
 ) -> AppResult<HttpResponse> {
     let service = KnowledgeService::new(&state.db);
-    
+
     let existing = service.get_knowledge_by_id(&knowledge_id).await?;
-    
+
     if existing.is_none() {
         return Ok(HttpResponse::NotFound().json(serde_json::json!({
             "detail": "Knowledge not found"
         })));
     }
-    
+
     let existing = existing.unwrap();
-    
+
     // Check write access
     if existing.user_id != auth_user.user.id && auth_user.user.role != "admin" {
         // TODO: Check write access_control
@@ -158,14 +160,16 @@ async fn update_knowledge(
             "detail": "Unauthorized"
         })));
     }
-    
-    let updated = service.update_knowledge(
-        &knowledge_id,
-        form.name.as_deref(),
-        form.description.as_deref(),
-        form.data.clone(),
-    ).await?;
-    
+
+    let updated = service
+        .update_knowledge(
+            &knowledge_id,
+            form.name.as_deref(),
+            form.description.as_deref(),
+            form.data.clone(),
+        )
+        .await?;
+
     let response: KnowledgeResponse = updated.into();
     Ok(HttpResponse::Ok().json(response))
 }
@@ -177,25 +181,25 @@ async fn delete_knowledge(
     knowledge_id: web::Path<String>,
 ) -> AppResult<HttpResponse> {
     let service = KnowledgeService::new(&state.db);
-    
+
     let existing = service.get_knowledge_by_id(&knowledge_id).await?;
-    
+
     if existing.is_none() {
         return Ok(HttpResponse::Ok().json(false));
     }
-    
+
     let existing = existing.unwrap();
-    
+
     // Check write access
     if existing.user_id != auth_user.user.id && auth_user.user.role != "admin" {
         return Ok(HttpResponse::Ok().json(false));
     }
-    
+
     service.delete_knowledge(&knowledge_id).await?;
-    
+
     // TODO: Delete associated files
     // TODO: Delete from vector DB
-    
+
     Ok(HttpResponse::Ok().json(true))
 }
 
@@ -207,27 +211,27 @@ async fn add_file_to_knowledge(
     form: web::Json<serde_json::Value>,
 ) -> AppResult<HttpResponse> {
     let service = KnowledgeService::new(&state.db);
-    
+
     let existing = service.get_knowledge_by_id(&knowledge_id).await?;
-    
+
     if existing.is_none() {
         return Ok(HttpResponse::NotFound().json(serde_json::json!({
             "detail": "Knowledge not found"
         })));
     }
-    
+
     let existing = existing.unwrap();
-    
+
     // Check write access
     if existing.user_id != auth_user.user.id && auth_user.user.role != "admin" {
         return Ok(HttpResponse::Unauthorized().json(serde_json::json!({
             "detail": "Unauthorized"
         })));
     }
-    
+
     // TODO: Add file ID to knowledge data.file_ids array
     // TODO: Process file and add to vector DB
-    
+
     Ok(HttpResponse::NotImplemented().json(serde_json::json!({
         "detail": "File operations not yet implemented"
     })))
@@ -241,27 +245,27 @@ async fn remove_file_from_knowledge(
     form: web::Json<serde_json::Value>,
 ) -> AppResult<HttpResponse> {
     let service = KnowledgeService::new(&state.db);
-    
+
     let existing = service.get_knowledge_by_id(&knowledge_id).await?;
-    
+
     if existing.is_none() {
         return Ok(HttpResponse::NotFound().json(serde_json::json!({
             "detail": "Knowledge not found"
         })));
     }
-    
+
     let existing = existing.unwrap();
-    
+
     // Check write access
     if existing.user_id != auth_user.user.id && auth_user.user.role != "admin" {
         return Ok(HttpResponse::Unauthorized().json(serde_json::json!({
             "detail": "Unauthorized"
         })));
     }
-    
+
     // TODO: Remove file ID from knowledge data.file_ids array
     // TODO: Remove from vector DB
-    
+
     Ok(HttpResponse::NotImplemented().json(serde_json::json!({
         "detail": "File operations not yet implemented"
     })))
@@ -274,26 +278,26 @@ async fn reset_knowledge(
     knowledge_id: web::Path<String>,
 ) -> AppResult<HttpResponse> {
     let service = KnowledgeService::new(&state.db);
-    
+
     let existing = service.get_knowledge_by_id(&knowledge_id).await?;
-    
+
     if existing.is_none() {
         return Ok(HttpResponse::NotFound().json(serde_json::json!({
             "detail": "Knowledge not found"
         })));
     }
-    
+
     let existing = existing.unwrap();
-    
+
     // Check write access
     if existing.user_id != auth_user.user.id && auth_user.user.role != "admin" {
         return Ok(HttpResponse::Unauthorized().json(serde_json::json!({
             "detail": "Unauthorized"
         })));
     }
-    
+
     // TODO: Delete vector collection and re-index all files
-    
+
     Ok(HttpResponse::NotImplemented().json(serde_json::json!({
         "detail": "Vector DB reset not yet implemented"
     })))
@@ -307,26 +311,26 @@ async fn update_file_in_knowledge(
     _form: web::Json<serde_json::Value>,
 ) -> AppResult<HttpResponse> {
     let service = KnowledgeService::new(&state.db);
-    
+
     let existing = service.get_knowledge_by_id(&knowledge_id).await?;
-    
+
     if existing.is_none() {
         return Ok(HttpResponse::NotFound().json(serde_json::json!({
             "detail": "Knowledge not found"
         })));
     }
-    
+
     let existing = existing.unwrap();
-    
+
     // Check write access
     if existing.user_id != auth_user.user.id && auth_user.user.role != "admin" {
         return Ok(HttpResponse::Unauthorized().json(serde_json::json!({
             "detail": "Unauthorized"
         })));
     }
-    
+
     // TODO: Update file metadata and re-index
-    
+
     Ok(HttpResponse::NotImplemented().json(serde_json::json!({
         "detail": "File update not yet implemented"
     })))
@@ -343,9 +347,9 @@ async fn reindex_all_knowledge(
             "detail": "Unauthorized"
         })));
     }
-    
+
     // TODO: Reindex all knowledge bases
-    
+
     Ok(HttpResponse::NotImplemented().json(serde_json::json!({
         "detail": "Reindex not yet implemented"
     })))
@@ -359,26 +363,26 @@ async fn add_files_batch(
     _form: web::Json<serde_json::Value>,
 ) -> AppResult<HttpResponse> {
     let service = KnowledgeService::new(&state.db);
-    
+
     let existing = service.get_knowledge_by_id(&knowledge_id).await?;
-    
+
     if existing.is_none() {
         return Ok(HttpResponse::NotFound().json(serde_json::json!({
             "detail": "Knowledge not found"
         })));
     }
-    
+
     let existing = existing.unwrap();
-    
+
     // Check write access
     if existing.user_id != auth_user.user.id && auth_user.user.role != "admin" {
         return Ok(HttpResponse::Unauthorized().json(serde_json::json!({
             "detail": "Unauthorized"
         })));
     }
-    
+
     // TODO: Add multiple files and process in batch
-    
+
     Ok(HttpResponse::NotImplemented().json(serde_json::json!({
         "detail": "Batch file operations not yet implemented"
     })))

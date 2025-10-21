@@ -110,18 +110,21 @@ pub struct NoteUserResponse {
 impl NoteUserResponse {
     pub fn from_note_and_user(note: Note, user: Option<serde_json::Value>) -> Self {
         let model = NoteModel::from(note);
-        
+
         // Ensure data has proper content structure for frontend
         let normalized_data = model.data.map(|mut data| {
             if let Some(obj) = data.as_object_mut() {
                 // If content field doesn't exist or is incomplete, normalize it
                 if !obj.contains_key("content") {
                     // Add default empty content structure
-                    obj.insert("content".to_string(), serde_json::json!({
-                        "json": null,
-                        "html": "",
-                        "md": ""
-                    }));
+                    obj.insert(
+                        "content".to_string(),
+                        serde_json::json!({
+                            "json": null,
+                            "html": "",
+                            "md": ""
+                        }),
+                    );
                 } else if let Some(content) = obj.get_mut("content") {
                     // Ensure content has all required fields
                     if let Some(content_obj) = content.as_object_mut() {
@@ -129,17 +132,23 @@ impl NoteUserResponse {
                             content_obj.insert("json".to_string(), serde_json::Value::Null);
                         }
                         if !content_obj.contains_key("html") {
-                            content_obj.insert("html".to_string(), serde_json::Value::String("".to_string()));
+                            content_obj.insert(
+                                "html".to_string(),
+                                serde_json::Value::String("".to_string()),
+                            );
                         }
                         if !content_obj.contains_key("md") {
-                            content_obj.insert("md".to_string(), serde_json::Value::String("".to_string()));
+                            content_obj.insert(
+                                "md".to_string(),
+                                serde_json::Value::String("".to_string()),
+                            );
                         }
                     }
                 }
             }
             data
         });
-        
+
         NoteUserResponse {
             id: model.id,
             user_id: model.user_id,

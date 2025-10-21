@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::{error, info};
 
@@ -57,7 +57,7 @@ impl OAuthClient {
     /// Generate authorization URL with PKCE
     pub fn get_authorization_url(&self, state: &str, code_verifier: &str) -> String {
         let code_challenge = Self::generate_code_challenge(code_verifier);
-        
+
         let mut url = format!(
             "{}?client_id={}&redirect_uri={}&response_type=code&state={}&code_challenge={}&code_challenge_method=S256",
             self.config.authorize_url,
@@ -68,7 +68,10 @@ impl OAuthClient {
         );
 
         if !self.config.scopes.is_empty() {
-            url.push_str(&format!("&scope={}", urlencoding::encode(&self.config.scopes.join(" "))));
+            url.push_str(&format!(
+                "&scope={}",
+                urlencoding::encode(&self.config.scopes.join(" "))
+            ));
         }
 
         url
@@ -101,9 +104,15 @@ impl OAuthClient {
             })?;
 
         if !response.status().is_success() {
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
             error!("OAuth token exchange failed: {}", error_text);
-            return Err(AppError::Auth(format!("Token exchange failed: {}", error_text)));
+            return Err(AppError::Auth(format!(
+                "Token exchange failed: {}",
+                error_text
+            )));
         }
 
         let token_response: OAuthTokenResponse = response.json().await.map_err(|e| {
@@ -136,9 +145,15 @@ impl OAuthClient {
             })?;
 
         if !response.status().is_success() {
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
             error!("OAuth token refresh failed: {}", error_text);
-            return Err(AppError::Auth(format!("Token refresh failed: {}", error_text)));
+            return Err(AppError::Auth(format!(
+                "Token refresh failed: {}",
+                error_text
+            )));
         }
 
         let token_response: OAuthTokenResponse = response.json().await.map_err(|e| {
@@ -170,9 +185,15 @@ impl OAuthClient {
             })?;
 
         if !response.status().is_success() {
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
             error!("Failed to get user info: {}", error_text);
-            return Err(AppError::Auth(format!("Failed to get user info: {}", error_text)));
+            return Err(AppError::Auth(format!(
+                "Failed to get user info: {}",
+                error_text
+            )));
         }
 
         let user_info: OAuthUserInfo = response.json().await.map_err(|e| {
@@ -193,8 +214,9 @@ impl OAuthClient {
         }
 
         let payload = parts[1];
-        use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-        let decoded = URL_SAFE_NO_PAD.decode(payload)
+        use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+        let decoded = URL_SAFE_NO_PAD
+            .decode(payload)
             .map_err(|e| AppError::Auth(format!("Failed to decode ID token: {}", e)))?;
 
         let claims: Value = serde_json::from_slice(&decoded)
@@ -205,16 +227,16 @@ impl OAuthClient {
 
     /// Generate PKCE code verifier
     pub fn generate_code_verifier() -> String {
+        use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
         use rand::Rng;
-        use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
         let random_bytes: Vec<u8> = (0..32).map(|_| rand::rng().random()).collect();
         URL_SAFE_NO_PAD.encode(random_bytes)
     }
 
     /// Generate PKCE code challenge from verifier
     pub fn generate_code_challenge(verifier: &str) -> String {
-        use sha2::{Sha256, Digest};
-        use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+        use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+        use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
         hasher.update(verifier.as_bytes());
         let result = hasher.finalize();
@@ -222,7 +244,11 @@ impl OAuthClient {
     }
 
     /// Revoke token
-    pub async fn revoke_token(&self, _token: &str, _token_type_hint: Option<&str>) -> AppResult<()> {
+    pub async fn revoke_token(
+        &self,
+        _token: &str,
+        _token_type_hint: Option<&str>,
+    ) -> AppResult<()> {
         // Not all providers support token revocation
         info!("Revoking OAuth token");
         Ok(())
@@ -243,7 +269,11 @@ pub mod providers {
             authorize_url: "https://accounts.google.com/o/oauth2/v2/auth".to_string(),
             token_url: "https://oauth2.googleapis.com/token".to_string(),
             userinfo_url: Some("https://openidconnect.googleapis.com/v1/userinfo".to_string()),
-            scopes: vec!["openid".to_string(), "email".to_string(), "profile".to_string()],
+            scopes: vec![
+                "openid".to_string(),
+                "email".to_string(),
+                "profile".to_string(),
+            ],
             redirect_uri,
         }
     }
@@ -263,16 +293,31 @@ pub mod providers {
     }
 
     #[allow(dead_code)]
-    pub fn microsoft(client_id: String, client_secret: String, redirect_uri: String, tenant: Option<String>) -> OAuthConfig {
+    pub fn microsoft(
+        client_id: String,
+        client_secret: String,
+        redirect_uri: String,
+        tenant: Option<String>,
+    ) -> OAuthConfig {
         let tenant = tenant.unwrap_or_else(|| "common".to_string());
         OAuthConfig {
             provider_name: "Microsoft".to_string(),
             client_id,
             client_secret,
-            authorize_url: format!("https://login.microsoftonline.com/{}/oauth2/v2.0/authorize", tenant),
-            token_url: format!("https://login.microsoftonline.com/{}/oauth2/v2.0/token", tenant),
+            authorize_url: format!(
+                "https://login.microsoftonline.com/{}/oauth2/v2.0/authorize",
+                tenant
+            ),
+            token_url: format!(
+                "https://login.microsoftonline.com/{}/oauth2/v2.0/token",
+                tenant
+            ),
             userinfo_url: Some("https://graph.microsoft.com/oidc/userinfo".to_string()),
-            scopes: vec!["openid".to_string(), "email".to_string(), "profile".to_string()],
+            scopes: vec![
+                "openid".to_string(),
+                "email".to_string(),
+                "profile".to_string(),
+            ],
             redirect_uri,
         }
     }
@@ -291,7 +336,11 @@ pub mod providers {
             authorize_url: format!("{}/protocol/openid-connect/auth", realm_url),
             token_url: format!("{}/protocol/openid-connect/token", realm_url),
             userinfo_url: Some(format!("{}/protocol/openid-connect/userinfo", realm_url)),
-            scopes: vec!["openid".to_string(), "email".to_string(), "profile".to_string()],
+            scopes: vec![
+                "openid".to_string(),
+                "email".to_string(),
+                "profile".to_string(),
+            ],
             redirect_uri,
         }
     }
@@ -317,4 +366,3 @@ mod tests {
         assert_ne!(verifier1, verifier2);
     }
 }
-

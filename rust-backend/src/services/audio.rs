@@ -38,14 +38,12 @@ impl AudioService {
         } else {
             self.config.tts_engine.as_str()
         };
-        
+
         match engine {
             "openai" => self.openai_tts(request).await,
             "azure" => self.azure_tts(request).await,
             "elevenlabs" => self.elevenlabs_tts(request).await,
-            _ => Err(AppError::BadRequest(
-                "Unsupported TTS engine".to_string(),
-            )),
+            _ => Err(AppError::BadRequest("Unsupported TTS engine".to_string())),
         }
     }
 
@@ -85,8 +83,9 @@ impl AudioService {
     async fn azure_tts(&self, request: TTSRequest) -> AppResult<Vec<u8>> {
         let api_key = std::env::var("AZURE_SPEECH_KEY")
             .map_err(|_| AppError::InternalServerError("Azure Speech key not set".to_string()))?;
-        let region = std::env::var("AZURE_SPEECH_REGION")
-            .map_err(|_| AppError::InternalServerError("Azure Speech region not set".to_string()))?;
+        let region = std::env::var("AZURE_SPEECH_REGION").map_err(|_| {
+            AppError::InternalServerError("Azure Speech region not set".to_string())
+        })?;
 
         let ssml = format!(
             r#"<speak version='1.0' xml:lang='en-US'><voice name='{}'>{}</voice></speak>"#,
@@ -101,7 +100,10 @@ impl AudioService {
             ))
             .header("Ocp-Apim-Subscription-Key", api_key)
             .header("Content-Type", "application/ssml+xml")
-            .header("X-Microsoft-OutputFormat", "audio-16khz-128kbitrate-mono-mp3")
+            .header(
+                "X-Microsoft-OutputFormat",
+                "audio-16khz-128kbitrate-mono-mp3",
+            )
             .body(ssml)
             .send()
             .await
@@ -169,13 +171,11 @@ impl AudioService {
         } else {
             self.config.stt_engine.as_str()
         };
-        
+
         match engine {
             "whisper" | "openai" => self.openai_stt(audio_data, request).await,
             "azure" => self.azure_stt(audio_data, request).await,
-            _ => Err(AppError::BadRequest(
-                "Unsupported STT engine".to_string(),
-            )),
+            _ => Err(AppError::BadRequest("Unsupported STT engine".to_string())),
         }
     }
 
@@ -228,8 +228,9 @@ impl AudioService {
     async fn azure_stt(&self, audio_data: Vec<u8>, _request: STTRequest) -> AppResult<String> {
         let api_key = std::env::var("AZURE_SPEECH_KEY")
             .map_err(|_| AppError::InternalServerError("Azure Speech key not set".to_string()))?;
-        let region = std::env::var("AZURE_SPEECH_REGION")
-            .map_err(|_| AppError::InternalServerError("Azure Speech region not set".to_string()))?;
+        let region = std::env::var("AZURE_SPEECH_REGION").map_err(|_| {
+            AppError::InternalServerError("Azure Speech region not set".to_string())
+        })?;
 
         let response = self
             .client
@@ -264,4 +265,3 @@ impl AudioService {
         Ok(text)
     }
 }
-

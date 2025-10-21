@@ -2,7 +2,11 @@ use actix_web::{web, HttpResponse};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::{error::AppError, middleware::{AuthMiddleware, AuthUser}, AppState};
+use crate::{
+    error::AppError,
+    middleware::{AuthMiddleware, AuthUser},
+    AppState,
+};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ConfigUpdate {
@@ -88,7 +92,7 @@ async fn get_configs(
     _user: AuthUser,
 ) -> Result<HttpResponse, AppError> {
     let config = state.config.read().unwrap();
-    
+
     Ok(HttpResponse::Ok().json(json!({
         "status": true,
         "enable_signup": config.enable_signup,
@@ -157,7 +161,7 @@ async fn get_features(
     _user: AuthUser,
 ) -> Result<HttpResponse, AppError> {
     let config = state.config.read().unwrap();
-    
+
     Ok(HttpResponse::Ok().json(json!({
         "enable_signup": config.enable_signup,
         "enable_login_form": config.enable_login_form,
@@ -218,7 +222,7 @@ async fn get_connections_config(
     _user: AuthUser,
 ) -> Result<HttpResponse, AppError> {
     let config = state.config.read().unwrap();
-    
+
     Ok(HttpResponse::Ok().json(ConnectionsConfigResponse {
         enable_direct_connections: config.enable_direct_connections,
         enable_base_models_cache: config.enable_base_models_cache,
@@ -248,8 +252,10 @@ async fn set_connections_config(
         "enable_direct_connections": payload.enable_direct_connections,
         "enable_base_models_cache": payload.enable_base_models_cache
     });
-    
-    if let Err(e) = crate::services::ConfigService::update_section(&state.db, "connections", config_json).await {
+
+    if let Err(e) =
+        crate::services::ConfigService::update_section(&state.db, "connections", config_json).await
+    {
         tracing::warn!("Failed to persist connections config to database: {}", e);
     }
 
@@ -257,7 +263,9 @@ async fn set_connections_config(
     let direct_json = serde_json::json!({
         "enable": payload.enable_direct_connections
     });
-    if let Err(e) = crate::services::ConfigService::update_section(&state.db, "direct", direct_json).await {
+    if let Err(e) =
+        crate::services::ConfigService::update_section(&state.db, "direct", direct_json).await
+    {
         tracing::warn!("Failed to persist direct config to database: {}", e);
     }
 
@@ -294,7 +302,9 @@ async fn get_code_execution_config(
         code_interpreter_jupyter_url: config.code_interpreter_jupyter_url.clone(),
         code_interpreter_jupyter_auth: config.code_interpreter_jupyter_auth.clone(),
         code_interpreter_jupyter_auth_token: config.code_interpreter_jupyter_auth_token.clone(),
-        code_interpreter_jupyter_auth_password: config.code_interpreter_jupyter_auth_password.clone(),
+        code_interpreter_jupyter_auth_password: config
+            .code_interpreter_jupyter_auth_password
+            .clone(),
         code_interpreter_jupyter_timeout: config.code_interpreter_jupyter_timeout,
     }))
 }
@@ -317,17 +327,22 @@ async fn set_code_execution_config(
         config.code_execution_engine = form_data.code_execution_engine.clone();
         config.code_execution_jupyter_url = form_data.code_execution_jupyter_url.clone();
         config.code_execution_jupyter_auth = form_data.code_execution_jupyter_auth.clone();
-        config.code_execution_jupyter_auth_token = form_data.code_execution_jupyter_auth_token.clone();
-        config.code_execution_jupyter_auth_password = form_data.code_execution_jupyter_auth_password.clone();
+        config.code_execution_jupyter_auth_token =
+            form_data.code_execution_jupyter_auth_token.clone();
+        config.code_execution_jupyter_auth_password =
+            form_data.code_execution_jupyter_auth_password.clone();
         config.code_execution_jupyter_timeout = form_data.code_execution_jupyter_timeout;
 
         config.enable_code_interpreter = form_data.enable_code_interpreter;
         config.code_interpreter_engine = form_data.code_interpreter_engine.clone();
-        config.code_interpreter_prompt_template = form_data.code_interpreter_prompt_template.clone();
+        config.code_interpreter_prompt_template =
+            form_data.code_interpreter_prompt_template.clone();
         config.code_interpreter_jupyter_url = form_data.code_interpreter_jupyter_url.clone();
         config.code_interpreter_jupyter_auth = form_data.code_interpreter_jupyter_auth.clone();
-        config.code_interpreter_jupyter_auth_token = form_data.code_interpreter_jupyter_auth_token.clone();
-        config.code_interpreter_jupyter_auth_password = form_data.code_interpreter_jupyter_auth_password.clone();
+        config.code_interpreter_jupyter_auth_token =
+            form_data.code_interpreter_jupyter_auth_token.clone();
+        config.code_interpreter_jupyter_auth_password =
+            form_data.code_interpreter_jupyter_auth_password.clone();
         config.code_interpreter_jupyter_timeout = form_data.code_interpreter_jupyter_timeout;
     }
 
@@ -341,7 +356,12 @@ async fn set_code_execution_config(
         "jupyter_auth_password": config.code_execution_jupyter_auth_password,
         "jupyter_timeout": config.code_execution_jupyter_timeout
     });
-    let _ = crate::services::ConfigService::update_section(&state.db, "code_execution", code_execution_json).await;
+    let _ = crate::services::ConfigService::update_section(
+        &state.db,
+        "code_execution",
+        code_execution_json,
+    )
+    .await;
 
     let code_interpreter_json = serde_json::json!({
         "engine": config.code_interpreter_engine,
@@ -352,13 +372,19 @@ async fn set_code_execution_config(
         "jupyter_auth_password": config.code_interpreter_jupyter_auth_password,
         "jupyter_timeout": config.code_interpreter_jupyter_timeout
     });
-    let _ = crate::services::ConfigService::update_section(&state.db, "code_interpreter", code_interpreter_json).await;
+    let _ = crate::services::ConfigService::update_section(
+        &state.db,
+        "code_interpreter",
+        code_interpreter_json,
+    )
+    .await;
 
     let features_json = serde_json::json!({
         "enable_code_execution": config.enable_code_execution,
         "enable_code_interpreter": config.enable_code_interpreter
     });
-    let _ = crate::services::ConfigService::update_section(&state.db, "features", features_json).await;
+    let _ =
+        crate::services::ConfigService::update_section(&state.db, "features", features_json).await;
 
     Ok(HttpResponse::Ok().json(CodeExecutionConfigForm {
         enable_code_execution: config.enable_code_execution,
@@ -374,7 +400,9 @@ async fn set_code_execution_config(
         code_interpreter_jupyter_url: config.code_interpreter_jupyter_url.clone(),
         code_interpreter_jupyter_auth: config.code_interpreter_jupyter_auth.clone(),
         code_interpreter_jupyter_auth_token: config.code_interpreter_jupyter_auth_token.clone(),
-        code_interpreter_jupyter_auth_password: config.code_interpreter_jupyter_auth_password.clone(),
+        code_interpreter_jupyter_auth_password: config
+            .code_interpreter_jupyter_auth_password
+            .clone(),
         code_interpreter_jupyter_timeout: config.code_interpreter_jupyter_timeout,
     }))
 }
@@ -506,7 +534,12 @@ async fn set_tool_servers_config(
     let tool_servers_json = serde_json::json!({
         "connections": config.tool_server_connections
     });
-    let _ = crate::services::ConfigService::update_section(&state.db, "tool_servers", tool_servers_json).await;
+    let _ = crate::services::ConfigService::update_section(
+        &state.db,
+        "tool_servers",
+        tool_servers_json,
+    )
+    .await;
 
     Ok(HttpResponse::Ok().json(ToolServersConfigForm {
         tool_server_connections: config.tool_server_connections.clone(),

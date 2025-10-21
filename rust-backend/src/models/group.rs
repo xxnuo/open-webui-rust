@@ -39,7 +39,8 @@ impl Group {
             self.permissions = serde_json::from_str(perms_str).ok();
         }
         // Always parse user_ids_str, defaulting to empty array if None or parse fails
-        self.user_ids = self.user_ids_str
+        self.user_ids = self
+            .user_ids_str
             .as_ref()
             .and_then(|ids_str| serde_json::from_str(ids_str).ok())
             .unwrap_or_default();

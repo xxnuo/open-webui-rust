@@ -23,7 +23,9 @@ impl<'a> KnowledgeService<'a> {
         data: Option<serde_json::Value>,
     ) -> AppResult<Knowledge> {
         let now = current_timestamp_seconds();
-        let data_str = data.as_ref().map(|v| serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string()));
+        let data_str = data
+            .as_ref()
+            .map(|v| serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string()));
 
         sqlx::query(
             r#"
@@ -41,9 +43,9 @@ impl<'a> KnowledgeService<'a> {
         .execute(&self.db.pool)
         .await?;
 
-        self.get_knowledge_by_id(id).await?.ok_or_else(|| {
-            AppError::InternalServerError("Failed to create knowledge".to_string())
-        })
+        self.get_knowledge_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::InternalServerError("Failed to create knowledge".to_string()))
     }
 
     pub async fn get_knowledge_by_id(&self, id: &str) -> AppResult<Option<Knowledge>> {
@@ -126,9 +128,9 @@ impl<'a> KnowledgeService<'a> {
 
         query.execute(&self.db.pool).await?;
 
-        self.get_knowledge_by_id(id).await?.ok_or_else(|| {
-            AppError::NotFound("Knowledge not found".to_string())
-        })
+        self.get_knowledge_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Knowledge not found".to_string()))
     }
 
     pub async fn delete_knowledge(&self, id: &str) -> AppResult<()> {
@@ -149,4 +151,3 @@ impl<'a> KnowledgeService<'a> {
         Ok(())
     }
 }
-

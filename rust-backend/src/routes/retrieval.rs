@@ -2,7 +2,11 @@ use actix_web::{web, HttpResponse};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::{error::{AppError, AppResult}, middleware::{AuthMiddleware, AuthUser}, AppState};
+use crate::{
+    error::{AppError, AppResult},
+    middleware::{AuthMiddleware, AuthUser},
+    AppState,
+};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct RetrievalConfigResponse {
@@ -109,7 +113,10 @@ pub fn create_routes(cfg: &mut web::ServiceConfig) {
             .route("/process/web/search", web::post().to(process_web_search))
             .route("/process/files/batch", web::post().to(process_files_batch))
             .route("/query/doc", web::post().to(query_doc_handler))
-            .route("/query/collection", web::post().to(query_collection_handler))
+            .route(
+                "/query/collection",
+                web::post().to(query_collection_handler),
+            )
             .route("/delete", web::post().to(delete_entries))
             .route("/reset/db", web::post().to(reset_vector_db))
             .route("/reset/uploads", web::post().to(reset_uploads))

@@ -60,10 +60,14 @@ impl EmbeddingRequest {
                 return Err(AppError::BadRequest("Input cannot be empty".to_string()));
             }
             EmbeddingInput::Array(arr) if arr.is_empty() => {
-                return Err(AppError::BadRequest("Input array cannot be empty".to_string()));
+                return Err(AppError::BadRequest(
+                    "Input array cannot be empty".to_string(),
+                ));
             }
             EmbeddingInput::TokenArray(arr) if arr.is_empty() => {
-                return Err(AppError::BadRequest("Token array cannot be empty".to_string()));
+                return Err(AppError::BadRequest(
+                    "Token array cannot be empty".to_string(),
+                ));
             }
             EmbeddingInput::TokenArrayArray(arr) if arr.is_empty() => {
                 return Err(AppError::BadRequest(
@@ -136,7 +140,7 @@ pub async fn generate_openai_embeddings(
     dimension: Option<i32>,
 ) -> Result<Vec<Vec<f32>>, AppError> {
     let client = reqwest::Client::new();
-    
+
     let mut payload = json!({
         "model": model,
         "input": texts,
@@ -164,8 +168,12 @@ pub async fn generate_openai_embeddings(
     }
 
     let response_data: EmbeddingResponse = response.json().await?;
-    
-    Ok(response_data.data.into_iter().map(|d| d.embedding).collect())
+
+    Ok(response_data
+        .data
+        .into_iter()
+        .map(|d| d.embedding)
+        .collect())
 }
 
 /// Generate embeddings using Azure OpenAI API
@@ -179,7 +187,7 @@ pub async fn generate_azure_openai_embeddings(
     dimension: Option<i32>,
 ) -> Result<Vec<Vec<f32>>, AppError> {
     let client = reqwest::Client::new();
-    
+
     let url = format!(
         "{}/openai/deployments/{}/embeddings?api-version={}",
         base_url, model, api_version
@@ -211,8 +219,12 @@ pub async fn generate_azure_openai_embeddings(
     }
 
     let response_data: EmbeddingResponse = response.json().await?;
-    
-    Ok(response_data.data.into_iter().map(|d| d.embedding).collect())
+
+    Ok(response_data
+        .data
+        .into_iter()
+        .map(|d| d.embedding)
+        .collect())
 }
 
 /// Generate embeddings using local candle library (pure Rust)
@@ -230,86 +242,117 @@ pub async fn generate_local_embeddings(
         use candle_transformers::models::bert::{BertModel, Config as BertConfig};
         use hf_hub::{api::sync::Api, Repo, RepoType};
         use tokenizers::Tokenizer;
-        
+
         // Map model name to HuggingFace model ID
         let (repo_id, revision) = match model_name.as_str() {
-            "all-minilm-l6-v2" | "all-MiniLM-L6-v2" => 
-                ("sentence-transformers/all-MiniLM-L6-v2", "main"),
-            "bge-base-en-v1.5" => 
-                ("BAAI/bge-base-en-v1.5", "main"),
-            "bge-small-en-v1.5" => 
-                ("BAAI/bge-small-en-v1.5", "main"),
+            "all-minilm-l6-v2" | "all-MiniLM-L6-v2" => {
+                ("sentence-transformers/all-MiniLM-L6-v2", "main")
+            }
+            "bge-base-en-v1.5" => ("BAAI/bge-base-en-v1.5", "main"),
+            "bge-small-en-v1.5" => ("BAAI/bge-small-en-v1.5", "main"),
             _ => ("sentence-transformers/all-MiniLM-L6-v2", "main"), // Default
         };
-        
+
         // Download model files from HuggingFace
-        let api = Api::new()
-            .map_err(|e| AppError::InternalServerError(format!("Failed to initialize HF API: {}", e)))?;
-        let repo = api.repo(Repo::with_revision(repo_id.to_string(), RepoType::Model, revision.to_string()));
-        
-        let tokenizer_path = repo.get("tokenizer.json")
-            .map_err(|e| AppError::InternalServerError(format!("Failed to download tokenizer: {}", e)))?;
-        let config_path = repo.get("config.json")
-            .map_err(|e| AppError::InternalServerError(format!("Failed to download config: {}", e)))?;
-        let weights_path = repo.get("model.safetensors")
+        let api = Api::new().map_err(|e| {
+            AppError::InternalServerError(format!("Failed to initialize HF API: {}", e))
+        })?;
+        let repo = api.repo(Repo::with_revision(
+            repo_id.to_string(),
+            RepoType::Model,
+            revision.to_string(),
+        ));
+
+        let tokenizer_path = repo.get("tokenizer.json").map_err(|e| {
+            AppError::InternalServerError(format!("Failed to download tokenizer: {}", e))
+        })?;
+        let config_path = repo.get("config.json").map_err(|e| {
+            AppError::InternalServerError(format!("Failed to download config: {}", e))
+        })?;
+        let weights_path = repo
+            .get("model.safetensors")
             .or_else(|_| repo.get("pytorch_model.bin"))
-            .map_err(|e| AppError::InternalServerError(format!("Failed to download model weights: {}", e)))?;
-        
+            .map_err(|e| {
+                AppError::InternalServerError(format!("Failed to download model weights: {}", e))
+            })?;
+
         // Load tokenizer
-        let tokenizer = Tokenizer::from_file(tokenizer_path)
-            .map_err(|e| AppError::InternalServerError(format!("Failed to load tokenizer: {}", e)))?;
-        
+        let tokenizer = Tokenizer::from_file(tokenizer_path).map_err(|e| {
+            AppError::InternalServerError(format!("Failed to load tokenizer: {}", e))
+        })?;
+
         // Load config
         let config_str = std::fs::read_to_string(config_path)
             .map_err(|e| AppError::InternalServerError(format!("Failed to read config: {}", e)))?;
         let config: BertConfig = serde_json::from_str(&config_str)
             .map_err(|e| AppError::InternalServerError(format!("Failed to parse config: {}", e)))?;
-        
+
         // Load model
         let device = Device::Cpu;
         let vb = VarBuilder::from_pth(&weights_path, candle_core::DType::F32, &device)
-            .or_else(|_| unsafe { VarBuilder::from_mmaped_safetensors(&[weights_path], candle_core::DType::F32, &device) })
-            .map_err(|e| AppError::InternalServerError(format!("Failed to load model weights: {}", e)))?;
-        
-        let model = BertModel::load(vb, &config)
-            .map_err(|e| AppError::InternalServerError(format!("Failed to load BERT model: {}", e)))?;
-        
+            .or_else(|_| unsafe {
+                VarBuilder::from_mmaped_safetensors(
+                    &[weights_path],
+                    candle_core::DType::F32,
+                    &device,
+                )
+            })
+            .map_err(|e| {
+                AppError::InternalServerError(format!("Failed to load model weights: {}", e))
+            })?;
+
+        let model = BertModel::load(vb, &config).map_err(|e| {
+            AppError::InternalServerError(format!("Failed to load BERT model: {}", e))
+        })?;
+
         // Process each text
         let mut all_embeddings = Vec::new();
         for text in texts {
             // Tokenize
-            let encoding = tokenizer.encode(text, true)
-                .map_err(|e| AppError::InternalServerError(format!("Tokenization failed: {}", e)))?;
+            let encoding = tokenizer.encode(text, true).map_err(|e| {
+                AppError::InternalServerError(format!("Tokenization failed: {}", e))
+            })?;
             let token_ids = encoding.get_ids().to_vec();
             let token_type_ids = encoding.get_type_ids().to_vec();
-            
+
             // Convert to tensors
             let token_ids = Tensor::new(token_ids.as_slice(), &device)
-                .map_err(|e| AppError::InternalServerError(format!("Failed to create token tensor: {}", e)))?
+                .map_err(|e| {
+                    AppError::InternalServerError(format!("Failed to create token tensor: {}", e))
+                })?
                 .unsqueeze(0)
-                .map_err(|e| AppError::InternalServerError(format!("Failed to unsqueeze: {}", e)))?;
+                .map_err(|e| {
+                    AppError::InternalServerError(format!("Failed to unsqueeze: {}", e))
+                })?;
             let token_type_ids = Tensor::new(token_type_ids.as_slice(), &device)
-                .map_err(|e| AppError::InternalServerError(format!("Failed to create type tensor: {}", e)))?
+                .map_err(|e| {
+                    AppError::InternalServerError(format!("Failed to create type tensor: {}", e))
+                })?
                 .unsqueeze(0)
-                .map_err(|e| AppError::InternalServerError(format!("Failed to unsqueeze: {}", e)))?;
-            
+                .map_err(|e| {
+                    AppError::InternalServerError(format!("Failed to unsqueeze: {}", e))
+                })?;
+
             // Run model
-            let embeddings = model.forward(&token_ids, &token_type_ids)
-                .map_err(|e| AppError::InternalServerError(format!("Model forward failed: {}", e)))?;
-            
+            let embeddings = model.forward(&token_ids, &token_type_ids).map_err(|e| {
+                AppError::InternalServerError(format!("Model forward failed: {}", e))
+            })?;
+
             // Mean pooling
-            let embedding = embeddings.mean(1)
+            let embedding = embeddings
+                .mean(1)
                 .map_err(|e| AppError::InternalServerError(format!("Mean pooling failed: {}", e)))?
                 .squeeze(0)
                 .map_err(|e| AppError::InternalServerError(format!("Squeeze failed: {}", e)))?;
-            
+
             // Convert to Vec<f32>
-            let embedding_vec = embedding.to_vec1::<f32>()
-                .map_err(|e| AppError::InternalServerError(format!("Failed to convert to vec: {}", e)))?;
-            
+            let embedding_vec = embedding.to_vec1::<f32>().map_err(|e| {
+                AppError::InternalServerError(format!("Failed to convert to vec: {}", e))
+            })?;
+
             all_embeddings.push(embedding_vec);
         }
-        
+
         Ok(all_embeddings)
     })
     .await
@@ -403,7 +446,7 @@ mod tests {
             dimensions: None,
             user: None,
         };
-        
+
         let strings = request.get_input_strings();
         assert_eq!(strings.len(), 2);
         assert_eq!(strings[0], "text1");
@@ -412,16 +455,12 @@ mod tests {
 
     #[test]
     fn test_embedding_response_creation() {
-        let embeddings = vec![
-            vec![0.1, 0.2, 0.3],
-            vec![0.4, 0.5, 0.6],
-        ];
-        
+        let embeddings = vec![vec![0.1, 0.2, 0.3], vec![0.4, 0.5, 0.6]];
+
         let response = EmbeddingResponse::new("test-model".to_string(), embeddings);
-        
+
         assert_eq!(response.data.len(), 2);
         assert_eq!(response.model, "test-model");
         assert_eq!(response.usage.total_tokens, 6);
     }
 }
-

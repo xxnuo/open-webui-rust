@@ -47,14 +47,9 @@ pub fn create_routes(cfg: &mut web::ServiceConfig) {
     );
 }
 
-async fn get_folders(
-    state: web::Data<AppState>,
-    auth_user: AuthUser,
-) -> AppResult<HttpResponse> {
+async fn get_folders(state: web::Data<AppState>, auth_user: AuthUser) -> AppResult<HttpResponse> {
     let folder_service = FolderService::new(&state.db);
-    let folders = folder_service
-        .get_folders_by_user_id(&auth_user.id)
-        .await?;
+    let folders = folder_service.get_folders_by_user_id(&auth_user.id).await?;
 
     // TODO: Verify folder data integrity with files and knowledge
     // For now, just return the folders

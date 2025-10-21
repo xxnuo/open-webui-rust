@@ -91,7 +91,7 @@ async fn get_session_user(
     req: HttpRequest,
 ) -> AppResult<HttpResponse> {
     let config = state.config.read().unwrap();
-    
+
     // Get token from Authorization header or cookie
     let token = if let Some(auth_header) = req.headers().get(header::AUTHORIZATION) {
         if let Ok(auth_str) = auth_header.to_str() {
@@ -110,17 +110,17 @@ async fn get_session_user(
             Ok(claims) => {
                 if let Some(exp) = claims.exp {
                     let now = chrono::Utc::now().timestamp();
-                    
+
                     // Check if token is expired
                     if now > exp {
                         return Err(crate::error::AppError::Unauthorized(
                             "Token expired".to_string(),
                         ));
                     }
-                    
+
                     // Check if token is close to expiring (within 5 minutes) - refresh it
                     let should_refresh = (exp - now) < 300; // 5 minutes = 300 seconds
-                    
+
                     if should_refresh {
                         // Generate new token
                         let new_token = create_jwt(
@@ -128,13 +128,13 @@ async fn get_session_user(
                             &config.webui_secret_key,
                             &config.jwt_expires_in,
                         )?;
-                        
+
                         let new_expires_at = chrono::Utc::now()
                             .checked_add_signed(crate::utils::auth::parse_duration(
                                 &config.jwt_expires_in,
                             )?)
                             .map(|dt| dt.timestamp());
-                        
+
                         (new_token, new_expires_at, true)
                     } else {
                         // Use existing token
@@ -152,13 +152,11 @@ async fn get_session_user(
                     &config.webui_secret_key,
                     &config.jwt_expires_in,
                 )?;
-                
+
                 let new_expires_at = chrono::Utc::now()
-                    .checked_add_signed(crate::utils::auth::parse_duration(
-                        &config.jwt_expires_in,
-                    )?)
+                    .checked_add_signed(crate::utils::auth::parse_duration(&config.jwt_expires_in)?)
                     .map(|dt| dt.timestamp());
-                
+
                 (new_token, new_expires_at, true)
             }
         }
@@ -169,13 +167,11 @@ async fn get_session_user(
             &config.webui_secret_key,
             &config.jwt_expires_in,
         )?;
-        
+
         let new_expires_at = chrono::Utc::now()
-            .checked_add_signed(crate::utils::auth::parse_duration(
-                &config.jwt_expires_in,
-            )?)
+            .checked_add_signed(crate::utils::auth::parse_duration(&config.jwt_expires_in)?)
             .map(|dt| dt.timestamp());
-        
+
         (new_token, new_expires_at, true)
     };
 
@@ -204,10 +200,10 @@ async fn get_session_user(
 
     // Return response with Set-Cookie header
     let mut response = HttpResponse::Ok();
-    
+
     // Always set cookie to ensure it's refreshed
     response.append_header((header::SET_COOKIE, cookie.to_string()));
-    
+
     Ok(response.json(response_json))
 }
 
@@ -226,24 +222,19 @@ async fn signin(
         .await?
         .ok_or(crate::error::AppError::InvalidCredentials)?;
 
-    let user = user_service
-        .get_user_by_id(&user_id)
-        .await?
-        .ok_or(crate::error::AppError::NotFound(
-            "User not found".to_string(),
-        ))?;
+    let user =
+        user_service
+            .get_user_by_id(&user_id)
+            .await?
+            .ok_or(crate::error::AppError::NotFound(
+                "User not found".to_string(),
+            ))?;
 
     let config = state.config.read().unwrap();
-    let token = create_jwt(
-        &user.id,
-        &config.webui_secret_key,
-        &config.jwt_expires_in,
-    )?;
+    let token = create_jwt(&user.id, &config.webui_secret_key, &config.jwt_expires_in)?;
 
     let expires_at = chrono::Utc::now()
-        .checked_add_signed(crate::utils::auth::parse_duration(
-            &config.jwt_expires_in,
-        )?)
+        .checked_add_signed(crate::utils::auth::parse_duration(&config.jwt_expires_in)?)
         .map(|dt| dt.timestamp());
 
     let session_response = SessionResponse {
@@ -280,7 +271,7 @@ async fn signup(
     req: web::Json<SignupRequest>,
 ) -> AppResult<HttpResponse> {
     let config = state.config.read().unwrap();
-    
+
     if !config.enable_signup {
         return Err(crate::error::AppError::Forbidden(
             "Signup is disabled".to_string(),
@@ -337,16 +328,10 @@ async fn signup(
         .create_auth(&user_id, &req.email.to_lowercase(), &req.password)
         .await?;
 
-    let token = create_jwt(
-        &user.id,
-        &config.webui_secret_key,
-        &config.jwt_expires_in,
-    )?;
+    let token = create_jwt(&user.id, &config.webui_secret_key, &config.jwt_expires_in)?;
 
     let expires_at = chrono::Utc::now()
-        .checked_add_signed(crate::utils::auth::parse_duration(
-            &config.jwt_expires_in,
-        )?)
+        .checked_add_signed(crate::utils::auth::parse_duration(&config.jwt_expires_in)?)
         .map(|dt| dt.timestamp());
 
     let session_response = SessionResponse {
@@ -397,24 +382,29 @@ async fn update_profile(
     req: web::Json<serde_json::Value>,
 ) -> AppResult<HttpResponse> {
     let user_service = UserService::new(&state.db);
-    
+
     // Extract update fields from request
     let mut update_data = std::collections::HashMap::new();
-    
+
     if let Some(name) = req.get("name").and_then(|v| v.as_str()) {
         update_data.insert("name".to_string(), name.to_string());
     }
     if let Some(profile_image_url) = req.get("profile_image_url").and_then(|v| v.as_str()) {
-        update_data.insert("profile_image_url".to_string(), profile_image_url.to_string());
+        update_data.insert(
+            "profile_image_url".to_string(),
+            profile_image_url.to_string(),
+        );
     }
-    
+
     // Update user profile (you'll need to implement this in your UserService)
     // For now, just return the current user
     let user = user_service
         .get_user_by_id(&auth_user.user.id)
         .await?
-        .ok_or(crate::error::AppError::NotFound("User not found".to_string()))?;
-    
+        .ok_or(crate::error::AppError::NotFound(
+            "User not found".to_string(),
+        ))?;
+
     Ok(HttpResponse::Ok().json(json!({
         "id": user.id,
         "name": user.name,
@@ -429,26 +419,29 @@ async fn update_password(
     auth_user: AuthUser,
     req: web::Json<serde_json::Value>,
 ) -> AppResult<HttpResponse> {
-    let password = req.get("password")
-        .and_then(|v| v.as_str())
-        .ok_or(crate::error::AppError::BadRequest("password is required".to_string()))?;
-    
-    let _new_password = req.get("new_password")
-        .and_then(|v| v.as_str())
-        .ok_or(crate::error::AppError::BadRequest("new_password is required".to_string()))?;
-    
+    let password =
+        req.get("password")
+            .and_then(|v| v.as_str())
+            .ok_or(crate::error::AppError::BadRequest(
+                "password is required".to_string(),
+            ))?;
+
+    let _new_password = req.get("new_password").and_then(|v| v.as_str()).ok_or(
+        crate::error::AppError::BadRequest("new_password is required".to_string()),
+    )?;
+
     let auth_service = AuthService::new(&state.db);
-    
+
     // Verify current password
     let user_id = auth_service
         .authenticate(&auth_user.user.email, password)
         .await?
         .ok_or(crate::error::AppError::InvalidCredentials)?;
-    
+
     if user_id != auth_user.user.id {
         return Err(crate::error::AppError::InvalidCredentials);
     }
-    
+
     // TODO: Update password (you'll need to implement this in AuthService)
     // auth_service.update_password(&auth_user.user.id, new_password).await?;
     // For now, return success
@@ -477,13 +470,13 @@ async fn add_user(
             "Admin access required".to_string(),
         ));
     }
-    
+
     req.validate()
         .map_err(|e| crate::error::AppError::Validation(e.to_string()))?;
-    
+
     let user_service = UserService::new(&state.db);
     let auth_service = AuthService::new(&state.db);
-    
+
     // Check if user already exists
     if user_service
         .get_user_by_email(&req.email.to_lowercase())
@@ -492,11 +485,14 @@ async fn add_user(
     {
         return Err(crate::error::AppError::UserAlreadyExists);
     }
-    
+
     // Create user
     let user_id = uuid::Uuid::new_v4().to_string();
-    let profile_image_url = req.profile_image_url.clone().unwrap_or_else(|| "/user.png".to_string());
-    
+    let profile_image_url = req
+        .profile_image_url
+        .clone()
+        .unwrap_or_else(|| "/user.png".to_string());
+
     let user = user_service
         .create_user(
             &user_id,
@@ -506,19 +502,15 @@ async fn add_user(
             &profile_image_url,
         )
         .await?;
-    
+
     // Create auth
     auth_service
         .create_auth(&user_id, &req.email.to_lowercase(), &req.password)
         .await?;
-    
+
     let config = state.config.read().unwrap();
-    let token = create_jwt(
-        &user.id,
-        &config.webui_secret_key,
-        &config.jwt_expires_in,
-    )?;
-    
+    let token = create_jwt(&user.id, &config.webui_secret_key, &config.jwt_expires_in)?;
+
     Ok(HttpResponse::Ok().json(json!({
         "token": token,
         "token_type": "Bearer",
@@ -535,43 +527,44 @@ async fn get_admin_details(
     _auth_user: AuthUser,
 ) -> AppResult<HttpResponse> {
     let config = state.config.read().unwrap();
-    
+
     if !config.show_admin_details {
         return Err(crate::error::AppError::Forbidden(
             "Action prohibited".to_string(),
         ));
     }
-    
+
     let user_service = UserService::new(&state.db);
-    
+
     // Get first user as admin
     let (admin_name, admin_email) = if let Some(first_user) = user_service.get_first_user().await? {
         (Some(first_user.name), Some(first_user.email))
     } else {
         (None, None)
     };
-    
+
     Ok(HttpResponse::Ok().json(json!({
         "name": admin_name,
         "email": admin_email,
     })))
 }
 
-async fn get_api_key(
-    state: web::Data<AppState>,
-    auth_user: AuthUser,
-) -> AppResult<HttpResponse> {
+async fn get_api_key(state: web::Data<AppState>, auth_user: AuthUser) -> AppResult<HttpResponse> {
     let user_service = UserService::new(&state.db);
-    
+
     let user = user_service
         .get_user_by_id(&auth_user.user.id)
         .await?
-        .ok_or(crate::error::AppError::NotFound("User not found".to_string()))?;
-    
+        .ok_or(crate::error::AppError::NotFound(
+            "User not found".to_string(),
+        ))?;
+
     if let Some(api_key) = user.api_key {
         Ok(HttpResponse::Ok().json(json!({"api_key": api_key})))
     } else {
-        Err(crate::error::AppError::NotFound("API key not found".to_string()))
+        Err(crate::error::AppError::NotFound(
+            "API key not found".to_string(),
+        ))
     }
 }
 
@@ -580,16 +573,16 @@ async fn create_api_key(
     auth_user: AuthUser,
 ) -> AppResult<HttpResponse> {
     let config = state.config.read().unwrap();
-    
+
     if !config.enable_api_key {
         return Err(crate::error::AppError::Forbidden(
             "API key creation is not allowed".to_string(),
         ));
     }
-    
+
     // Generate API key
     let api_key = format!("sk-{}", uuid::Uuid::new_v4().to_string().replace("-", ""));
-    
+
     // Update user with new API key
     let result = sqlx::query(
         r#"
@@ -603,11 +596,13 @@ async fn create_api_key(
     .bind(&auth_user.user.id)
     .execute(&state.db.pool)
     .await?;
-    
+
     if result.rows_affected() > 0 {
         Ok(HttpResponse::Ok().json(json!({"api_key": api_key})))
     } else {
-        Err(crate::error::AppError::BadRequest("Failed to create API key".to_string()))
+        Err(crate::error::AppError::BadRequest(
+            "Failed to create API key".to_string(),
+        ))
     }
 }
 
@@ -627,7 +622,7 @@ async fn delete_api_key(
     .bind(&auth_user.user.id)
     .execute(&state.db.pool)
     .await?;
-    
+
     Ok(HttpResponse::Ok().json(result.rows_affected() > 0))
 }
 
@@ -714,25 +709,25 @@ async fn update_admin_config(
 
     // Update config with write lock
     let mut config = state.config.write().unwrap();
-    
+
     config.show_admin_details = form_data.show_admin_details;
     config.webui_url = form_data.webui_url.clone();
     config.enable_signup = form_data.enable_signup;
     config.enable_api_key = form_data.enable_api_key;
     config.enable_api_key_endpoint_restrictions = form_data.enable_api_key_endpoint_restrictions;
     config.api_key_allowed_endpoints = form_data.api_key_allowed_endpoints.clone();
-    
+
     // Validate and update default_user_role
     if ["pending", "user", "admin"].contains(&form_data.default_user_role.as_str()) {
         config.default_user_role = form_data.default_user_role.clone();
     }
-    
+
     // Validate JWT_EXPIRES_IN format (basic validation)
     let pattern = regex::Regex::new(r"^(-1|0|(-?\d+(\.\d+)?)(ms|s|m|h|d|w))$").unwrap();
     if pattern.is_match(&form_data.jwt_expires_in) {
         config.jwt_expires_in = form_data.jwt_expires_in.clone();
     }
-    
+
     config.enable_community_sharing = form_data.enable_community_sharing;
     config.enable_message_rating = form_data.enable_message_rating;
     config.enable_channels = form_data.enable_channels;
@@ -761,14 +756,16 @@ async fn update_admin_config(
         "pending_user_overlay_content": config.pending_user_overlay_content,
         "response_watermark": config.response_watermark,
     });
-    
+
     // Drop the write lock before async operations
     drop(config);
-    
-    if let Err(e) = crate::services::ConfigService::update_section(&state.db, "admin", admin_config_json).await {
+
+    if let Err(e) =
+        crate::services::ConfigService::update_section(&state.db, "admin", admin_config_json).await
+    {
         tracing::warn!("Failed to persist admin config to database: {}", e);
     }
-    
+
     // Re-acquire read lock for response
     let config = state.config.read().unwrap();
 
@@ -921,7 +918,7 @@ async fn update_ldap_server(
 
     // Update config with write lock
     let mut config = state.config.write().unwrap();
-    
+
     config.ldap_server_label = form_data.label.clone();
     config.ldap_server_host = form_data.host.clone();
     config.ldap_server_port = form_data.port;

@@ -42,7 +42,7 @@ impl<'a> FeedbackService<'a> {
         sqlx::query(
             r#"
             INSERT INTO feedback (id, user_id, version, type, data, meta, snapshot, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8, $9)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             "#,
         )
         .bind(&id)
@@ -57,9 +57,9 @@ impl<'a> FeedbackService<'a> {
         .execute(&self.db.pool)
         .await?;
 
-        self.get_feedback_by_id(&id).await?.ok_or_else(|| {
-            AppError::InternalServerError("Failed to create feedback".to_string())
-        })
+        self.get_feedback_by_id(&id)
+            .await?
+            .ok_or_else(|| AppError::InternalServerError("Failed to create feedback".to_string()))
     }
 
     pub async fn get_feedback_by_id(&self, id: &str) -> AppResult<Option<Feedback>> {
@@ -167,9 +167,9 @@ impl<'a> FeedbackService<'a> {
         sqlx::query(
             r#"
             UPDATE feedback
-            SET data = COALESCE($1::jsonb, data),
-                meta = COALESCE($2::jsonb, meta),
-                snapshot = COALESCE($3::jsonb, snapshot),
+            SET data = COALESCE($1, data),
+                meta = COALESCE($2, meta),
+                snapshot = COALESCE($3, snapshot),
                 updated_at = $4
             WHERE id = $5
             "#,
@@ -182,9 +182,9 @@ impl<'a> FeedbackService<'a> {
         .execute(&self.db.pool)
         .await?;
 
-        self.get_feedback_by_id(id).await?.ok_or_else(|| {
-            AppError::NotFound("Feedback not found".to_string())
-        })
+        self.get_feedback_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Feedback not found".to_string()))
     }
 
     pub async fn update_feedback_by_id_and_user_id(
@@ -216,9 +216,9 @@ impl<'a> FeedbackService<'a> {
         sqlx::query(
             r#"
             UPDATE feedback
-            SET data = COALESCE($1::jsonb, data),
-                meta = COALESCE($2::jsonb, meta),
-                snapshot = COALESCE($3::jsonb, snapshot),
+            SET data = COALESCE($1, data),
+                meta = COALESCE($2, meta),
+                snapshot = COALESCE($3, snapshot),
                 updated_at = $4
             WHERE id = $5 AND user_id = $6
             "#,
@@ -277,4 +277,3 @@ impl<'a> FeedbackService<'a> {
         Ok(result.rows_affected() > 0)
     }
 }
-

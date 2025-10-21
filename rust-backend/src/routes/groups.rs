@@ -50,10 +50,7 @@ pub fn create_routes(cfg: &mut web::ServiceConfig) {
     );
 }
 
-async fn get_groups(
-    state: web::Data<AppState>,
-    auth_user: AuthUser,
-) -> AppResult<HttpResponse> {
+async fn get_groups(state: web::Data<AppState>, auth_user: AuthUser) -> AppResult<HttpResponse> {
     let group_service = GroupService::new(&state.db);
 
     let groups = if auth_user.role == "admin" {
@@ -112,9 +109,7 @@ async fn update_group_by_id(
         form_data.user_ids = Some(valid_ids);
     }
 
-    let group = group_service
-        .update_group_by_id(&id, &form_data)
-        .await?;
+    let group = group_service.update_group_by_id(&id, &form_data).await?;
 
     Ok(HttpResponse::Ok().json(GroupResponse::from(group)))
 }
@@ -133,9 +128,7 @@ async fn add_users_to_group(
     let user_ids = payload.user_ids.as_ref().unwrap_or(&empty_vec);
     let valid_ids = user_service.get_valid_user_ids(user_ids).await?;
 
-    let group = group_service
-        .add_users_to_group(&id, &valid_ids)
-        .await?;
+    let group = group_service.add_users_to_group(&id, &valid_ids).await?;
 
     Ok(HttpResponse::Ok().json(GroupResponse::from(group)))
 }
@@ -151,9 +144,7 @@ async fn remove_users_from_group(
     let empty_vec = vec![];
     let user_ids = payload.user_ids.as_ref().unwrap_or(&empty_vec);
 
-    let group = group_service
-        .remove_users_from_group(&id, user_ids)
-        .await?;
+    let group = group_service.remove_users_from_group(&id, user_ids).await?;
 
     Ok(HttpResponse::Ok().json(GroupResponse::from(group)))
 }

@@ -40,4 +40,3 @@ pub struct UpdateOAuthSession {
     pub scope: Option<String>,
     pub meta: Option<serde_json::Value>,
 }
-

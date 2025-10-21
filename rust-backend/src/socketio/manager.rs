@@ -1,11 +1,10 @@
 /// Socket.IO Session and Room Manager
-/// 
+///
 /// This manages:
 /// - Sessions (sid -> user data)
 /// - User pools (user_id -> [sids])
 /// - Rooms (room_id -> [sids])
 /// - Usage tracking (model_id -> {sid -> timestamp})
-
 use serde_json::Value as JsonValue;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -44,22 +43,22 @@ impl Session {
 }
 
 /// Socket.IO Manager
-/// 
+///
 /// Thread-safe manager for all Socket.IO sessions, rooms, and connections
 #[derive(Clone)]
 pub struct SocketIOManager {
     /// Session pool: sid -> Session
     sessions: Arc<RwLock<HashMap<String, Session>>>,
-    
+
     /// User pool: user_id -> [sids]
     user_pool: Arc<RwLock<HashMap<String, Vec<String>>>>,
-    
+
     /// Room pool: room_id -> [sids]
     rooms: Arc<RwLock<HashMap<String, HashSet<String>>>>,
-    
+
     /// Usage pool: model_id -> {sid -> timestamp}
     usage_pool: Arc<RwLock<HashMap<String, HashMap<String, i64>>>>,
-    
+
     /// Configuration
     ping_interval: u64,
     ping_timeout: u64,
@@ -73,7 +72,7 @@ impl SocketIOManager {
             rooms: Arc::new(RwLock::new(HashMap::new())),
             usage_pool: Arc::new(RwLock::new(HashMap::new())),
             ping_interval: 25_000, // 25 seconds
-            ping_timeout: 20_000,   // 20 seconds
+            ping_timeout: 20_000,  // 20 seconds
         }
     }
 
@@ -338,4 +337,3 @@ mod tests {
         assert_eq!(room_sessions.len(), 1);
     }
 }
-

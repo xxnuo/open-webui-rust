@@ -41,9 +41,9 @@ impl<'a> FileService<'a> {
         .execute(&self.db.pool)
         .await?;
 
-        self.get_file_by_id(id).await?.ok_or_else(|| {
-            AppError::InternalServerError("Failed to create file".to_string())
-        })
+        self.get_file_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::InternalServerError("Failed to create file".to_string()))
     }
 
     pub async fn get_file_by_id(&self, id: &str) -> AppResult<Option<File>> {
@@ -119,11 +119,7 @@ impl<'a> FileService<'a> {
         Ok(files)
     }
 
-    pub async fn update_file_metadata(
-        &self,
-        id: &str,
-        meta: serde_json::Value,
-    ) -> AppResult<File> {
+    pub async fn update_file_metadata(&self, id: &str, meta: serde_json::Value) -> AppResult<File> {
         let now = current_timestamp_seconds();
         let meta_str = serde_json::to_string(&meta).unwrap_or_else(|_| "{}".to_string());
 
@@ -140,9 +136,9 @@ impl<'a> FileService<'a> {
         .execute(&self.db.pool)
         .await?;
 
-        self.get_file_by_id(id).await?.ok_or_else(|| {
-            AppError::NotFound("File not found".to_string())
-        })
+        self.get_file_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("File not found".to_string()))
     }
 
     pub async fn delete_file(&self, id: &str) -> AppResult<()> {
@@ -154,11 +150,7 @@ impl<'a> FileService<'a> {
         Ok(())
     }
 
-    pub async fn delete_file_by_id_and_user_id(
-        &self,
-        id: &str,
-        user_id: &str,
-    ) -> AppResult<()> {
+    pub async fn delete_file_by_id_and_user_id(&self, id: &str, user_id: &str) -> AppResult<()> {
         sqlx::query("DELETE FROM file WHERE id = $2 AND user_id = $1")
             .bind(id)
             .bind(user_id)
@@ -185,11 +177,7 @@ impl<'a> FileService<'a> {
         Ok(())
     }
 
-    pub async fn update_file_data(
-        &self,
-        id: &str,
-        data: serde_json::Value,
-    ) -> AppResult<File> {
+    pub async fn update_file_data(&self, id: &str, data: serde_json::Value) -> AppResult<File> {
         let now = current_timestamp_seconds();
         let data_str = serde_json::to_string(&data).unwrap_or_else(|_| "{}".to_string());
 
@@ -206,9 +194,9 @@ impl<'a> FileService<'a> {
         .execute(&self.db.pool)
         .await?;
 
-        self.get_file_by_id(id).await?.ok_or_else(|| {
-            AppError::NotFound("File not found".to_string())
-        })
+        self.get_file_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("File not found".to_string()))
     }
 
     pub async fn search_files_by_pattern(
@@ -217,7 +205,7 @@ impl<'a> FileService<'a> {
         pattern: &str,
     ) -> AppResult<Vec<File>> {
         let search_pattern = format!("%{}%", pattern);
-        
+
         let files = if let Some(uid) = user_id {
             sqlx::query_as::<_, File>(
                 r#"
@@ -252,4 +240,3 @@ impl<'a> FileService<'a> {
         Ok(files)
     }
 }
-

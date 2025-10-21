@@ -1,16 +1,15 @@
+use crate::socketio::events::EventHandler;
+use crate::socketio::manager::SocketIOManager;
 /// Socket.IO Transport Layer
-/// 
+///
 /// Handles both WebSocket and HTTP long-polling transports
-/// 
+///
 /// This implementation follows Socket.IO Protocol v5 (used by Socket.IO v3+)
 /// Key requirements:
 /// - Client sends CONNECT packet first
 /// - Server responds with CONNECT packet containing {sid: "..."}
 /// - All namespaces (including default "/") require explicit CONNECT
-
 use crate::socketio::protocol::{EnginePacket, EnginePacketType, SocketPacket, SocketPacketType};
-use crate::socketio::manager::SocketIOManager;
-use crate::socketio::events::EventHandler;
 use actix_web::{web, Error, HttpRequest, HttpResponse};
 use actix_ws::Message as WsMessage;
 use futures_util::StreamExt;
@@ -29,7 +28,10 @@ lazy_static::lazy_static! {
 /// Queue a response for a polling session
 async fn queue_polling_response(sid: &str, message: String) {
     let mut queue = POLLING_RESPONSES.write().await;
-    queue.entry(sid.to_string()).or_insert_with(Vec::new).push(message);
+    queue
+        .entry(sid.to_string())
+        .or_insert_with(Vec::new)
+        .push(message);
 }
 
 /// Get and clear queued responses for a polling session
@@ -70,7 +72,7 @@ pub async fn websocket_handler(
 
     // Create a channel for sending messages to this WebSocket
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
-    
+
     // Register the connection
     event_handler.register_connection(&sid, tx).await;
 
@@ -106,7 +108,7 @@ pub async fn websocket_handler(
             match msg {
                 WsMessage::Text(text) => {
                     tracing::debug!("Received text message: {}", text);
-                    
+
                     // Parse Engine.IO packet
                     if let Ok(engine_packet) = EnginePacket::decode(&text.to_string()) {
                         match engine_packet.packet_type {
@@ -121,7 +123,14 @@ pub async fn websocket_handler(
                                 let data_str = String::from_utf8_lossy(&engine_packet.data);
                                 if let Ok(socket_packet) = SocketPacket::decode(&data_str) {
                                     // Handle Socket.IO packet
-                                    handle_socket_packet(&event_handler, &sid, socket_packet, &http_client, &mut session).await;
+                                    handle_socket_packet(
+                                        &event_handler,
+                                        &sid,
+                                        socket_packet,
+                                        &http_client,
+                                        &mut session,
+                                    )
+                                    .await;
                                 }
                             }
                             EnginePacketType::Close => {
@@ -170,17 +179,21 @@ async fn handle_socket_packet(
         SocketPacketType::Connect => {
             // Client is requesting connection to a namespace
             // In Socket.IO v5, we must respond with CONNECT containing {sid}
-            tracing::info!("Client {} connecting to namespace: {}", sid, packet.namespace);
-            
+            tracing::info!(
+                "Client {} connecting to namespace: {}",
+                sid,
+                packet.namespace
+            );
+
             // Check if client sent auth data
             if let Some(ref auth_data) = packet.data {
                 tracing::debug!("Auth data received: {:?}", auth_data);
                 // You could validate auth here if needed
             }
-            
+
             // Generate a Socket.IO session ID (different from Engine.IO sid)
             let socket_sid = SocketIOManager::generate_sid();
-            
+
             // Send CONNECT response with sid
             let connect_response = SocketPacket::connect(&packet.namespace, Some(&socket_sid));
             let engine_msg = EnginePacket::message(connect_response.encode().into_bytes());
@@ -190,37 +203,21 @@ async fn handle_socket_packet(
         SocketPacketType::Event => {
             if let Some((event, data)) = packet.get_event() {
                 tracing::info!("Event from {}: {} - {:?}", sid, event, data);
-                
+
                 // Handle different event types
                 let result = match event.as_str() {
-                    "user-join" => {
-                        event_handler.handle_user_join(sid, data, http_client).await
-                            .map(|_| ())
-                    }
-                    "usage" => {
-                        event_handler.handle_usage(sid, data).await
-                    }
-                    "chat-events" => {
-                        event_handler.handle_chat_event(sid, data).await
-                    }
-                    "channel-events" => {
-                        event_handler.handle_channel_event(sid, data).await
-                    }
-                    "channel:join" => {
-                        event_handler.handle_channel_join(sid, data).await
-                    }
-                    "channel:leave" => {
-                        event_handler.handle_channel_leave(sid, data).await
-                    }
-                    "ydoc:document:join" => {
-                        event_handler.handle_ydoc_join(sid, data).await
-                    }
-                    "ydoc:document:leave" => {
-                        event_handler.handle_ydoc_leave(sid, data).await
-                    }
-                    "ydoc:document:update" => {
-                        event_handler.handle_ydoc_update(sid, data).await
-                    }
+                    "user-join" => event_handler
+                        .handle_user_join(sid, data, http_client)
+                        .await
+                        .map(|_| ()),
+                    "usage" => event_handler.handle_usage(sid, data).await,
+                    "chat-events" => event_handler.handle_chat_event(sid, data).await,
+                    "channel-events" => event_handler.handle_channel_event(sid, data).await,
+                    "channel:join" => event_handler.handle_channel_join(sid, data).await,
+                    "channel:leave" => event_handler.handle_channel_leave(sid, data).await,
+                    "ydoc:document:join" => event_handler.handle_ydoc_join(sid, data).await,
+                    "ydoc:document:leave" => event_handler.handle_ydoc_leave(sid, data).await,
+                    "ydoc:document:update" => event_handler.handle_ydoc_update(sid, data).await,
                     "ydoc:document:state" => {
                         event_handler.handle_ydoc_state_request(sid, data).await
                     }
@@ -239,7 +236,11 @@ async fn handle_socket_packet(
             }
         }
         SocketPacketType::Disconnect => {
-            tracing::info!("Client {} disconnecting from namespace {}", sid, packet.namespace);
+            tracing::info!(
+                "Client {} disconnecting from namespace {}",
+                sid,
+                packet.namespace
+            );
         }
         _ => {
             tracing::debug!("Unhandled packet type: {:?}", packet.packet_type);
@@ -254,13 +255,14 @@ pub async fn polling_handler(
     manager: web::Data<SocketIOManager>,
     event_handler: Option<web::Data<EventHandler>>,
 ) -> Result<HttpResponse, Error> {
-    let query = web::Query::<std::collections::HashMap<String, String>>::from_query(req.query_string())
-        .map_err(|_| actix_web::error::ErrorBadRequest("Invalid query parameters"))?;
+    let query =
+        web::Query::<std::collections::HashMap<String, String>>::from_query(req.query_string())
+            .map_err(|_| actix_web::error::ErrorBadRequest("Invalid query parameters"))?;
 
     let transport = query.get("transport").map(|s| s.as_str());
     let sid = query.get("sid").map(|s| s.as_str());
     let eio = query.get("EIO").map(|s| s.as_str());
-    
+
     // Check Engine.IO version
     if let Some(version) = eio {
         if version != "4" {
@@ -271,7 +273,7 @@ pub async fn polling_handler(
     }
 
     let method = req.method();
-    
+
     match (method.as_str(), transport, sid) {
         // GET request - initial connection or polling for messages
         ("GET", Some("polling"), None) | ("GET", None, None) => {
@@ -282,8 +284,9 @@ pub async fn polling_handler(
 
             // Send Engine.IO OPEN packet only
             // In Socket.IO v5, client must send CONNECT first
-            let open_packet = EnginePacket::open(&sid, manager.ping_interval(), manager.ping_timeout());
-            
+            let open_packet =
+                EnginePacket::open(&sid, manager.ping_interval(), manager.ping_timeout());
+
             Ok(HttpResponse::Ok()
                 .content_type("text/plain; charset=UTF-8")
                 .append_header(("Access-Control-Allow-Credentials", "true"))
@@ -293,10 +296,10 @@ pub async fn polling_handler(
             // Polling request with session ID - client polling for messages
             if manager.get_session(sid).await.is_some() {
                 manager.update_ping(sid).await;
-                
+
                 // Get queued messages for this session
                 let messages = get_polling_responses(sid).await;
-                
+
                 if messages.is_empty() {
                     // No messages, return NOOP
                     Ok(HttpResponse::Ok()
@@ -321,21 +324,21 @@ pub async fn polling_handler(
         ("POST", Some("polling"), Some(sid)) | ("POST", None, Some(sid)) => {
             if manager.get_session(sid).await.is_some() {
                 manager.update_ping(sid).await;
-                
+
                 // Parse incoming messages
                 let body_str = String::from_utf8_lossy(&body);
                 tracing::debug!("Received polling POST from {}: {}", sid, body_str);
-                
+
                 // Handle messages if event_handler is provided
                 if let Some(handler) = event_handler {
                     let http_client = reqwest::Client::new();
-                    
+
                     // Split by packet separator
                     for packet_str in body_str.split('\x1e') {
                         if packet_str.is_empty() {
                             continue;
                         }
-                        
+
                         // Parse Engine.IO packet
                         if let Ok(engine_packet) = EnginePacket::decode(packet_str) {
                             match engine_packet.packet_type {
@@ -345,21 +348,36 @@ pub async fn polling_handler(
                                     if let Ok(socket_packet) = SocketPacket::decode(&data_str) {
                                         // Handle CONNECT specially for polling (need to queue response)
                                         if socket_packet.packet_type == SocketPacketType::Connect {
-                                            tracing::info!("Polling client {} connecting to namespace: {}", sid, socket_packet.namespace);
-                                            
+                                            tracing::info!(
+                                                "Polling client {} connecting to namespace: {}",
+                                                sid,
+                                                socket_packet.namespace
+                                            );
+
                                             // Generate Socket.IO session ID
                                             let socket_sid = SocketIOManager::generate_sid();
-                                            
+
                                             // Create CONNECT response
-                                            let connect_response = SocketPacket::connect(&socket_packet.namespace, Some(&socket_sid));
-                                            let engine_msg = EnginePacket::message(connect_response.encode().into_bytes());
-                                            
+                                            let connect_response = SocketPacket::connect(
+                                                &socket_packet.namespace,
+                                                Some(&socket_sid),
+                                            );
+                                            let engine_msg = EnginePacket::message(
+                                                connect_response.encode().into_bytes(),
+                                            );
+
                                             // Queue the response for next GET
                                             queue_polling_response(sid, engine_msg.encode()).await;
-                                            tracing::info!("Queued CONNECT response for polling session {}", sid);
+                                            tracing::info!(
+                                                "Queued CONNECT response for polling session {}",
+                                                sid
+                                            );
                                         } else {
                                             // Handle other Socket.IO packets (but polling doesn't support this easily)
-                                            tracing::debug!("Received Socket.IO packet in polling: {:?}", socket_packet.packet_type);
+                                            tracing::debug!(
+                                                "Received Socket.IO packet in polling: {:?}",
+                                                socket_packet.packet_type
+                                            );
                                         }
                                     }
                                 }
@@ -373,7 +391,7 @@ pub async fn polling_handler(
                         }
                     }
                 }
-                
+
                 Ok(HttpResponse::Ok()
                     .content_type("text/plain; charset=UTF-8")
                     .append_header(("Access-Control-Allow-Credentials", "true"))
@@ -385,8 +403,12 @@ pub async fn polling_handler(
             }
         }
         _ => {
-            tracing::warn!("Invalid polling request: method={}, transport={:?}, sid={:?}", 
-                method, transport, sid);
+            tracing::warn!(
+                "Invalid polling request: method={}, transport={:?}, sid={:?}",
+                method,
+                transport,
+                sid
+            );
             Ok(HttpResponse::BadRequest()
                 .json(serde_json::json!({"error": "Invalid transport parameters"})))
         }
@@ -401,17 +423,13 @@ pub async fn emit_to_session(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let socket_packet = SocketPacket::event("/", event, data);
     let engine_packet = EnginePacket::message(socket_packet.encode().into_bytes());
-    
+
     session.text(engine_packet.encode()).await?;
     Ok(())
 }
 
 /// Broadcast event to multiple sessions
-pub async fn broadcast_to_sessions(
-    sids: Vec<String>,
-    event: &str,
-    data: serde_json::Value,
-) {
+pub async fn broadcast_to_sessions(sids: Vec<String>, event: &str, data: serde_json::Value) {
     let socket_packet = SocketPacket::event("/", event, data);
     let engine_packet = EnginePacket::message(socket_packet.encode().into_bytes());
     let _message = engine_packet.encode();
@@ -420,4 +438,3 @@ pub async fn broadcast_to_sessions(
     // This will be improved in the events module
     tracing::debug!("Broadcasting to {} sessions: {}", sids.len(), event);
 }
-

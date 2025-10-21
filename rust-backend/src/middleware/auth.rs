@@ -27,7 +27,7 @@ impl AuthUser {
 
 impl std::ops::Deref for AuthUser {
     type Target = User;
-    
+
     fn deref(&self) -> &Self::Target {
         &self.user
     }
@@ -44,7 +44,7 @@ impl actix_web::FromRequest for AuthUser {
             .get::<AuthUser>()
             .cloned()
             .ok_or_else(|| AppError::Unauthorized("Not authenticated".to_string()));
-        
+
         ready(result)
     }
 }
@@ -108,9 +108,9 @@ where
             };
 
             // If no Authorization header, try to get token from cookie
-            let token = token.or_else(|| {
-                req.cookie("token").map(|c| c.value().to_string())
-            }).ok_or_else(|| AppError::Unauthorized("Missing authorization token".to_string()))?;
+            let token = token
+                .or_else(|| req.cookie("token").map(|c| c.value().to_string()))
+                .ok_or_else(|| AppError::Unauthorized("Missing authorization token".to_string()))?;
 
             // Check if it's an API key (starts with sk-)
             let user = if token.starts_with("sk-") {
@@ -131,13 +131,12 @@ where
                 let config = state.config.read().unwrap();
                 let webui_secret_key = config.webui_secret_key.clone();
                 drop(config); // Release the lock
-                
-                let claims = verify_jwt(&token, &webui_secret_key)
-                    .map_err(|e| {
-                        // Token verification failed (expired or invalid)
-                        tracing::debug!("JWT verification failed: {:?}", e);
-                        AppError::Unauthorized("Invalid or expired token".to_string())
-                    })?;
+
+                let claims = verify_jwt(&token, &webui_secret_key).map_err(|e| {
+                    // Token verification failed (expired or invalid)
+                    tracing::debug!("JWT verification failed: {:?}", e);
+                    AppError::Unauthorized("Invalid or expired token".to_string())
+                })?;
 
                 // Check token expiration explicitly
                 if let Some(exp) = claims.exp {
@@ -224,9 +223,9 @@ where
             };
 
             // If no Authorization header, try to get token from cookie
-            let token = token.or_else(|| {
-                req.cookie("token").map(|c| c.value().to_string())
-            }).ok_or_else(|| AppError::Unauthorized("Missing authorization token".to_string()))?;
+            let token = token
+                .or_else(|| req.cookie("token").map(|c| c.value().to_string()))
+                .ok_or_else(|| AppError::Unauthorized("Missing authorization token".to_string()))?;
 
             // Check if it's an API key (starts with sk-)
             let user = if token.starts_with("sk-") {
@@ -247,13 +246,12 @@ where
                 let config = state.config.read().unwrap();
                 let webui_secret_key = config.webui_secret_key.clone();
                 drop(config); // Release the lock
-                
-                let claims = verify_jwt(&token, &webui_secret_key)
-                    .map_err(|e| {
-                        // Token verification failed (expired or invalid)
-                        tracing::debug!("JWT verification failed: {:?}", e);
-                        AppError::Unauthorized("Invalid or expired token".to_string())
-                    })?;
+
+                let claims = verify_jwt(&token, &webui_secret_key).map_err(|e| {
+                    // Token verification failed (expired or invalid)
+                    tracing::debug!("JWT verification failed: {:?}", e);
+                    AppError::Unauthorized("Invalid or expired token".to_string())
+                })?;
 
                 // Check token expiration explicitly
                 if let Some(exp) = claims.exp {

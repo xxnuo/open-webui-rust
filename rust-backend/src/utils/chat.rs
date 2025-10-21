@@ -96,7 +96,10 @@ pub fn get_message_list(
     while let Some(id) = current_id {
         if let Some(message) = messages_map.get(&id) {
             messages.push(message.clone());
-            current_id = message.get("parentId").and_then(|v| v.as_str()).map(String::from);
+            current_id = message
+                .get("parentId")
+                .and_then(|v| v.as_str())
+                .map(String::from);
         } else {
             break;
         }
@@ -108,10 +111,7 @@ pub fn get_message_list(
 
 /// Add or update user message with additional content
 #[allow(dead_code)]
-pub fn add_or_update_user_message(
-    content: &str,
-    messages: &mut Vec<ChatMessage>,
-) {
+pub fn add_or_update_user_message(content: &str, messages: &mut Vec<ChatMessage>) {
     if let Some(last_message) = messages.last_mut() {
         if last_message.role == "user" {
             last_message.content = format!("{}\n\n{}", last_message.content, content);
@@ -145,24 +145,24 @@ pub fn apply_system_prompt_to_body(
 ) -> Result<(), AppError> {
     // Replace variables in system prompt
     let mut processed_prompt = system_prompt.to_string();
-    
+
     // Replace {{USER_NAME}}
     processed_prompt = processed_prompt.replace("{{USER_NAME}}", &user.name);
-    
+
     // Replace {{USER_EMAIL}}
     processed_prompt = processed_prompt.replace("{{USER_EMAIL}}", &user.email);
-    
+
     // Replace {{USER_ROLE}}
     processed_prompt = processed_prompt.replace("{{USER_ROLE}}", &user.role);
-    
+
     // Replace {{CURRENT_DATE}}
     let current_date = chrono::Utc::now().format("%Y-%m-%d").to_string();
     processed_prompt = processed_prompt.replace("{{CURRENT_DATE}}", &current_date);
-    
+
     // Replace {{CURRENT_TIME}}
     let current_time = chrono::Utc::now().format("%H:%M:%S").to_string();
     processed_prompt = processed_prompt.replace("{{CURRENT_TIME}}", &current_time);
-    
+
     // Update the system message in form_data
     if let Some(messages) = form_data.get_mut("messages").and_then(|v| v.as_array_mut()) {
         // Find and update system message, or add new one
@@ -176,15 +176,18 @@ pub fn apply_system_prompt_to_body(
                 }
             }
         }
-        
+
         if !found {
-            messages.insert(0, json!({
-                "role": "system",
-                "content": processed_prompt
-            }));
+            messages.insert(
+                0,
+                json!({
+                    "role": "system",
+                    "content": processed_prompt
+                }),
+            );
         }
     }
-    
+
     Ok(())
 }
 
@@ -243,4 +246,3 @@ mod tests {
         assert_eq!(system_msg.unwrap().content, "You are a helpful assistant.");
     }
 }
-

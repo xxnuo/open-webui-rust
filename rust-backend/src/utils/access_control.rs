@@ -184,7 +184,6 @@ pub async fn get_users_with_access(
             users.push(user);
         }
     }
-    
+
     Ok(users)
 }
-

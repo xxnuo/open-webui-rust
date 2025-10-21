@@ -32,7 +32,7 @@ impl Function {
             self.meta = serde_json::from_str(meta_str).ok();
         }
     }
-    
+
     pub fn parse_valves(&mut self) {
         if let Some(ref valves_str) = self.valves_str {
             self.valves = serde_json::from_str(valves_str).ok();

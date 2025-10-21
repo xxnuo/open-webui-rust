@@ -26,15 +26,21 @@ impl<'a> ChannelService<'a> {
         access_control: Option<serde_json::Value>,
     ) -> AppResult<Channel> {
         let now = current_timestamp();
-        
-        let data_str = data.as_ref().map(|v| serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string()));
-        let meta_str = meta.as_ref().map(|v| serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string()));
-        let access_control_str = access_control.as_ref().map(|v| serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string()));
+
+        let data_str = data
+            .as_ref()
+            .map(|v| serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string()));
+        let meta_str = meta
+            .as_ref()
+            .map(|v| serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string()));
+        let access_control_str = access_control
+            .as_ref()
+            .map(|v| serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string()));
 
         sqlx::query(
             r#"
             INSERT INTO channel (id, name, description, user_id, type, data, meta, access_control, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9, $10)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             "#,
         )
         .bind(id)
@@ -50,9 +56,9 @@ impl<'a> ChannelService<'a> {
         .execute(&self.db.pool)
         .await?;
 
-        self.get_channel_by_id(id).await?.ok_or_else(|| {
-            AppError::InternalServerError("Failed to create channel".to_string())
-        })
+        self.get_channel_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::InternalServerError("Failed to create channel".to_string()))
     }
 
     pub async fn get_channel_by_id(&self, id: &str) -> AppResult<Option<Channel>> {
@@ -169,7 +175,7 @@ impl<'a> ChannelService<'a> {
 
         let mut updates = vec!["updated_at = $1".to_string()];
         let mut bind_count = 2;
-        
+
         if name.is_some() {
             updates.push(format!("name = ${}", bind_count));
             bind_count += 1;
@@ -183,15 +189,15 @@ impl<'a> ChannelService<'a> {
             bind_count += 1;
         }
         if data.is_some() {
-            updates.push(format!("data = ${}::jsonb", bind_count));
+            updates.push(format!("data = ${}", bind_count));
             bind_count += 1;
         }
         if meta.is_some() {
-            updates.push(format!("meta = ${}::jsonb", bind_count));
+            updates.push(format!("meta = ${}", bind_count));
             bind_count += 1;
         }
         if access_control.is_some() {
-            updates.push(format!("access_control = ${}::jsonb", bind_count));
+            updates.push(format!("access_control = ${}", bind_count));
             bind_count += 1;
         }
 
@@ -203,7 +209,7 @@ impl<'a> ChannelService<'a> {
 
         let mut query = sqlx::query(&query_str);
         query = query.bind(now);
-        
+
         if let Some(n) = name {
             query = query.bind(n);
         }
@@ -222,14 +228,14 @@ impl<'a> ChannelService<'a> {
         if let Some(ac_val) = access_control {
             query = query.bind(serde_json::to_string(&ac_val).unwrap());
         }
-        
+
         query = query.bind(id);
 
         query.execute(&self.db.pool).await?;
 
-        self.get_channel_by_id(id).await?.ok_or_else(|| {
-            AppError::NotFound("Channel not found".to_string())
-        })
+        self.get_channel_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Channel not found".to_string()))
     }
 
     pub async fn delete_channel(&self, id: &str) -> AppResult<()> {

@@ -49,30 +49,28 @@ pub fn create_routes(cfg: &mut web::ServiceConfig) {
     );
 }
 
-async fn get_prompts(
-    state: web::Data<AppState>,
-    auth_user: AuthUser,
-) -> AppResult<HttpResponse> {
+async fn get_prompts(state: web::Data<AppState>, auth_user: AuthUser) -> AppResult<HttpResponse> {
     let prompt_service = PromptService::new(&state.db);
     let config = state.config.read().unwrap();
 
-    let all_prompts = if auth_user.role == "admin" && config.bypass_admin_access_control.unwrap_or(false) {
-        prompt_service.get_all_prompts().await?
-    } else {
-        // Get user's groups
-        let group_service = GroupService::new(&state.db);
-        let groups = group_service.get_groups_by_member_id(&auth_user.id).await?;
-        let user_group_ids: HashSet<String> = groups.into_iter().map(|g| g.id).collect();
+    let all_prompts =
+        if auth_user.role == "admin" && config.bypass_admin_access_control.unwrap_or(false) {
+            prompt_service.get_all_prompts().await?
+        } else {
+            // Get user's groups
+            let group_service = GroupService::new(&state.db);
+            let groups = group_service.get_groups_by_member_id(&auth_user.id).await?;
+            let user_group_ids: HashSet<String> = groups.into_iter().map(|g| g.id).collect();
 
-        // Filter prompts by access control
-        let all = prompt_service.get_all_prompts().await?;
-        all.into_iter()
-            .filter(|p| {
-                p.user_id == auth_user.id
-                    || has_access(&auth_user.id, "read", &p.access_control, &user_group_ids)
-            })
-            .collect()
-    };
+            // Filter prompts by access control
+            let all = prompt_service.get_all_prompts().await?;
+            all.into_iter()
+                .filter(|p| {
+                    p.user_id == auth_user.id
+                        || has_access(&auth_user.id, "read", &p.access_control, &user_group_ids)
+                })
+                .collect()
+        };
 
     let response: Vec<PromptModel> = all_prompts.into_iter().map(PromptModel::from).collect();
 
@@ -87,23 +85,24 @@ async fn get_prompt_list(
     let user_service = UserService::new(&state.db);
     let config = state.config.read().unwrap();
 
-    let all_prompts = if auth_user.role == "admin" && config.bypass_admin_access_control.unwrap_or(false) {
-        prompt_service.get_all_prompts().await?
-    } else {
-        // Get user's groups
-        let group_service = GroupService::new(&state.db);
-        let groups = group_service.get_groups_by_member_id(&auth_user.id).await?;
-        let user_group_ids: HashSet<String> = groups.into_iter().map(|g| g.id).collect();
+    let all_prompts =
+        if auth_user.role == "admin" && config.bypass_admin_access_control.unwrap_or(false) {
+            prompt_service.get_all_prompts().await?
+        } else {
+            // Get user's groups
+            let group_service = GroupService::new(&state.db);
+            let groups = group_service.get_groups_by_member_id(&auth_user.id).await?;
+            let user_group_ids: HashSet<String> = groups.into_iter().map(|g| g.id).collect();
 
-        // Filter prompts by write access
-        let all = prompt_service.get_all_prompts().await?;
-        all.into_iter()
-            .filter(|p| {
-                p.user_id == auth_user.id
-                    || has_access(&auth_user.id, "write", &p.access_control, &user_group_ids)
-            })
-            .collect()
-    };
+            // Filter prompts by write access
+            let all = prompt_service.get_all_prompts().await?;
+            all.into_iter()
+                .filter(|p| {
+                    p.user_id == auth_user.id
+                        || has_access(&auth_user.id, "write", &p.access_control, &user_group_ids)
+                })
+                .collect()
+        };
 
     // Get unique user IDs
     let user_ids: HashSet<String> = all_prompts.iter().map(|p| p.user_id.clone()).collect();

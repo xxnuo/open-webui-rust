@@ -18,8 +18,8 @@ impl<'a> UserService<'a> {
             r#"
             SELECT id, name, email, username, role, profile_image_url, bio, gender, 
                    date_of_birth, 
-                   COALESCE(info, '{}'::jsonb) as info, 
-                   COALESCE(settings, '{}'::jsonb) as settings, 
+                   COALESCE(info, '{}') as info, 
+                   COALESCE(settings, '{}') as settings, 
                    api_key, oauth_sub, 
                    last_active_at, updated_at, created_at
             FROM "user"
@@ -38,8 +38,8 @@ impl<'a> UserService<'a> {
             r#"
             SELECT id, name, email, username, role, profile_image_url, bio, gender, 
                    date_of_birth, 
-                   COALESCE(info, '{}'::jsonb) as info, 
-                   COALESCE(settings, '{}'::jsonb) as settings, 
+                   COALESCE(info, '{}') as info, 
+                   COALESCE(settings, '{}') as settings, 
                    api_key, oauth_sub, 
                    last_active_at, updated_at, created_at
             FROM "user"
@@ -59,8 +59,8 @@ impl<'a> UserService<'a> {
             r#"
             SELECT id, name, email, username, role, profile_image_url, bio, gender, 
                    date_of_birth, 
-                   COALESCE(info, '{}'::jsonb) as info, 
-                   COALESCE(settings, '{}'::jsonb) as settings, 
+                   COALESCE(info, '{}') as info, 
+                   COALESCE(settings, '{}') as settings, 
                    api_key, oauth_sub, 
                    last_active_at, updated_at, created_at
             FROM "user"
@@ -79,8 +79,8 @@ impl<'a> UserService<'a> {
             r#"
             SELECT id, name, email, username, role, profile_image_url, bio, gender, 
                    date_of_birth, 
-                   COALESCE(info, '{}'::jsonb) as info, 
-                   COALESCE(settings, '{}'::jsonb) as settings, 
+                   COALESCE(info, '{}') as info, 
+                   COALESCE(settings, '{}') as settings, 
                    api_key, oauth_sub, 
                    last_active_at, updated_at, created_at
             FROM "user"
@@ -150,8 +150,8 @@ impl<'a> UserService<'a> {
             r#"
             SELECT id, name, email, username, role, profile_image_url, bio, gender, 
                    date_of_birth, 
-                   COALESCE(info, '{}'::jsonb) as info, 
-                   COALESCE(settings, '{}'::jsonb) as settings, 
+                   COALESCE(info, '{}') as info, 
+                   COALESCE(settings, '{}') as settings, 
                    api_key, oauth_sub, 
                    last_active_at, updated_at, created_at
             FROM "user"
@@ -227,7 +227,7 @@ impl<'a> UserService<'a> {
         let result = sqlx::query("SELECT COUNT(*) as count FROM \"user\"")
             .fetch_one(&self.db.pool)
             .await?;
-        
+
         let count: i64 = result.try_get("count")?;
         Ok(count)
     }
@@ -238,15 +238,14 @@ impl<'a> UserService<'a> {
         }
 
         // Build IN clause for SQLite
-        let placeholders = user_ids.iter().enumerate()
+        let placeholders = user_ids
+            .iter()
+            .enumerate()
             .map(|(i, _)| format!("${}", i + 1))
             .collect::<Vec<_>>()
             .join(", ");
-        
-        let query = format!(
-            r#"SELECT id FROM "user" WHERE id IN ({})"#,
-            placeholders
-        );
+
+        let query = format!(r#"SELECT id FROM "user" WHERE id IN ({})"#, placeholders);
 
         let mut q = sqlx::query_as(&query);
         for id in user_ids {
