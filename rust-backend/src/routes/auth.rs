@@ -14,6 +14,16 @@ use crate::services::{AuthService, UserService};
 use crate::utils::auth::create_jwt;
 use crate::AppState;
 
+// Helper function to create a cookie for clearing auth cookies
+fn create_clear_cookie() -> Cookie<'static> {
+    let mut token_cookie = Cookie::new("token", "");
+    token_cookie.set_http_only(true);
+    token_cookie.set_same_site(SameSite::Lax);
+    token_cookie.set_path("/");
+    token_cookie.set_max_age(time::Duration::seconds(-1));
+    token_cookie
+}
+
 pub fn create_routes(cfg: &mut web::ServiceConfig) {
     cfg.route("/signin", web::post().to(signin))
         .route("/signup", web::post().to(signup))
@@ -82,28 +92,92 @@ async fn get_session_user(
 ) -> AppResult<HttpResponse> {
     let config = state.config.read().unwrap();
     
-    // Get token from cookie or regenerate
-    let token = req
-        .cookie("token")
-        .map(|c| c.value().to_string())
-        .unwrap_or_else(|| {
-            // Regenerate token if not in cookie
-            create_jwt(
-                &auth_user.user.id,
-                &config.webui_secret_key,
-                &config.jwt_expires_in,
-            )
-            .unwrap_or_default()
-        });
-
-    // Parse expires_at from token
-    let expires_at =
-        if let Ok(claims) = crate::utils::auth::verify_jwt(&token, &config.webui_secret_key)
-        {
-            claims.exp
+    // Get token from Authorization header or cookie
+    let token = if let Some(auth_header) = req.headers().get(header::AUTHORIZATION) {
+        if let Ok(auth_str) = auth_header.to_str() {
+            auth_str.strip_prefix("Bearer ").map(|s| s.to_string())
         } else {
             None
-        };
+        }
+    } else {
+        None
+    }
+    .or_else(|| req.cookie("token").map(|c| c.value().to_string()));
+
+    // Validate token and check expiration
+    let (token, expires_at, _should_refresh) = if let Some(existing_token) = token {
+        match crate::utils::auth::verify_jwt(&existing_token, &config.webui_secret_key) {
+            Ok(claims) => {
+                if let Some(exp) = claims.exp {
+                    let now = chrono::Utc::now().timestamp();
+                    
+                    // Check if token is expired
+                    if now > exp {
+                        return Err(crate::error::AppError::Unauthorized(
+                            "Token expired".to_string(),
+                        ));
+                    }
+                    
+                    // Check if token is close to expiring (within 5 minutes) - refresh it
+                    let should_refresh = (exp - now) < 300; // 5 minutes = 300 seconds
+                    
+                    if should_refresh {
+                        // Generate new token
+                        let new_token = create_jwt(
+                            &auth_user.user.id,
+                            &config.webui_secret_key,
+                            &config.jwt_expires_in,
+                        )?;
+                        
+                        let new_expires_at = chrono::Utc::now()
+                            .checked_add_signed(crate::utils::auth::parse_duration(
+                                &config.jwt_expires_in,
+                            )?)
+                            .map(|dt| dt.timestamp());
+                        
+                        (new_token, new_expires_at, true)
+                    } else {
+                        // Use existing token
+                        (existing_token, Some(exp), false)
+                    }
+                } else {
+                    // Token has no expiration, use it as is
+                    (existing_token, None, false)
+                }
+            }
+            Err(_) => {
+                // Token is invalid, generate new one
+                let new_token = create_jwt(
+                    &auth_user.user.id,
+                    &config.webui_secret_key,
+                    &config.jwt_expires_in,
+                )?;
+                
+                let new_expires_at = chrono::Utc::now()
+                    .checked_add_signed(crate::utils::auth::parse_duration(
+                        &config.jwt_expires_in,
+                    )?)
+                    .map(|dt| dt.timestamp());
+                
+                (new_token, new_expires_at, true)
+            }
+        }
+    } else {
+        // No token found, generate new one
+        let new_token = create_jwt(
+            &auth_user.user.id,
+            &config.webui_secret_key,
+            &config.jwt_expires_in,
+        )?;
+        
+        let new_expires_at = chrono::Utc::now()
+            .checked_add_signed(crate::utils::auth::parse_duration(
+                &config.jwt_expires_in,
+            )?)
+            .map(|dt| dt.timestamp());
+        
+        (new_token, new_expires_at, true)
+    };
 
     let response_json = json!({
         "token": token,
@@ -118,7 +192,7 @@ async fn get_session_user(
     });
 
     // Create/refresh cookie with token
-    let mut cookie = Cookie::new("token", token);
+    let mut cookie = Cookie::new("token", token.clone());
     cookie.set_http_only(true);
     cookie.set_same_site(SameSite::Lax);
     cookie.set_path("/");
@@ -129,9 +203,12 @@ async fn get_session_user(
     }
 
     // Return response with Set-Cookie header
-    Ok(HttpResponse::Ok()
-        .append_header((header::SET_COOKIE, cookie.to_string()))
-        .json(response_json))
+    let mut response = HttpResponse::Ok();
+    
+    // Always set cookie to ensure it's refreshed
+    response.append_header((header::SET_COOKIE, cookie.to_string()));
+    
+    Ok(response.json(response_json))
 }
 
 async fn signin(

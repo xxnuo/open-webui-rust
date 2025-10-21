@@ -133,7 +133,20 @@ where
                 drop(config); // Release the lock
                 
                 let claims = verify_jwt(&token, &webui_secret_key)
-                    .map_err(|e| AppError::from(e))?;
+                    .map_err(|e| {
+                        // Token verification failed (expired or invalid)
+                        tracing::debug!("JWT verification failed: {:?}", e);
+                        AppError::Unauthorized("Invalid or expired token".to_string())
+                    })?;
+
+                // Check token expiration explicitly
+                if let Some(exp) = claims.exp {
+                    let now = chrono::Utc::now().timestamp();
+                    if now > exp {
+                        tracing::debug!("Token expired at {}, current time {}", exp, now);
+                        return Err(AppError::Unauthorized("Token expired".to_string()).into());
+                    }
+                }
 
                 let user_service = UserService::new(&state.db);
                 user_service
@@ -236,7 +249,20 @@ where
                 drop(config); // Release the lock
                 
                 let claims = verify_jwt(&token, &webui_secret_key)
-                    .map_err(|e| AppError::from(e))?;
+                    .map_err(|e| {
+                        // Token verification failed (expired or invalid)
+                        tracing::debug!("JWT verification failed: {:?}", e);
+                        AppError::Unauthorized("Invalid or expired token".to_string())
+                    })?;
+
+                // Check token expiration explicitly
+                if let Some(exp) = claims.exp {
+                    let now = chrono::Utc::now().timestamp();
+                    if now > exp {
+                        tracing::debug!("Token expired at {}, current time {}", exp, now);
+                        return Err(AppError::Unauthorized("Token expired".to_string()).into());
+                    }
+                }
 
                 let user_service = UserService::new(&state.db);
                 user_service
