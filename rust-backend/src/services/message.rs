@@ -38,7 +38,7 @@ impl<'a> MessageService<'a> {
         sqlx::query(
             r#"
             INSERT INTO message (id, channel_id, user_id, content, reply_to_id, parent_id, data, meta, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             "#,
         )
         .bind(&id)
@@ -227,7 +227,7 @@ impl<'a> MessageService<'a> {
         sqlx::query(
             r#"
             UPDATE message 
-            SET content = $1, data = $2::jsonb, meta = $3::jsonb, updated_at = $4
+            SET content = $1, data = $2, meta = $3, updated_at = $4
             WHERE id = $5
             "#,
         )

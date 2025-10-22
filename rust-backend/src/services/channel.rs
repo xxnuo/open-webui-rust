@@ -40,7 +40,7 @@ impl<'a> ChannelService<'a> {
         sqlx::query(
             r#"
             INSERT INTO channel (id, name, description, user_id, type, data, meta, access_control, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9, $10)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             "#,
         )
         .bind(id)
@@ -225,15 +225,15 @@ impl<'a> ChannelService<'a> {
             bind_count += 1;
         }
         if data.is_some() {
-            updates.push(format!("data = ${}::jsonb", bind_count));
+            updates.push(format!("data = ${}", bind_count));
             bind_count += 1;
         }
         if meta.is_some() {
-            updates.push(format!("meta = ${}::jsonb", bind_count));
+            updates.push(format!("meta = ${}", bind_count));
             bind_count += 1;
         }
         if access_control.is_some() {
-            updates.push(format!("access_control = ${}::jsonb", bind_count));
+            updates.push(format!("access_control = ${}", bind_count));
             bind_count += 1;
         }
 

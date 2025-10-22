@@ -28,7 +28,7 @@ impl<'a> PromptService<'a> {
         sqlx::query(
             r#"
             INSERT INTO prompt (command, user_id, title, content, access_control, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5::jsonb, $6, $6)
+            VALUES ($1, $2, $3, $4, $5, $6, $6)
             "#,
         )
         .bind(&form_data.command)
@@ -92,7 +92,7 @@ impl<'a> PromptService<'a> {
         sqlx::query(
             r#"
             UPDATE prompt
-            SET title = $1, content = $2, access_control = $3::jsonb, updated_at = $4
+            SET title = $1, content = $2, access_control = $3, updated_at = $4
             WHERE command = $5
             "#,
         )

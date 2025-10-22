@@ -105,7 +105,7 @@ impl<'a> ChatService<'a> {
                 r#"
                 SELECT id, user_id, title, chat, folder_id, archived, pinned, share_id, meta, created_at, updated_at
                 FROM chat
-                WHERE user_id = $1 AND archived = false
+                WHERE user_id = $1 AND archived = 0
                 ORDER BY updated_at DESC
                 LIMIT $2 OFFSET $3
                 "#,
@@ -127,7 +127,7 @@ impl<'a> ChatService<'a> {
             r#"
             SELECT id, user_id, title, chat, folder_id, archived, pinned, share_id, meta, created_at, updated_at
             FROM chat
-            WHERE user_id = $1 AND pinned = true AND archived = false
+            WHERE user_id = $1 AND pinned = 1 AND archived = 0
             ORDER BY updated_at DESC
             "#,
         )
@@ -149,7 +149,7 @@ impl<'a> ChatService<'a> {
             r#"
             SELECT id, user_id, title, chat, folder_id, archived, pinned, share_id, meta, created_at, updated_at
             FROM chat
-            WHERE folder_id = $1 AND user_id = $2 AND archived = false AND (pinned = false OR pinned IS NULL)
+            WHERE folder_id = $1 AND user_id = $2 AND archived = 0 AND (pinned = 0 OR pinned IS NULL)
             ORDER BY updated_at DESC
             LIMIT $3 OFFSET $4
             "#,
@@ -189,7 +189,7 @@ impl<'a> ChatService<'a> {
                 r#"
                 SELECT id, user_id, title, chat, folder_id, archived, pinned, share_id, meta, created_at, updated_at
                 FROM chat
-                WHERE user_id = $1 AND archived = false AND title LIKE $2
+                WHERE user_id = $1 AND archived = 0 AND title LIKE $2
                 ORDER BY updated_at DESC
                 LIMIT $3 OFFSET $4
                 "#,
@@ -257,7 +257,7 @@ impl<'a> ChatService<'a> {
         sqlx::query(
             r#"
             UPDATE chat
-            SET pinned = CASE WHEN pinned = true THEN false ELSE true END,
+            SET pinned = CASE WHEN pinned = 1 THEN 0 ELSE 1 END,
                 updated_at = $1
             WHERE id = $2 AND user_id = $3
             "#,
@@ -279,7 +279,7 @@ impl<'a> ChatService<'a> {
         sqlx::query(
             r#"
             UPDATE chat
-            SET archived = CASE WHEN archived = true THEN false ELSE true END,
+            SET archived = CASE WHEN archived = 1 THEN 0 ELSE 1 END,
                 updated_at = $1
             WHERE id = $2 AND user_id = $3
             "#,
@@ -299,7 +299,7 @@ impl<'a> ChatService<'a> {
         sqlx::query(
             r#"
             UPDATE chat
-            SET archived = true
+            SET archived = 1
             WHERE user_id = $1
             "#,
         )
@@ -314,7 +314,7 @@ impl<'a> ChatService<'a> {
         sqlx::query(
             r#"
             UPDATE chat
-            SET archived = false
+            SET archived = 0
             WHERE user_id = $1
             "#,
         )
@@ -564,7 +564,7 @@ impl<'a> ChatService<'a> {
             r#"
             SELECT id, title, updated_at, created_at, folder_id
             FROM chat
-            WHERE user_id = $1 AND archived = false
+            WHERE user_id = $1 AND archived = 0
             ORDER BY updated_at DESC
             LIMIT $2 OFFSET $3
             "#,
@@ -614,8 +614,8 @@ impl<'a> ChatService<'a> {
             r#"
             SELECT id, title, updated_at, created_at, folder_id
             FROM chat
-            WHERE user_id = $1 AND archived = false 
-                AND (title ILIKE $2 OR chat::text ILIKE $2)
+            WHERE user_id = $1 AND archived = 0 
+                AND (title LIKE $2 OR chat LIKE $2)
             ORDER BY updated_at DESC
             LIMIT $3 OFFSET $4
             "#,
@@ -648,7 +648,7 @@ impl<'a> ChatService<'a> {
             r#"
             SELECT id, user_id, title, chat, folder_id, archived, pinned, share_id, meta, created_at, updated_at
             FROM chat
-            WHERE user_id = $1 AND archived = true
+            WHERE user_id = $1 AND archived = 1
             ORDER BY updated_at DESC
             "#,
         )
@@ -669,7 +669,7 @@ impl<'a> ChatService<'a> {
             r#"
             SELECT id, title, updated_at, created_at, folder_id
             FROM chat
-            WHERE user_id = $1 AND archived = true
+            WHERE user_id = $1 AND archived = 1
             ORDER BY updated_at DESC
             LIMIT $2 OFFSET $3
             "#,
@@ -705,7 +705,7 @@ impl<'a> ChatService<'a> {
             r#"
             SELECT id, user_id, title, chat, folder_id, archived, pinned, share_id, meta, created_at, updated_at
             FROM chat
-            WHERE user_id = $1 AND folder_id = $2 AND archived = false
+            WHERE user_id = $1 AND folder_id = $2 AND archived = 0
             ORDER BY updated_at DESC
             "#,
         )
@@ -728,7 +728,7 @@ impl<'a> ChatService<'a> {
             r#"
             SELECT id, title, updated_at
             FROM chat
-            WHERE user_id = $1 AND folder_id = $2 AND archived = false
+            WHERE user_id = $1 AND folder_id = $2 AND archived = 0
             ORDER BY updated_at DESC
             LIMIT $3 OFFSET $4
             "#,
@@ -761,18 +761,21 @@ impl<'a> ChatService<'a> {
         skip: i64,
         limit: i64,
     ) -> AppResult<Vec<serde_json::Value>> {
+        // SQLite doesn't support PostgreSQL's JSONB operators
+        // Use json_extract to search for tag in meta.tags array
+        let tag_search = format!("%\"{}%", tag_name);
         let rows = sqlx::query(
             r#"
             SELECT id, title, updated_at, created_at, folder_id
             FROM chat
-            WHERE user_id = $1 AND archived = false
-                AND meta @> jsonb_build_object('tags', jsonb_build_array($2))
+            WHERE user_id = $1 AND archived = 0
+                AND json_extract(meta, '$.tags') LIKE $2
             ORDER BY updated_at DESC
             LIMIT $3 OFFSET $4
             "#,
         )
         .bind(user_id)
-        .bind(tag_name)
+        .bind(&tag_search)
         .bind(limit)
         .bind(skip)
         .fetch_all(&self.db.pool)
