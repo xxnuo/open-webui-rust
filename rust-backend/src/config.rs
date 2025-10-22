@@ -442,10 +442,10 @@ impl Config {
             upload_dir: env::var("UPLOAD_DIR").unwrap_or_else(|_| "/app/data/uploads".to_string()),
             cache_dir: env::var("CACHE_DIR").unwrap_or_else(|_| "/app/data/cache".to_string()),
             static_dir: env::var("STATIC_DIR").unwrap_or_else(|_| {
-                // Default to config_dir/static
+                // Default to config_dir/build
                 let expanded_config_dir = Self::expand_home_dir(&config_dir);
                 PathBuf::from(&expanded_config_dir)
-                    .join("static")
+                    .join("build")
                     .to_string_lossy()
                     .to_string()
             }),
