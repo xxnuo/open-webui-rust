@@ -257,7 +257,7 @@ impl Config {
     pub fn from_env() -> anyhow::Result<Self> {
         // Get config directory first
         let config_dir =
-            env::var("CONFIG_DIR").unwrap_or_else(|_| "~/.config/open-webui-slim".to_string());
+            env::var("CONFIG_DIR").unwrap_or_else(|_| "~/.config/open-webui-lite".to_string());
 
         Ok(Config {
             // Server
