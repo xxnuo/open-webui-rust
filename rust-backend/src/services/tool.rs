@@ -25,10 +25,12 @@ impl<'a> ToolService<'a> {
         access_control: Option<serde_json::Value>,
     ) -> AppResult<Tool> {
         let now = current_timestamp_seconds();
-        
+
         let specs_str = serde_json::to_string(&specs).unwrap();
         let meta_str = serde_json::to_string(&meta).unwrap();
-        let access_control_str = access_control.as_ref().map(|v| serde_json::to_string(v).unwrap());
+        let access_control_str = access_control
+            .as_ref()
+            .map(|v| serde_json::to_string(v).unwrap());
 
         sqlx::query(
             r#"
@@ -50,9 +52,9 @@ impl<'a> ToolService<'a> {
         .execute(&self.db.pool)
         .await?;
 
-        self.get_tool_by_id(id).await?.ok_or_else(|| {
-            AppError::InternalServerError("Failed to create tool".to_string())
-        })
+        self.get_tool_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::InternalServerError("Failed to create tool".to_string()))
     }
 
     pub async fn get_tool_by_id(&self, id: &str) -> AppResult<Option<Tool>> {
@@ -150,7 +152,7 @@ impl<'a> ToolService<'a> {
         // Build dynamic query parts
         let mut updates = vec!["updated_at = $1".to_string()];
         let mut bind_count = 2;
-        
+
         if name.is_some() {
             updates.push(format!("name = ${}", bind_count));
             bind_count += 1;
@@ -180,7 +182,7 @@ impl<'a> ToolService<'a> {
 
         let mut query = sqlx::query(&query_str);
         query = query.bind(now);
-        
+
         if let Some(n) = name {
             query = query.bind(n);
         }
@@ -196,14 +198,14 @@ impl<'a> ToolService<'a> {
         if let Some(ac) = access_control {
             query = query.bind(serde_json::to_string(&ac).unwrap());
         }
-        
+
         query = query.bind(id);
 
         query.execute(&self.db.pool).await?;
 
-        self.get_tool_by_id(id).await?.ok_or_else(|| {
-            AppError::NotFound("Tool not found".to_string())
-        })
+        self.get_tool_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Tool not found".to_string()))
     }
 
     pub async fn update_tool_valves(&self, id: &str, valves: serde_json::Value) -> AppResult<()> {

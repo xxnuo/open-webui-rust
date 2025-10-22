@@ -49,10 +49,7 @@ pub fn create_routes(cfg: &mut web::ServiceConfig) {
 }
 
 /// GET / - Get notes with permission filtering
-async fn get_notes(
-    state: web::Data<AppState>,
-    auth_user: AuthUser,
-) -> AppResult<HttpResponse> {
+async fn get_notes(state: web::Data<AppState>, auth_user: AuthUser) -> AppResult<HttpResponse> {
     // Check if user has notes feature permission
     let config = state.config.read().unwrap();
     if auth_user.user.role != "admin"
@@ -309,16 +306,11 @@ async fn update_note_by_id(
     }
 
     // Check if user can share publicly
-    if auth_user.user.role != "admin"
-        && form_data.access_control.is_none()
-        && !can_share_public
-    {
+    if auth_user.user.role != "admin" && form_data.access_control.is_none() && !can_share_public {
         form_data.access_control = Some(serde_json::json!({}));
     }
 
-    let updated_note = note_service
-        .update_note_by_id(&note_id, &form_data)
-        .await?;
+    let updated_note = note_service.update_note_by_id(&note_id, &form_data).await?;
 
     // TODO: Emit Socket.IO event
     // await sio.emit("note-events", note.model_dump(), to=f"note:{note.id}")

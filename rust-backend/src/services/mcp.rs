@@ -1,6 +1,6 @@
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use reqwest::Client;
 use tracing::{error, info};
 
 use crate::error::{AppError, AppResult};
@@ -60,7 +60,11 @@ impl McpClient {
 
             match self.get_server_tools(server).await {
                 Ok(tools) => {
-                    info!("Discovered {} tools from server: {}", tools.len(), server.name);
+                    info!(
+                        "Discovered {} tools from server: {}",
+                        tools.len(),
+                        server.name
+                    );
                     all_tools.extend(tools);
                 }
                 Err(e) => {
@@ -75,9 +79,9 @@ impl McpClient {
     /// Get tools from a specific server
     async fn get_server_tools(&self, server: &McpServerConfig) -> AppResult<Vec<McpTool>> {
         let url = format!("{}/tools", server.url);
-        
+
         let mut request = self.client.get(&url);
-        
+
         if let Some(token) = &server.auth_token {
             request = request.bearer_auth(token);
         }
@@ -88,7 +92,10 @@ impl McpClient {
         })?;
 
         if !response.status().is_success() {
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
             return Err(AppError::InternalServerError(format!(
                 "Tool server returned error: {}",
                 error_text
@@ -100,27 +107,32 @@ impl McpClient {
         })?;
 
         // Parse tools and add server name
-        let tools: Vec<McpTool> = if let Some(tools_array) = tools_data.get("tools").and_then(|t| t.as_array()) {
-            tools_array
-                .iter()
-                .filter_map(|tool| {
-                    Some(McpTool {
-                        name: tool.get("name")?.as_str()?.to_string(),
-                        description: tool.get("description")?.as_str()?.to_string(),
-                        input_schema: tool.get("inputSchema")?.clone(),
-                        server: server.name.clone(),
+        let tools: Vec<McpTool> =
+            if let Some(tools_array) = tools_data.get("tools").and_then(|t| t.as_array()) {
+                tools_array
+                    .iter()
+                    .filter_map(|tool| {
+                        Some(McpTool {
+                            name: tool.get("name")?.as_str()?.to_string(),
+                            description: tool.get("description")?.as_str()?.to_string(),
+                            input_schema: tool.get("inputSchema")?.clone(),
+                            server: server.name.clone(),
+                        })
                     })
-                })
-                .collect()
-        } else {
-            vec![]
-        };
+                    .collect()
+            } else {
+                vec![]
+            };
 
         Ok(tools)
     }
 
     /// Execute a tool call on the appropriate server
-    pub async fn execute_tool(&self, tool_name: &str, arguments: Value) -> AppResult<McpToolResponse> {
+    pub async fn execute_tool(
+        &self,
+        tool_name: &str,
+        arguments: Value,
+    ) -> AppResult<McpToolResponse> {
         // Find which server provides this tool
         let tools = self.discover_tools().await?;
         let tool = tools
@@ -133,11 +145,13 @@ impl McpClient {
             .servers
             .iter()
             .find(|s| s.name == tool.server)
-            .ok_or_else(|| AppError::InternalServerError("Server configuration not found".to_string()))?;
+            .ok_or_else(|| {
+                AppError::InternalServerError("Server configuration not found".to_string())
+            })?;
 
         // Execute tool call
         let url = format!("{}/tools/{}/execute", server.url, tool_name);
-        
+
         let mut request = self.client.post(&url).json(&serde_json::json!({
             "arguments": arguments
         }));
@@ -152,7 +166,10 @@ impl McpClient {
         })?;
 
         if !response.status().is_success() {
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
             return Ok(McpToolResponse {
                 result: Value::Null,
                 error: Some(format!("Tool execution failed: {}", error_text)),
@@ -177,9 +194,9 @@ impl McpClient {
 
         for server in &self.servers {
             let url = format!("{}/health", server.url);
-            
+
             let mut request = self.client.get(&url);
-            
+
             if let Some(token) = &server.auth_token {
                 request = request.bearer_auth(token);
             }
@@ -236,7 +253,11 @@ impl ToolServerManager {
         self.mcp_client.discover_tools().await
     }
 
-    pub async fn execute_tool(&self, tool_name: &str, arguments: Value) -> AppResult<McpToolResponse> {
+    pub async fn execute_tool(
+        &self,
+        tool_name: &str,
+        arguments: Value,
+    ) -> AppResult<McpToolResponse> {
         self.mcp_client.execute_tool(tool_name, arguments).await
     }
 
@@ -273,7 +294,7 @@ mod tests {
     #[test]
     fn test_add_remove_server() {
         let mut client = McpClient::new(vec![]);
-        
+
         let server = McpServerConfig {
             name: "test-server".to_string(),
             url: "http://localhost:8000".to_string(),
@@ -288,4 +309,3 @@ mod tests {
         assert_eq!(client.servers.len(), 0);
     }
 }
-

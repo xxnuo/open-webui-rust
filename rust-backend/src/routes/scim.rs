@@ -2,7 +2,7 @@ use actix_web::{web, HttpResponse};
 use serde::{Deserialize, Serialize};
 
 use crate::error::AppResult;
-use crate::middleware::auth::{AuthUser, AdminMiddleware};
+use crate::middleware::auth::{AdminMiddleware, AuthUser};
 
 // SCIM 2.0 Schema URIs
 const SCIM_USER_SCHEMA: &str = "urn:ietf:params:scim:schemas:core:2.0:User";
@@ -23,9 +23,7 @@ struct SCIMListResponse {
 }
 
 // GET /Users - List users
-async fn list_scim_users(
-    _user: AuthUser,
-) -> AppResult<HttpResponse> {
+async fn list_scim_users(_user: AuthUser) -> AppResult<HttpResponse> {
     // TODO: Implement SCIM user listing
     let response = SCIMListResponse {
         schemas: vec![SCIM_LIST_RESPONSE_SCHEMA.to_string()],
@@ -34,14 +32,12 @@ async fn list_scim_users(
         items_per_page: 0,
         resources: vec![],
     };
-    
+
     Ok(HttpResponse::Ok().json(response))
 }
 
 // POST /Users - Create user
-async fn create_scim_user(
-    _user: AuthUser,
-) -> AppResult<HttpResponse> {
+async fn create_scim_user(_user: AuthUser) -> AppResult<HttpResponse> {
     // TODO: Implement SCIM user creation
     Ok(HttpResponse::NotImplemented().json(serde_json::json!({
         "detail": "SCIM user creation not yet implemented"
@@ -49,10 +45,7 @@ async fn create_scim_user(
 }
 
 // GET /Users/{id} - Get user by ID
-async fn get_scim_user(
-    _user: AuthUser,
-    _user_id: web::Path<String>,
-) -> AppResult<HttpResponse> {
+async fn get_scim_user(_user: AuthUser, _user_id: web::Path<String>) -> AppResult<HttpResponse> {
     // TODO: Implement SCIM user retrieval
     Ok(HttpResponse::NotImplemented().json(serde_json::json!({
         "detail": "SCIM user retrieval not yet implemented"
@@ -60,10 +53,7 @@ async fn get_scim_user(
 }
 
 // PUT /Users/{id} - Update user
-async fn update_scim_user(
-    _user: AuthUser,
-    _user_id: web::Path<String>,
-) -> AppResult<HttpResponse> {
+async fn update_scim_user(_user: AuthUser, _user_id: web::Path<String>) -> AppResult<HttpResponse> {
     // TODO: Implement SCIM user update
     Ok(HttpResponse::NotImplemented().json(serde_json::json!({
         "detail": "SCIM user update not yet implemented"
@@ -71,10 +61,7 @@ async fn update_scim_user(
 }
 
 // PATCH /Users/{id} - Patch user
-async fn patch_scim_user(
-    _user: AuthUser,
-    _user_id: web::Path<String>,
-) -> AppResult<HttpResponse> {
+async fn patch_scim_user(_user: AuthUser, _user_id: web::Path<String>) -> AppResult<HttpResponse> {
     // TODO: Implement SCIM user patch
     Ok(HttpResponse::NotImplemented().json(serde_json::json!({
         "detail": "SCIM user patch not yet implemented"
@@ -82,10 +69,7 @@ async fn patch_scim_user(
 }
 
 // DELETE /Users/{id} - Delete user
-async fn delete_scim_user(
-    _user: AuthUser,
-    _user_id: web::Path<String>,
-) -> AppResult<HttpResponse> {
+async fn delete_scim_user(_user: AuthUser, _user_id: web::Path<String>) -> AppResult<HttpResponse> {
     // TODO: Implement SCIM user deletion
     Ok(HttpResponse::NotImplemented().json(serde_json::json!({
         "detail": "SCIM user deletion not yet implemented"
@@ -93,9 +77,7 @@ async fn delete_scim_user(
 }
 
 // GET /Groups - List groups
-async fn list_scim_groups(
-    _user: AuthUser,
-) -> AppResult<HttpResponse> {
+async fn list_scim_groups(_user: AuthUser) -> AppResult<HttpResponse> {
     // TODO: Implement SCIM group listing
     let response = SCIMListResponse {
         schemas: vec![SCIM_LIST_RESPONSE_SCHEMA.to_string()],
@@ -104,14 +86,12 @@ async fn list_scim_groups(
         items_per_page: 0,
         resources: vec![],
     };
-    
+
     Ok(HttpResponse::Ok().json(response))
 }
 
 // POST /Groups - Create group
-async fn create_scim_group(
-    _user: AuthUser,
-) -> AppResult<HttpResponse> {
+async fn create_scim_group(_user: AuthUser) -> AppResult<HttpResponse> {
     // TODO: Implement SCIM group creation
     Ok(HttpResponse::NotImplemented().json(serde_json::json!({
         "detail": "SCIM group creation not yet implemented"
@@ -119,10 +99,7 @@ async fn create_scim_group(
 }
 
 // GET /Groups/{id} - Get group by ID
-async fn get_scim_group(
-    _user: AuthUser,
-    _group_id: web::Path<String>,
-) -> AppResult<HttpResponse> {
+async fn get_scim_group(_user: AuthUser, _group_id: web::Path<String>) -> AppResult<HttpResponse> {
     // TODO: Implement SCIM group retrieval
     Ok(HttpResponse::NotImplemented().json(serde_json::json!({
         "detail": "SCIM group retrieval not yet implemented"
@@ -169,7 +146,7 @@ pub fn create_routes(cfg: &mut web::ServiceConfig) {
                 web::resource("/Users")
                     .wrap(AdminMiddleware)
                     .route(web::get().to(list_scim_users))
-                    .route(web::post().to(create_scim_user))
+                    .route(web::post().to(create_scim_user)),
             )
             .service(
                 web::resource("/Users/{id}")
@@ -177,13 +154,13 @@ pub fn create_routes(cfg: &mut web::ServiceConfig) {
                     .route(web::get().to(get_scim_user))
                     .route(web::put().to(update_scim_user))
                     .route(web::patch().to(patch_scim_user))
-                    .route(web::delete().to(delete_scim_user))
+                    .route(web::delete().to(delete_scim_user)),
             )
             .service(
                 web::resource("/Groups")
                     .wrap(AdminMiddleware)
                     .route(web::get().to(list_scim_groups))
-                    .route(web::post().to(create_scim_group))
+                    .route(web::post().to(create_scim_group)),
             )
             .service(
                 web::resource("/Groups/{id}")
@@ -191,7 +168,7 @@ pub fn create_routes(cfg: &mut web::ServiceConfig) {
                     .route(web::get().to(get_scim_group))
                     .route(web::put().to(update_scim_group))
                     .route(web::patch().to(patch_scim_group))
-                    .route(web::delete().to(delete_scim_group))
-            )
+                    .route(web::delete().to(delete_scim_group)),
+            ),
     );
 }

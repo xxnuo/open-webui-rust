@@ -23,10 +23,7 @@ pub fn deep_update(target: &mut Value, source: &Value) {
 
 /// Get message list from messages map by following parent IDs
 #[allow(dead_code)]
-pub fn get_message_list(
-    messages_map: &HashMap<String, Value>,
-    message_id: &str,
-) -> Vec<Value> {
+pub fn get_message_list(messages_map: &HashMap<String, Value>, message_id: &str) -> Vec<Value> {
     let mut messages = Vec::new();
     let mut current_id = Some(message_id.to_string());
 
@@ -118,9 +115,9 @@ pub fn is_file_extension_allowed(filename: &str, allowed_extensions: &[String]) 
     }
 
     if let Some(ext) = get_file_extension(filename) {
-        allowed_extensions.iter().any(|allowed| {
-            allowed.trim_start_matches('.').eq_ignore_ascii_case(&ext)
-        })
+        allowed_extensions
+            .iter()
+            .any(|allowed| allowed.trim_start_matches('.').eq_ignore_ascii_case(&ext))
     } else {
         false
     }
@@ -130,7 +127,7 @@ pub fn is_file_extension_allowed(filename: &str, allowed_extensions: &[String]) 
 #[allow(dead_code)]
 pub fn sanitize_filename(filename: &str) -> String {
     filename
-        .replace("..", "_")  // Replace .. first before replacing /
+        .replace("..", "_") // Replace .. first before replacing /
         .replace(['/', '\\'], "_")
         .chars()
         .filter(|c| c.is_alphanumeric() || *c == '.' || *c == '_' || *c == '-')
@@ -153,14 +150,10 @@ pub fn parse_data_url(data_url: &str) -> Option<(String, Vec<u8>)> {
     let data = parts[1];
 
     // Extract mime type
-    let mime_type = header
-        .strip_prefix("data:")?
-        .split(';')
-        .next()?
-        .to_string();
+    let mime_type = header.strip_prefix("data:")?.split(';').next()?.to_string();
 
     // Decode base64
-    use base64::{Engine as _, engine::general_purpose::STANDARD};
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
     let decoded = STANDARD.decode(data).ok()?;
 
     Some((mime_type, decoded))
@@ -309,14 +302,22 @@ mod tests {
     fn test_sanitize_filename() {
         // "../../../etc/passwd" -> "_/_/_/etc/passwd" (after ..) -> "______etc_passwd" (after /)
         assert_eq!(sanitize_filename("../../../etc/passwd"), "______etc_passwd");
-        assert_eq!(sanitize_filename("valid-file_name.txt"), "valid-file_name.txt");
-        assert_eq!(sanitize_filename("file with spaces.txt"), "filewithspaces.txt");
+        assert_eq!(
+            sanitize_filename("valid-file_name.txt"),
+            "valid-file_name.txt"
+        );
+        assert_eq!(
+            sanitize_filename("file with spaces.txt"),
+            "filewithspaces.txt"
+        );
     }
 
     #[test]
     fn test_truncate_string() {
         assert_eq!(truncate_string("short", 10), "short");
-        assert_eq!(truncate_string("this is a very long string", 10), "this is...");
+        assert_eq!(
+            truncate_string("this is a very long string", 10),
+            "this is..."
+        );
     }
 }
-

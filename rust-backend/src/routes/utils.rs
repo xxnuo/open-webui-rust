@@ -43,7 +43,7 @@ async fn get_gravatar(
     // Simple MD5 hash implementation for gravatar
     // TODO: Add md5 crate dependency or use a different method
     let hash = format!("{:x}", md5::compute(email.as_bytes()));
-    
+
     let gravatar_url = format!("https://www.gravatar.com/avatar/{}", hash);
     Ok(HttpResponse::Ok().json(gravatar_url))
 }
@@ -67,7 +67,7 @@ async fn get_html_from_markdown(
     // TODO: Use a markdown parser like pulldown-cmark or comrak
     // For now, return the markdown as-is
     let html = format!("<pre>{}</pre>", form_data.md);
-    
+
     Ok(HttpResponse::Ok().json(HtmlResponse { html }))
 }
 
@@ -115,7 +115,7 @@ async fn execute_code(
     _form_data: web::Json<CodeForm>,
 ) -> AppResult<HttpResponse> {
     let config = state.config.read().unwrap();
-    
+
     if config.code_execution_engine != "jupyter" {
         return Err(AppError::BadRequest(
             "Code execution engine not supported".to_string(),
@@ -126,7 +126,7 @@ async fn execute_code(
     // This would require HTTP client to communicate with Jupyter server
     // and handle authentication (token or password)
     drop(config);
-    
+
     Err(AppError::NotImplemented(
         "Code execution not yet implemented".to_string(),
     ))
@@ -138,7 +138,7 @@ async fn download_db(
     _auth_user: AuthUser, // AdminMiddleware already checked
 ) -> AppResult<HttpResponse> {
     let config = state.config.read().unwrap();
-    
+
     if !config.enable_admin_export {
         return Err(AppError::Unauthorized(
             "Admin export is not enabled".to_string(),
@@ -149,7 +149,7 @@ async fn download_db(
     // For PostgreSQL, this endpoint doesn't make sense
     // TODO: Implement SQLite database file download if using SQLite
     drop(config);
-    
+
     Err(AppError::NotImplemented(
         "Database download only supported for SQLite".to_string(),
     ))

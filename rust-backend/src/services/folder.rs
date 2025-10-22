@@ -336,4 +336,3 @@ impl<'a> FolderService<'a> {
         Ok(result.0)
     }
 }
-

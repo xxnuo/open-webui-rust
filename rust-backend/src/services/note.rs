@@ -13,11 +13,7 @@ impl<'a> NoteService<'a> {
         NoteService { db }
     }
 
-    pub async fn insert_new_note(
-        &self,
-        user_id: &str,
-        form_data: &NoteForm,
-    ) -> AppResult<Note> {
+    pub async fn insert_new_note(&self, user_id: &str, form_data: &NoteForm) -> AppResult<Note> {
         let now = current_timestamp_nanos();
         let id = Uuid::new_v4().to_string();
 
@@ -26,7 +22,7 @@ impl<'a> NoteService<'a> {
             .as_ref()
             .map(|d| serde_json::to_string(d).ok())
             .flatten();
-        
+
         let meta_json = form_data
             .meta
             .as_ref()
@@ -56,9 +52,9 @@ impl<'a> NoteService<'a> {
         .execute(&self.db.pool)
         .await?;
 
-        self.get_note_by_id(&id).await?.ok_or_else(|| {
-            AppError::InternalServerError("Failed to create note".to_string())
-        })
+        self.get_note_by_id(&id)
+            .await?
+            .ok_or_else(|| AppError::InternalServerError("Failed to create note".to_string()))
     }
 
     pub async fn get_note_by_id(&self, id: &str) -> AppResult<Option<Note>> {
@@ -148,28 +144,26 @@ impl<'a> NoteService<'a> {
         Ok(filtered_notes)
     }
 
-    pub async fn update_note_by_id(
-        &self,
-        id: &str,
-        form_data: &NoteUpdateForm,
-    ) -> AppResult<Note> {
+    pub async fn update_note_by_id(&self, id: &str, form_data: &NoteUpdateForm) -> AppResult<Note> {
         let now = current_timestamp_nanos();
 
         // Get the existing note to merge data fields
-        let mut existing_note = self.get_note_by_id(id).await?
+        let mut existing_note = self
+            .get_note_by_id(id)
+            .await?
             .ok_or_else(|| AppError::NotFound("Note not found".to_string()))?;
         existing_note.parse_json_fields();
 
         // Update title if provided
-        let title = form_data.title.as_ref()
-            .unwrap_or(&existing_note.title);
+        let title = form_data.title.as_ref().unwrap_or(&existing_note.title);
 
         // Merge the data field: preserve existing fields and merge incoming data
         let merged_data = if let Some(incoming_data) = &form_data.data {
             if let Some(mut existing_data) = existing_note.data.clone() {
                 // Merge incoming data into existing data
-                if let (Some(existing_obj), Some(incoming_obj)) = 
-                    (existing_data.as_object_mut(), incoming_data.as_object()) {
+                if let (Some(existing_obj), Some(incoming_obj)) =
+                    (existing_data.as_object_mut(), incoming_data.as_object())
+                {
                     for (key, value) in incoming_obj {
                         existing_obj.insert(key.clone(), value.clone());
                     }
@@ -186,8 +180,9 @@ impl<'a> NoteService<'a> {
         let merged_meta = if let Some(incoming_meta) = &form_data.meta {
             if let Some(mut existing_meta) = existing_note.meta.clone() {
                 // Merge incoming meta into existing meta
-                if let (Some(existing_obj), Some(incoming_obj)) = 
-                    (existing_meta.as_object_mut(), incoming_meta.as_object()) {
+                if let (Some(existing_obj), Some(incoming_obj)) =
+                    (existing_meta.as_object_mut(), incoming_meta.as_object())
+                {
                     for (key, value) in incoming_obj {
                         existing_obj.insert(key.clone(), value.clone());
                     }
@@ -201,14 +196,16 @@ impl<'a> NoteService<'a> {
         };
 
         // access_control is replaced entirely if provided (not merged)
-        let access_control = form_data.access_control.as_ref()
+        let access_control = form_data
+            .access_control
+            .as_ref()
             .or(existing_note.access_control.as_ref());
 
         let data_json = merged_data
             .as_ref()
             .map(|d| serde_json::to_string(d).ok())
             .flatten();
-        
+
         let meta_json = merged_meta
             .as_ref()
             .map(|m| serde_json::to_string(m).ok())
@@ -235,9 +232,9 @@ impl<'a> NoteService<'a> {
         .execute(&self.db.pool)
         .await?;
 
-        self.get_note_by_id(id).await?.ok_or_else(|| {
-            AppError::NotFound("Note not found".to_string())
-        })
+        self.get_note_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Note not found".to_string()))
     }
 
     pub async fn delete_note_by_id(&self, id: &str) -> AppResult<()> {
@@ -249,4 +246,3 @@ impl<'a> NoteService<'a> {
         Ok(())
     }
 }
-

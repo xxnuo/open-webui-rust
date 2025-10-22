@@ -36,13 +36,13 @@ impl Channel {
             self.data = serde_json::from_str(data_str).ok();
         }
     }
-    
+
     pub fn parse_meta(&mut self) {
         if let Some(ref meta_str) = self.meta_str {
             self.meta = serde_json::from_str(meta_str).ok();
         }
     }
-    
+
     pub fn parse_access_control(&mut self) {
         if let Some(ref ac_str) = self.access_control_str {
             self.access_control = serde_json::from_str(ac_str).ok();

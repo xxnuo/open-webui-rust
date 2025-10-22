@@ -38,35 +38,48 @@ pub async fn process_pipeline_inlet_filter(
     base_urls: &[String],
     api_keys: &[String],
 ) -> AppResult<Value> {
-    debug!("Processing {} inlet filters for model {}", pipeline_filters.len(), model_id);
-    
+    debug!(
+        "Processing {} inlet filters for model {}",
+        pipeline_filters.len(),
+        model_id
+    );
+
     let client = Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()?;
-    
+
     for filter in pipeline_filters {
         if filter.url_idx >= base_urls.len() {
-            warn!("Invalid url_idx {} for filter {}", filter.url_idx, filter.id);
+            warn!(
+                "Invalid url_idx {} for filter {}",
+                filter.url_idx, filter.id
+            );
             continue;
         }
-        
+
         let base_url = &base_urls[filter.url_idx];
-        let api_key = api_keys.get(filter.url_idx).map(|s| s.as_str()).unwrap_or("");
-        
+        let api_key = api_keys
+            .get(filter.url_idx)
+            .map(|s| s.as_str())
+            .unwrap_or("");
+
         if api_key.is_empty() {
-            warn!("No API key for filter {} at url_idx {}", filter.id, filter.url_idx);
+            warn!(
+                "No API key for filter {} at url_idx {}",
+                filter.id, filter.url_idx
+            );
             continue;
         }
-        
+
         let url = format!("{}/{}/filter/inlet", base_url, filter.id);
-        
+
         let request_body = PipelineRequest {
             user: user.clone(),
             body: payload.clone(),
         };
-        
+
         debug!("Calling inlet filter: {} at {}", filter.id, url);
-        
+
         match client
             .post(&url)
             .header("Authorization", format!("Bearer {}", api_key))
@@ -81,7 +94,10 @@ pub async fn process_pipeline_inlet_filter(
                         debug!("Inlet filter {} applied successfully", filter.id);
                     }
                     Err(e) => {
-                        error!("Failed to parse response from inlet filter {}: {}", filter.id, e);
+                        error!(
+                            "Failed to parse response from inlet filter {}: {}",
+                            filter.id, e
+                        );
                         return Err(AppError::ExternalServiceError(format!(
                             "Inlet filter {} returned invalid response",
                             filter.id
@@ -110,7 +126,7 @@ pub async fn process_pipeline_inlet_filter(
             }
         }
     }
-    
+
     Ok(payload)
 }
 
@@ -125,36 +141,49 @@ pub async fn process_pipeline_outlet_filter(
     base_urls: &[String],
     api_keys: &[String],
 ) -> AppResult<Value> {
-    debug!("Processing {} outlet filters for model {}", pipeline_filters.len(), model_id);
-    
+    debug!(
+        "Processing {} outlet filters for model {}",
+        pipeline_filters.len(),
+        model_id
+    );
+
     let client = Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()?;
-    
+
     // Outlet filters are processed in reverse order
     for filter in pipeline_filters.iter().rev() {
         if filter.url_idx >= base_urls.len() {
-            warn!("Invalid url_idx {} for filter {}", filter.url_idx, filter.id);
+            warn!(
+                "Invalid url_idx {} for filter {}",
+                filter.url_idx, filter.id
+            );
             continue;
         }
-        
+
         let base_url = &base_urls[filter.url_idx];
-        let api_key = api_keys.get(filter.url_idx).map(|s| s.as_str()).unwrap_or("");
-        
+        let api_key = api_keys
+            .get(filter.url_idx)
+            .map(|s| s.as_str())
+            .unwrap_or("");
+
         if api_key.is_empty() {
-            warn!("No API key for filter {} at url_idx {}", filter.id, filter.url_idx);
+            warn!(
+                "No API key for filter {} at url_idx {}",
+                filter.id, filter.url_idx
+            );
             continue;
         }
-        
+
         let url = format!("{}/{}/filter/outlet", base_url, filter.id);
-        
+
         let request_body = PipelineRequest {
             user: user.clone(),
             body: payload.clone(),
         };
-        
+
         debug!("Calling outlet filter: {} at {}", filter.id, url);
-        
+
         match client
             .post(&url)
             .header("Authorization", format!("Bearer {}", api_key))
@@ -169,7 +198,10 @@ pub async fn process_pipeline_outlet_filter(
                         debug!("Outlet filter {} applied successfully", filter.id);
                     }
                     Err(e) => {
-                        error!("Failed to parse response from outlet filter {}: {}", filter.id, e);
+                        error!(
+                            "Failed to parse response from outlet filter {}: {}",
+                            filter.id, e
+                        );
                         // For outlet filters, we might want to continue even if one fails
                         warn!("Skipping outlet filter {} due to parse error", filter.id);
                     }
@@ -190,18 +222,15 @@ pub async fn process_pipeline_outlet_filter(
             }
         }
     }
-    
+
     Ok(payload)
 }
 
 /// Get sorted filters for a model based on priority
 #[allow(dead_code)]
-pub fn get_sorted_filters(
-    model_id: &str,
-    models: &HashMap<String, Value>,
-) -> Vec<PipelineFilter> {
+pub fn get_sorted_filters(model_id: &str, models: &HashMap<String, Value>) -> Vec<PipelineFilter> {
     let mut filters = Vec::new();
-    
+
     // Get model configuration
     if let Some(model) = models.get(model_id) {
         // Check if model has filters
@@ -212,7 +241,7 @@ pub fn get_sorted_filters(
                 }
             }
         }
-        
+
         // Check if the model itself is a pipeline filter
         if let Some(pipeline) = model.get("pipeline") {
             if let Some(id) = model.get("id").and_then(|i| i.as_str()) {
@@ -221,7 +250,7 @@ pub fn get_sorted_filters(
                         .get("priority")
                         .and_then(|p| p.as_i64())
                         .unwrap_or(0) as i32;
-                    
+
                     filters.push(PipelineFilter {
                         id: id.to_string(),
                         url_idx: url_idx as usize,
@@ -231,10 +260,10 @@ pub fn get_sorted_filters(
             }
         }
     }
-    
+
     // Sort by priority (lower priority values are processed first)
     filters.sort_by_key(|f| f.priority);
-    
+
     debug!("Found {} filters for model {}", filters.len(), model_id);
     filters
 }
@@ -247,7 +276,7 @@ mod tests {
     #[test]
     fn test_get_sorted_filters() {
         let mut models = HashMap::new();
-        
+
         models.insert(
             "test-model".to_string(),
             json!({
@@ -266,9 +295,9 @@ mod tests {
                 ]
             }),
         );
-        
+
         let filters = get_sorted_filters("test-model", &models);
-        
+
         assert_eq!(filters.len(), 2);
         assert_eq!(filters[0].id, "filter-2"); // Lower priority comes first
         assert_eq!(filters[1].id, "filter-1");
@@ -277,7 +306,7 @@ mod tests {
     #[test]
     fn test_get_sorted_filters_with_pipeline() {
         let mut models = HashMap::new();
-        
+
         models.insert(
             "test-model".to_string(),
             json!({
@@ -289,12 +318,11 @@ mod tests {
                 }
             }),
         );
-        
+
         let filters = get_sorted_filters("test-model", &models);
-        
+
         assert_eq!(filters.len(), 1);
         assert_eq!(filters[0].id, "test-model");
         assert_eq!(filters[0].priority, 15);
     }
 }
-

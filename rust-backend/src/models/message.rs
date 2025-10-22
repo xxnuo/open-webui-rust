@@ -38,23 +38,25 @@ impl Message {
             self.meta = serde_json::from_str(meta_str).ok();
         }
     }
-    
+
     pub fn parse_data(&mut self) {
         if let Some(ref data_str) = self.data_str {
             self.data = serde_json::from_str(data_str).ok();
         }
     }
-    
+
     pub fn get_meta(&self) -> Option<serde_json::Value> {
         self.meta.clone().or_else(|| {
-            self.meta_str.as_ref()
+            self.meta_str
+                .as_ref()
                 .and_then(|s| serde_json::from_str(s).ok())
         })
     }
-    
+
     pub fn get_data(&self) -> Option<serde_json::Value> {
         self.data.clone().or_else(|| {
-            self.data_str.as_ref()
+            self.data_str
+                .as_ref()
                 .and_then(|s| serde_json::from_str(s).ok())
         })
     }
@@ -156,4 +158,3 @@ pub struct Reaction {
     pub user_ids: Vec<String>,
     pub count: usize,
 }
-

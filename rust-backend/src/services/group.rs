@@ -12,11 +12,7 @@ impl<'a> GroupService<'a> {
         GroupService { db }
     }
 
-    pub async fn insert_new_group(
-        &self,
-        user_id: &str,
-        form_data: &GroupForm,
-    ) -> AppResult<Group> {
+    pub async fn insert_new_group(&self, user_id: &str, form_data: &GroupForm) -> AppResult<Group> {
         let id = uuid::Uuid::new_v4().to_string();
         let now = current_timestamp_seconds();
 
@@ -100,8 +96,12 @@ impl<'a> GroupService<'a> {
 
     pub async fn get_groups_by_member_id(&self, user_id: &str) -> AppResult<Vec<Group>> {
         let search_pattern = format!("%\"{}\"%", user_id);
-        tracing::info!("get_groups_by_member_id: user_id={}, search_pattern={}", user_id, search_pattern);
-        
+        tracing::info!(
+            "get_groups_by_member_id: user_id={}, search_pattern={}",
+            user_id,
+            search_pattern
+        );
+
         // First, let's see ALL groups in the database
         let all_groups = sqlx::query_as::<_, Group>(
             r#"
@@ -117,13 +117,17 @@ impl<'a> GroupService<'a> {
         )
         .fetch_all(&self.db.pool)
         .await?;
-        
+
         tracing::info!("  Total groups in database: {}", all_groups.len());
         for group in &all_groups {
-            tracing::debug!("    Group '{}' (id={}): user_ids_str={}", group.name, group.id, 
-                group.user_ids_str.as_ref().unwrap_or(&"NULL".to_string()));
+            tracing::debug!(
+                "    Group '{}' (id={}): user_ids_str={}",
+                group.name,
+                group.id,
+                group.user_ids_str.as_ref().unwrap_or(&"NULL".to_string())
+            );
         }
-        
+
         // Now execute the filtered query
         let mut groups = sqlx::query_as::<_, Group>(
             r#"
@@ -144,13 +148,25 @@ impl<'a> GroupService<'a> {
         .fetch_all(&self.db.pool)
         .await?;
 
-        tracing::info!("  Groups matching pattern '{}': {}", search_pattern, groups.len());
+        tracing::info!(
+            "  Groups matching pattern '{}': {}",
+            search_pattern,
+            groups.len()
+        );
 
         // Parse JSON fields for each group
         for group in &mut groups {
-            tracing::debug!("  Before parse - Group '{}': user_ids_str={:?}", group.name, group.user_ids_str);
+            tracing::debug!(
+                "  Before parse - Group '{}': user_ids_str={:?}",
+                group.name,
+                group.user_ids_str
+            );
             group.parse_json_fields();
-            tracing::debug!("  After parse - Group '{}': user_ids={:?}", group.name, group.user_ids);
+            tracing::debug!(
+                "  After parse - Group '{}': user_ids={:?}",
+                group.name,
+                group.user_ids
+            );
         }
 
         Ok(groups)
@@ -205,11 +221,7 @@ impl<'a> GroupService<'a> {
             .ok_or_else(|| AppError::NotFound("Group not found".to_string()))
     }
 
-    pub async fn add_users_to_group(
-        &self,
-        id: &str,
-        user_ids: &[String],
-    ) -> AppResult<Group> {
+    pub async fn add_users_to_group(&self, id: &str, user_ids: &[String]) -> AppResult<Group> {
         let mut group = self
             .get_group_by_id(id)
             .await?
@@ -246,11 +258,7 @@ impl<'a> GroupService<'a> {
             .ok_or_else(|| AppError::NotFound("Group not found".to_string()))
     }
 
-    pub async fn remove_users_from_group(
-        &self,
-        id: &str,
-        user_ids: &[String],
-    ) -> AppResult<Group> {
+    pub async fn remove_users_from_group(&self, id: &str, user_ids: &[String]) -> AppResult<Group> {
         let mut group = self
             .get_group_by_id(id)
             .await?

@@ -1,25 +1,24 @@
 /// Socket.IO Protocol v5 implementation
-/// 
+///
 /// This implements the Socket.IO protocol as specified in:
 /// https://github.com/socketio/socket.io-protocol
-/// 
+///
 /// Key changes in v5 (used by Socket.IO v3+):
 /// - CONNECT packet must include a data payload with {sid: "..."}
 /// - Client must send CONNECT for default namespace
 /// - CONNECT_ERROR for connection failures
-
 use serde_json::Value as JsonValue;
 
 /// Engine.IO packet types
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EnginePacketType {
-    Open = 0,       // Sent from server immediately after connection
-    Close = 1,      // Request closing of transport
-    Ping = 2,       // Sent by client for ping
-    Pong = 3,       // Sent by server for pong
-    Message = 4,    // Actual message
-    Upgrade = 5,    // Before engine.io switches transport
-    Noop = 6,       // Used for forcing packet flush
+    Open = 0,    // Sent from server immediately after connection
+    Close = 1,   // Request closing of transport
+    Ping = 2,    // Sent by client for ping
+    Pong = 3,    // Sent by server for pong
+    Message = 4, // Actual message
+    Upgrade = 5, // Before engine.io switches transport
+    Noop = 6,    // Used for forcing packet flush
 }
 
 impl EnginePacketType {
@@ -44,13 +43,13 @@ impl EnginePacketType {
 /// Socket.IO packet types (sent within Engine.IO MESSAGE packets)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SocketPacketType {
-    Connect = 0,         // Connect to namespace
-    Disconnect = 1,      // Disconnect from namespace
-    Event = 2,           // Event with data
-    Ack = 3,             // Acknowledgement
-    ConnectError = 4,    // Error during connection
-    BinaryEvent = 5,     // Event with binary data
-    BinaryAck = 6,       // Ack with binary data
+    Connect = 0,      // Connect to namespace
+    Disconnect = 1,   // Disconnect from namespace
+    Event = 2,        // Event with data
+    Ack = 3,          // Acknowledgement
+    ConnectError = 4, // Error during connection
+    BinaryEvent = 5,  // Event with binary data
+    BinaryAck = 6,    // Ack with binary data
 }
 
 impl SocketPacketType {
@@ -92,10 +91,7 @@ impl EnginePacket {
             "pingTimeout": ping_timeout,
             "maxPayload": 1_000_000,
         });
-        Self::new(
-            EnginePacketType::Open,
-            open_packet.to_string().into_bytes(),
-        )
+        Self::new(EnginePacketType::Open, open_packet.to_string().into_bytes())
     }
 
     pub fn message(data: Vec<u8>) -> Self {
@@ -198,7 +194,7 @@ impl SocketPacket {
             id: None,
         }
     }
-    
+
     /// Create a CONNECT request packet (client sends)
     /// In Socket.IO v5, client can send auth data in the CONNECT packet
     pub fn connect_request(namespace: &str, auth: Option<JsonValue>) -> Self {
@@ -253,26 +249,26 @@ impl SocketPacket {
     /// Encode Socket.IO packet to string
     pub fn encode(&self) -> String {
         let mut result = String::new();
-        
+
         // Packet type
         result.push_str(&self.packet_type.to_u8().to_string());
-        
+
         // Namespace (if not default)
         if self.namespace != "/" {
             result.push_str(&self.namespace);
             result.push(',');
         }
-        
+
         // Ack ID
         if let Some(id) = self.id {
             result.push_str(&id.to_string());
         }
-        
+
         // Data
         if let Some(ref data) = self.data {
             result.push_str(&data.to_string());
         }
-        
+
         result
     }
 
@@ -283,7 +279,7 @@ impl SocketPacket {
         }
 
         let mut chars = s.chars();
-        
+
         // Parse packet type
         let packet_type = chars
             .next()
@@ -318,7 +314,7 @@ impl SocketPacket {
         let data_start = remaining
             .find(|c: char| c == '[' || c == '{')
             .unwrap_or(remaining.len());
-        
+
         if data_start > 0 {
             let id_str = remaining[..data_start].trim();
             if !id_str.is_empty() {
@@ -348,7 +344,7 @@ impl SocketPacket {
 
         let data = self.data.as_ref()?;
         let arr = data.as_array()?;
-        
+
         if arr.len() < 2 {
             return None;
         }
@@ -377,16 +373,13 @@ mod tests {
 
     #[test]
     fn test_socket_packet_event() {
-        let packet = SocketPacket::event(
-            "/",
-            "chat-events",
-            serde_json::json!({"message": "hello"}),
-        );
+        let packet =
+            SocketPacket::event("/", "chat-events", serde_json::json!({"message": "hello"}));
         let encoded = packet.encode();
-        
+
         let decoded = SocketPacket::decode(&encoded).unwrap();
         assert_eq!(decoded.packet_type, SocketPacketType::Event);
-        
+
         let (event, data) = decoded.get_event().unwrap();
         assert_eq!(event, "chat-events");
         assert_eq!(data, serde_json::json!({"message": "hello"}));
@@ -394,16 +387,11 @@ mod tests {
 
     #[test]
     fn test_socket_packet_with_namespace() {
-        let packet = SocketPacket::event(
-            "/admin",
-            "test",
-            serde_json::json!({"data": 123}),
-        );
+        let packet = SocketPacket::event("/admin", "test", serde_json::json!({"data": 123}));
         let encoded = packet.encode();
         assert!(encoded.starts_with("2/admin,"));
-        
+
         let decoded = SocketPacket::decode(&encoded).unwrap();
         assert_eq!(decoded.namespace, "/admin");
     }
 }
-

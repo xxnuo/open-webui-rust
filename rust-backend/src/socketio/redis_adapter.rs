@@ -1,8 +1,7 @@
 /// Redis Adapter for Socket.IO
-/// 
+///
 /// Enables horizontal scaling by using Redis pub/sub to broadcast events
 /// across multiple server instances
-
 use futures_util::StreamExt;
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
@@ -53,7 +52,7 @@ impl RedisAdapter {
     #[allow(dead_code)]
     pub fn new(redis_url: &str, server_id: String) -> Result<Self, redis::RedisError> {
         let redis_client = redis::Client::open(redis_url)?;
-        
+
         Ok(Self {
             redis_client,
             server_id,
@@ -70,18 +69,15 @@ impl RedisAdapter {
     pub async fn publish(&self, message: RedisMessage) -> Result<(), Box<dyn std::error::Error>> {
         let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
         let serialized = serde_json::to_string(&message)?;
-        
+
         conn.publish::<_, _, ()>(&self.channel, serialized).await?;
         tracing::debug!("Published message to Redis: {:?}", message.message_type);
-        
+
         Ok(())
     }
 
     /// Subscribe to Redis channel and handle incoming messages
-    pub async fn subscribe<F>(
-        &self,
-        mut handler: F,
-    ) -> Result<(), Box<dyn std::error::Error>>
+    pub async fn subscribe<F>(&self, mut handler: F) -> Result<(), Box<dyn std::error::Error>>
     where
         F: FnMut(RedisMessage) + Send + 'static,
     {
@@ -94,7 +90,7 @@ impl RedisAdapter {
 
         while let Some(msg) = stream.next().await {
             let payload: String = msg.get_payload()?;
-            
+
             match serde_json::from_str::<RedisMessage>(&payload) {
                 Ok(redis_msg) => {
                     // Skip messages from this server
@@ -213,4 +209,3 @@ mod tests {
         assert_eq!(deserialized.server_id, "server-1");
     }
 }
-

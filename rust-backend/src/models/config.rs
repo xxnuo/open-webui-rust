@@ -15,4 +15,3 @@ pub struct ConfigData {
     #[serde(flatten)]
     pub data: serde_json::Value,
 }
-

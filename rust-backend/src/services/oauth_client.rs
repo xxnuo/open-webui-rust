@@ -48,8 +48,15 @@ impl OAuthClientManager {
     }
 
     /// Register a new OAuth client
-    pub async fn add_client(&self, client_id: String, client_info: OAuthClientInfo) -> AppResult<()> {
-        self.clients.write().await.insert(client_id.clone(), client_info);
+    pub async fn add_client(
+        &self,
+        client_id: String,
+        client_info: OAuthClientInfo,
+    ) -> AppResult<()> {
+        self.clients
+            .write()
+            .await
+            .insert(client_id.clone(), client_info);
         info!("Registered OAuth client: {}", client_id);
         Ok(())
     }
@@ -74,18 +81,21 @@ impl OAuthClientManager {
         force_refresh: bool,
     ) -> AppResult<Option<OAuthToken>> {
         let tokens = self.tokens.read().await;
-        
+
         if let Some(user_tokens) = tokens.get(user_id) {
             if let Some(token) = user_tokens.get(client_id) {
                 // Check if token is expired
                 if !force_refresh && !self.is_token_expired(token) {
                     return Ok(Some(token.clone()));
                 }
-                
+
                 // Try to refresh the token
                 if let Some(refresh_token) = token.refresh_token.clone() {
                     drop(tokens); // Release read lock before write
-                    return match self.refresh_access_token(user_id, client_id, &refresh_token).await {
+                    return match self
+                        .refresh_access_token(user_id, client_id, &refresh_token)
+                        .await
+                    {
                         Ok(new_token) => Ok(Some(new_token)),
                         Err(e) => {
                             warn!("Failed to refresh token: {}", e);
@@ -95,7 +105,7 @@ impl OAuthClientManager {
                 }
             }
         }
-        
+
         Ok(None)
     }
 
@@ -111,8 +121,11 @@ impl OAuthClientManager {
             .entry(user_id.to_string())
             .or_insert_with(HashMap::new)
             .insert(client_id.to_string(), token);
-        
-        debug!("Stored OAuth token for user {} and client {}", user_id, client_id);
+
+        debug!(
+            "Stored OAuth token for user {} and client {}",
+            user_id, client_id
+        );
         Ok(())
     }
 
@@ -149,12 +162,7 @@ impl OAuthClientManager {
             params.push(("client_secret", client_secret));
         }
 
-        let response = self
-            .client
-            .post(&token_url)
-            .form(&params)
-            .send()
-            .await?;
+        let response = self.client.post(&token_url).form(&params).send().await?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -166,12 +174,16 @@ impl OAuthClientManager {
         }
 
         let new_token: OAuthToken = response.json().await?;
-        
+
         // Store the new token
-        self.store_token(user_id, client_id, new_token.clone()).await?;
-        
-        info!("Refreshed OAuth token for user {} and client {}", user_id, client_id);
-        
+        self.store_token(user_id, client_id, new_token.clone())
+            .await?;
+
+        info!(
+            "Refreshed OAuth token for user {} and client {}",
+            user_id, client_id
+        );
+
         Ok(new_token)
     }
 
@@ -247,12 +259,7 @@ impl OAuthClientManager {
             params.push(("client_secret", client_secret.clone()));
         }
 
-        let response = self
-            .client
-            .post(&token_url)
-            .form(&params)
-            .send()
-            .await?;
+        let response = self.client.post(&token_url).form(&params).send().await?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -264,28 +271,34 @@ impl OAuthClientManager {
         }
 
         let token: OAuthToken = response.json().await?;
-        
+
         // Store the token
         self.store_token(user_id, client_id, token.clone()).await?;
-        
-        info!("Exchanged code for token for user {} and client {}", user_id, client_id);
-        
+
+        info!(
+            "Exchanged code for token for user {} and client {}",
+            user_id, client_id
+        );
+
         Ok(token)
     }
 
     /// Revoke OAuth token
     pub async fn revoke_token(&self, user_id: &str, client_id: &str) -> AppResult<()> {
         let mut tokens = self.tokens.write().await;
-        
+
         if let Some(user_tokens) = tokens.get_mut(user_id) {
             user_tokens.remove(client_id);
-            
+
             if user_tokens.is_empty() {
                 tokens.remove(user_id);
             }
         }
-        
-        info!("Revoked OAuth token for user {} and client {}", user_id, client_id);
+
+        info!(
+            "Revoked OAuth token for user {} and client {}",
+            user_id, client_id
+        );
         Ok(())
     }
 }
@@ -297,7 +310,7 @@ mod tests {
     #[tokio::test]
     async fn test_oauth_client_manager() {
         let manager = OAuthClientManager::new(None);
-        
+
         let client_info = OAuthClientInfo {
             client_id: "test-client".to_string(),
             client_secret: Some("secret".to_string()),
@@ -307,9 +320,12 @@ mod tests {
             token_url: Some("https://auth.example.com/token".to_string()),
             redirect_uri: Some("https://app.example.com/callback".to_string()),
         };
-        
-        manager.add_client("test-client".to_string(), client_info.clone()).await.unwrap();
-        
+
+        manager
+            .add_client("test-client".to_string(), client_info.clone())
+            .await
+            .unwrap();
+
         let retrieved = manager.get_client("test-client").await;
         assert!(retrieved.is_some());
         assert_eq!(retrieved.unwrap().client_id, "test-client");
@@ -318,7 +334,7 @@ mod tests {
     #[tokio::test]
     async fn test_token_storage() {
         let manager = OAuthClientManager::new(None);
-        
+
         let token = OAuthToken {
             access_token: "test-token".to_string(),
             token_type: "Bearer".to_string(),
@@ -326,12 +342,17 @@ mod tests {
             refresh_token: Some("refresh-token".to_string()),
             scope: Some("openid profile".to_string()),
         };
-        
-        manager.store_token("user1", "client1", token.clone()).await.unwrap();
-        
-        let retrieved = manager.get_oauth_token("user1", "client1", false).await.unwrap();
+
+        manager
+            .store_token("user1", "client1", token.clone())
+            .await
+            .unwrap();
+
+        let retrieved = manager
+            .get_oauth_token("user1", "client1", false)
+            .await
+            .unwrap();
         assert!(retrieved.is_some());
         assert_eq!(retrieved.unwrap().access_token, "test-token");
     }
 }
-

@@ -227,7 +227,7 @@ impl<'a> UserService<'a> {
         let result = sqlx::query("SELECT COUNT(*) as count FROM \"user\"")
             .fetch_one(&self.db.pool)
             .await?;
-        
+
         let count: i64 = result.try_get("count")?;
         Ok(count)
     }

@@ -2,8 +2,8 @@ use crate::db::Database;
 use crate::error::{AppError, AppResult};
 use crate::models::chat::{Chat, CreateChatRequest, UpdateChatRequest};
 use crate::utils::time::current_timestamp_seconds;
-use sqlx::Row;
 use sqlx::types::JsonValue;
+use sqlx::Row;
 use uuid::Uuid;
 
 pub struct ChatService<'a> {
@@ -43,9 +43,9 @@ impl<'a> ChatService<'a> {
         .execute(&self.db.pool)
         .await?;
 
-        self.get_chat_by_id(&id).await?.ok_or_else(|| {
-            AppError::InternalServerError("Failed to create chat".to_string())
-        })
+        self.get_chat_by_id(&id)
+            .await?
+            .ok_or_else(|| AppError::InternalServerError("Failed to create chat".to_string()))
     }
 
     pub async fn get_chat_by_id(&self, id: &str) -> AppResult<Option<Chat>> {
@@ -173,7 +173,7 @@ impl<'a> ChatService<'a> {
         limit: i64,
     ) -> AppResult<Vec<Chat>> {
         let search_pattern = format!("%{}%", search_text);
-        
+
         let query = if include_archived {
             sqlx::query_as::<_, Chat>(
                 r#"
@@ -246,14 +246,14 @@ impl<'a> ChatService<'a> {
 
         query_builder.build().execute(&self.db.pool).await?;
 
-        self.get_chat_by_id(id).await?.ok_or_else(|| {
-            AppError::NotFound("Chat not found after update".to_string())
-        })
+        self.get_chat_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Chat not found after update".to_string()))
     }
 
     pub async fn toggle_chat_pinned(&self, id: &str, user_id: &str) -> AppResult<Chat> {
         let now = current_timestamp_seconds();
-        
+
         sqlx::query(
             r#"
             UPDATE chat
@@ -268,14 +268,14 @@ impl<'a> ChatService<'a> {
         .execute(&self.db.pool)
         .await?;
 
-        self.get_chat_by_id(id).await?.ok_or_else(|| {
-            AppError::NotFound("Chat not found".to_string())
-        })
+        self.get_chat_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Chat not found".to_string()))
     }
 
     pub async fn toggle_chat_archived(&self, id: &str, user_id: &str) -> AppResult<Chat> {
         let now = current_timestamp_seconds();
-        
+
         sqlx::query(
             r#"
             UPDATE chat
@@ -290,9 +290,9 @@ impl<'a> ChatService<'a> {
         .execute(&self.db.pool)
         .await?;
 
-        self.get_chat_by_id(id).await?.ok_or_else(|| {
-            AppError::NotFound("Chat not found".to_string())
-        })
+        self.get_chat_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Chat not found".to_string()))
     }
 
     pub async fn archive_all_chats(&self, user_id: &str) -> AppResult<()> {
@@ -327,9 +327,10 @@ impl<'a> ChatService<'a> {
 
     pub async fn create_shared_chat(&self, chat_id: &str) -> AppResult<String> {
         // Get the original chat
-        let chat = self.get_chat_by_id(chat_id).await?.ok_or_else(|| {
-            AppError::NotFound("Chat not found".to_string())
-        })?;
+        let chat = self
+            .get_chat_by_id(chat_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Chat not found".to_string()))?;
 
         // Check if already shared
         if let Some(share_id) = &chat.share_id {
@@ -435,11 +436,7 @@ impl<'a> ChatService<'a> {
         Ok(())
     }
 
-    pub async fn delete_chats_by_folder_id(
-        &self,
-        folder_id: &str,
-        user_id: &str,
-    ) -> AppResult<()> {
+    pub async fn delete_chats_by_folder_id(&self, folder_id: &str, user_id: &str) -> AppResult<()> {
         sqlx::query(
             r#"
             DELETE FROM chat
@@ -478,21 +475,26 @@ impl<'a> ChatService<'a> {
         message: serde_json::Value,
     ) -> AppResult<()> {
         // Get existing chat
-        let chat = self.get_chat_by_id(chat_id).await?.ok_or_else(|| {
-            AppError::NotFound("Chat not found".to_string())
-        })?;
+        let chat = self
+            .get_chat_by_id(chat_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Chat not found".to_string()))?;
 
         let mut chat_json = chat.chat.clone();
 
         // Ensure structure: chat.history.messages.{message_id}
         if let Some(obj) = chat_json.as_object_mut() {
             // Get or create history
-            let history = obj.entry("history").or_insert_with(|| serde_json::json!({}));
-            
+            let history = obj
+                .entry("history")
+                .or_insert_with(|| serde_json::json!({}));
+
             if let Some(history_obj) = history.as_object_mut() {
                 // Get or create messages object
-                let messages = history_obj.entry("messages").or_insert_with(|| serde_json::json!({}));
-                
+                let messages = history_obj
+                    .entry("messages")
+                    .or_insert_with(|| serde_json::json!({}));
+
                 if let Some(messages_obj) = messages.as_object_mut() {
                     // Upsert message
                     if let Some(existing_msg) = messages_obj.get(message_id) {
@@ -504,14 +506,18 @@ impl<'a> ChatService<'a> {
                                     merged.insert(k.clone(), v.clone());
                                 }
                             }
-                            messages_obj.insert(message_id.to_string(), serde_json::Value::Object(merged));
+                            messages_obj
+                                .insert(message_id.to_string(), serde_json::Value::Object(merged));
                         }
                     } else {
                         messages_obj.insert(message_id.to_string(), message);
                     }
-                    
+
                     // Update currentId
-                    history_obj.insert("currentId".to_string(), serde_json::Value::String(message_id.to_string()));
+                    history_obj.insert(
+                        "currentId".to_string(),
+                        serde_json::Value::String(message_id.to_string()),
+                    );
                 }
             }
         }
@@ -591,7 +597,8 @@ impl<'a> ChatService<'a> {
         skip: i64,
         limit: i64,
     ) -> AppResult<Vec<serde_json::Value>> {
-        self.get_chat_title_id_list_by_user_id(user_id, skip, limit).await
+        self.get_chat_title_id_list_by_user_id(user_id, skip, limit)
+            .await
     }
 
     pub async fn search_chats_by_user_id(
@@ -602,7 +609,7 @@ impl<'a> ChatService<'a> {
         limit: i64,
     ) -> AppResult<Vec<serde_json::Value>> {
         let search_pattern = format!("%{}%", text);
-        
+
         let rows = sqlx::query(
             r#"
             SELECT id, title, updated_at, created_at, folder_id
@@ -810,12 +817,15 @@ impl<'a> ChatService<'a> {
     ) -> AppResult<Chat> {
         let new_id = Uuid::new_v4().to_string();
         let now = current_timestamp_seconds();
-        
+
         // Prepare cloned chat data
         let mut chat_data = source_chat.chat.clone();
         if let Some(obj) = chat_data.as_object_mut() {
-            obj.insert("originalChatId".to_string(), serde_json::Value::String(source_chat.id.clone()));
-            
+            obj.insert(
+                "originalChatId".to_string(),
+                serde_json::Value::String(source_chat.id.clone()),
+            );
+
             // Get branch point message ID
             if let Some(history) = obj.get("history").and_then(|h| h.as_object()) {
                 if let Some(current_id) = history.get("currentId") {
@@ -824,9 +834,7 @@ impl<'a> ChatService<'a> {
             }
         }
 
-        let new_title = title.unwrap_or_else(|| {
-            format!("Clone of {}", &source_chat.title)
-        });
+        let new_title = title.unwrap_or_else(|| format!("Clone of {}", &source_chat.title));
 
         sqlx::query(
             r#"
@@ -848,9 +856,9 @@ impl<'a> ChatService<'a> {
         .execute(&self.db.pool)
         .await?;
 
-        self.get_chat_by_id(&new_id).await?.ok_or_else(|| {
-            AppError::InternalServerError("Failed to clone chat".to_string())
-        })
+        self.get_chat_by_id(&new_id)
+            .await?
+            .ok_or_else(|| AppError::InternalServerError("Failed to clone chat".to_string()))
     }
 
     pub async fn update_chat_folder(
@@ -860,7 +868,7 @@ impl<'a> ChatService<'a> {
         folder_id: Option<String>,
     ) -> AppResult<Chat> {
         let now = current_timestamp_seconds();
-        
+
         sqlx::query(
             r#"
             UPDATE chat
@@ -875,9 +883,9 @@ impl<'a> ChatService<'a> {
         .execute(&self.db.pool)
         .await?;
 
-        self.get_chat_by_id_and_user_id(id, user_id).await?.ok_or_else(|| {
-            AppError::NotFound("Chat not found".to_string())
-        })
+        self.get_chat_by_id_and_user_id(id, user_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Chat not found".to_string()))
     }
 
     pub async fn update_chat_message(
@@ -888,18 +896,25 @@ impl<'a> ChatService<'a> {
         content: &str,
     ) -> AppResult<Chat> {
         // Get existing chat
-        let chat = self.get_chat_by_id_and_user_id(chat_id, user_id).await?.ok_or_else(|| {
-            AppError::NotFound("Chat not found".to_string())
-        })?;
+        let chat = self
+            .get_chat_by_id_and_user_id(chat_id, user_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Chat not found".to_string()))?;
 
         let mut chat_data = chat.chat.clone();
-        
+
         // Update message content in chat.history.messages.{message_id}.content
         if let Some(obj) = chat_data.as_object_mut() {
             if let Some(history) = obj.get_mut("history").and_then(|h| h.as_object_mut()) {
-                if let Some(messages) = history.get_mut("messages").and_then(|m| m.as_object_mut()) {
-                    if let Some(message) = messages.get_mut(message_id).and_then(|m| m.as_object_mut()) {
-                        message.insert("content".to_string(), serde_json::Value::String(content.to_string()));
+                if let Some(messages) = history.get_mut("messages").and_then(|m| m.as_object_mut())
+                {
+                    if let Some(message) =
+                        messages.get_mut(message_id).and_then(|m| m.as_object_mut())
+                    {
+                        message.insert(
+                            "content".to_string(),
+                            serde_json::Value::String(content.to_string()),
+                        );
                     }
                 }
             }
@@ -920,9 +935,9 @@ impl<'a> ChatService<'a> {
         .execute(&self.db.pool)
         .await?;
 
-        self.get_chat_by_id_and_user_id(chat_id, user_id).await?.ok_or_else(|| {
-            AppError::NotFound("Chat not found".to_string())
-        })
+        self.get_chat_by_id_and_user_id(chat_id, user_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Chat not found".to_string()))
     }
 
     pub async fn add_chat_tag(
@@ -931,24 +946,26 @@ impl<'a> ChatService<'a> {
         user_id: &str,
         tag_name: &str,
     ) -> AppResult<Chat> {
-        let chat = self.get_chat_by_id_and_user_id(chat_id, user_id).await?.ok_or_else(|| {
-            AppError::NotFound("Chat not found".to_string())
-        })?;
+        let chat = self
+            .get_chat_by_id_and_user_id(chat_id, user_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Chat not found".to_string()))?;
 
         let mut meta = chat.meta.unwrap_or_else(|| serde_json::json!({}));
-        
+
         // Get or create tags array
-        let tags_array = meta.get_mut("tags")
+        let tags_array = meta
+            .get_mut("tags")
             .and_then(|t| t.as_array_mut())
             .map(|arr| arr.clone())
             .unwrap_or_else(Vec::new);
 
         let tag_id = tag_name.replace(" ", "_").to_lowercase();
-        
+
         // Check if tag already exists
-        let tag_exists = tags_array.iter().any(|t| {
-            t.as_str().map(|s| s == tag_id).unwrap_or(false)
-        });
+        let tag_exists = tags_array
+            .iter()
+            .any(|t| t.as_str().map(|s| s == tag_id).unwrap_or(false));
 
         if !tag_exists {
             let mut new_tags = tags_array;
@@ -971,9 +988,9 @@ impl<'a> ChatService<'a> {
         .execute(&self.db.pool)
         .await?;
 
-        self.get_chat_by_id_and_user_id(chat_id, user_id).await?.ok_or_else(|| {
-            AppError::NotFound("Chat not found".to_string())
-        })
+        self.get_chat_by_id_and_user_id(chat_id, user_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Chat not found".to_string()))
     }
 
     pub async fn delete_chat_tag(
@@ -982,17 +999,16 @@ impl<'a> ChatService<'a> {
         user_id: &str,
         tag_name: &str,
     ) -> AppResult<Chat> {
-        let chat = self.get_chat_by_id_and_user_id(chat_id, user_id).await?.ok_or_else(|| {
-            AppError::NotFound("Chat not found".to_string())
-        })?;
+        let chat = self
+            .get_chat_by_id_and_user_id(chat_id, user_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Chat not found".to_string()))?;
 
         let mut meta = chat.meta.unwrap_or_else(|| serde_json::json!({}));
-        
+
         if let Some(tags) = meta.get_mut("tags").and_then(|t| t.as_array_mut()) {
             let tag_id = tag_name.replace(" ", "_").to_lowercase();
-            tags.retain(|t| {
-                t.as_str().map(|s| s != tag_id).unwrap_or(true)
-            });
+            tags.retain(|t| t.as_str().map(|s| s != tag_id).unwrap_or(true));
         }
 
         let now = current_timestamp_seconds();
@@ -1010,19 +1026,16 @@ impl<'a> ChatService<'a> {
         .execute(&self.db.pool)
         .await?;
 
-        self.get_chat_by_id_and_user_id(chat_id, user_id).await?.ok_or_else(|| {
-            AppError::NotFound("Chat not found".to_string())
-        })
+        self.get_chat_by_id_and_user_id(chat_id, user_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Chat not found".to_string()))
     }
 
-    pub async fn delete_all_chat_tags(
-        &self,
-        chat_id: &str,
-        user_id: &str,
-    ) -> AppResult<()> {
-        let chat = self.get_chat_by_id_and_user_id(chat_id, user_id).await?.ok_or_else(|| {
-            AppError::NotFound("Chat not found".to_string())
-        })?;
+    pub async fn delete_all_chat_tags(&self, chat_id: &str, user_id: &str) -> AppResult<()> {
+        let chat = self
+            .get_chat_by_id_and_user_id(chat_id, user_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Chat not found".to_string()))?;
 
         let mut meta = chat.meta.unwrap_or_else(|| serde_json::json!({}));
         meta["tags"] = serde_json::Value::Array(vec![]);

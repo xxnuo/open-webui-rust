@@ -22,7 +22,9 @@ impl<'a> MemoryService<'a> {
         meta: Option<serde_json::Value>,
     ) -> AppResult<Memory> {
         let now = current_timestamp_seconds();
-        let meta_str = meta.as_ref().map(|v| serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string()));
+        let meta_str = meta
+            .as_ref()
+            .map(|v| serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string()));
 
         sqlx::query(
             r#"
@@ -39,9 +41,9 @@ impl<'a> MemoryService<'a> {
         .execute(&self.db.pool)
         .await?;
 
-        self.get_memory_by_id(id).await?.ok_or_else(|| {
-            AppError::InternalServerError("Failed to create memory".to_string())
-        })
+        self.get_memory_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::InternalServerError("Failed to create memory".to_string()))
     }
 
     pub async fn get_memory_by_id(&self, id: &str) -> AppResult<Option<Memory>> {
@@ -119,9 +121,9 @@ impl<'a> MemoryService<'a> {
 
         query.execute(&self.db.pool).await?;
 
-        self.get_memory_by_id(id).await?.ok_or_else(|| {
-            AppError::NotFound("Memory not found".to_string())
-        })
+        self.get_memory_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Memory not found".to_string()))
     }
 
     pub async fn delete_memory(&self, id: &str) -> AppResult<()> {
@@ -149,7 +151,7 @@ impl<'a> MemoryService<'a> {
         limit: i64,
     ) -> AppResult<Vec<Memory>> {
         let search_pattern = format!("%{}%", query);
-        
+
         let memories = sqlx::query_as::<_, Memory>(
             r#"
             SELECT id, user_id, content, meta, created_at, updated_at
@@ -168,4 +170,3 @@ impl<'a> MemoryService<'a> {
         Ok(memories)
     }
 }
-

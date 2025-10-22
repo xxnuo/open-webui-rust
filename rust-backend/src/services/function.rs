@@ -47,9 +47,9 @@ impl<'a> FunctionService<'a> {
         .execute(&self.db.pool)
         .await?;
 
-        self.get_function_by_id(id).await?.ok_or_else(|| {
-            AppError::InternalServerError("Failed to create function".to_string())
-        })
+        self.get_function_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::InternalServerError("Failed to create function".to_string()))
     }
 
     pub async fn get_function_by_id(&self, id: &str) -> AppResult<Option<Function>> {
@@ -128,17 +128,49 @@ impl<'a> FunctionService<'a> {
         let mut set_clauses = vec!["updated_at = $1"];
         let mut param_count = 2;
 
-        let name_param = name.map(|_| { let p = param_count; param_count += 1; format!("name = ${}", p) });
-        let type_param = type_.map(|_| { let p = param_count; param_count += 1; format!("type = ${}", p) });
-        let content_param = content.map(|_| { let p = param_count; param_count += 1; format!("content = ${}", p) });
-        let meta_param = meta.as_ref().map(|_| { let p = param_count; param_count += 1; format!("meta = ${}", p) });
-        let is_active_param = { let p = param_count; param_count += 1; format!("is_active = ${}", p) };
-        let is_global_param = { let p = param_count; param_count += 1; format!("is_global = ${}", p) };
+        let name_param = name.map(|_| {
+            let p = param_count;
+            param_count += 1;
+            format!("name = ${}", p)
+        });
+        let type_param = type_.map(|_| {
+            let p = param_count;
+            param_count += 1;
+            format!("type = ${}", p)
+        });
+        let content_param = content.map(|_| {
+            let p = param_count;
+            param_count += 1;
+            format!("content = ${}", p)
+        });
+        let meta_param = meta.as_ref().map(|_| {
+            let p = param_count;
+            param_count += 1;
+            format!("meta = ${}", p)
+        });
+        let is_active_param = {
+            let p = param_count;
+            param_count += 1;
+            format!("is_active = ${}", p)
+        };
+        let is_global_param = {
+            let p = param_count;
+            param_count += 1;
+            format!("is_global = ${}", p)
+        };
 
-        if let Some(ref clause) = name_param { set_clauses.push(clause); }
-        if let Some(ref clause) = type_param { set_clauses.push(clause); }
-        if let Some(ref clause) = content_param { set_clauses.push(clause); }
-        if let Some(ref clause) = meta_param { set_clauses.push(clause); }
+        if let Some(ref clause) = name_param {
+            set_clauses.push(clause);
+        }
+        if let Some(ref clause) = type_param {
+            set_clauses.push(clause);
+        }
+        if let Some(ref clause) = content_param {
+            set_clauses.push(clause);
+        }
+        if let Some(ref clause) = meta_param {
+            set_clauses.push(clause);
+        }
         set_clauses.push(&is_active_param);
         set_clauses.push(&is_global_param);
 
@@ -150,19 +182,27 @@ impl<'a> FunctionService<'a> {
 
         let mut query = sqlx::query(&query_str);
         query = query.bind(now);
-        if let Some(n) = name { query = query.bind(n); }
-        if let Some(t) = type_ { query = query.bind(t); }
-        if let Some(c) = content { query = query.bind(c); }
-        if let Some(m) = meta { query = query.bind(serde_json::to_string(&m).unwrap()); }
+        if let Some(n) = name {
+            query = query.bind(n);
+        }
+        if let Some(t) = type_ {
+            query = query.bind(t);
+        }
+        if let Some(c) = content {
+            query = query.bind(c);
+        }
+        if let Some(m) = meta {
+            query = query.bind(serde_json::to_string(&m).unwrap());
+        }
         query = query.bind(is_active);
         query = query.bind(is_global);
         query = query.bind(id);
 
         query.execute(&self.db.pool).await?;
 
-        self.get_function_by_id(id).await?.ok_or_else(|| {
-            AppError::NotFound("Function not found".to_string())
-        })
+        self.get_function_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Function not found".to_string()))
     }
 
     pub async fn update_function_valves(
@@ -171,7 +211,7 @@ impl<'a> FunctionService<'a> {
         valves: serde_json::Value,
     ) -> AppResult<()> {
         let valves_str = serde_json::to_string(&valves).unwrap_or_else(|_| "{}".to_string());
-        
+
         sqlx::query(
             r#"
             UPDATE function
@@ -200,9 +240,9 @@ impl<'a> FunctionService<'a> {
         .execute(&self.db.pool)
         .await?;
 
-        self.get_function_by_id(id).await?.ok_or_else(|| {
-            AppError::NotFound("Function not found".to_string())
-        })
+        self.get_function_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Function not found".to_string()))
     }
 
     pub async fn delete_function(&self, id: &str) -> AppResult<()> {
@@ -223,4 +263,3 @@ impl<'a> FunctionService<'a> {
         Ok(())
     }
 }
-

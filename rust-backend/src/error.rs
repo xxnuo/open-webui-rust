@@ -1,4 +1,8 @@
-use actix_web::{cookie::{Cookie, SameSite}, http::{StatusCode, header}, HttpResponse, ResponseError};
+use actix_web::{
+    cookie::{Cookie, SameSite},
+    http::{header, StatusCode},
+    HttpResponse, ResponseError,
+};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -109,9 +113,7 @@ impl ResponseError for AppError {
                 tracing::error!("IO error: {:?}", e);
                 (StatusCode::INTERNAL_SERVER_ERROR, "IO error".to_string())
             }
-            AppError::NotImplemented(ref e) => {
-                (StatusCode::NOT_IMPLEMENTED, e.clone())
-            }
+            AppError::NotImplemented(ref e) => (StatusCode::NOT_IMPLEMENTED, e.clone()),
             AppError::ExternalServiceError(ref e) => {
                 tracing::error!("External service error: {:?}", e);
                 (StatusCode::BAD_GATEWAY, e.clone())
@@ -126,7 +128,10 @@ impl ResponseError for AppError {
             }
             AppError::RedisPool(ref e) => {
                 tracing::error!("Redis pool error: {:?}", e);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Redis pool error".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Redis pool error".to_string(),
+                )
             }
             AppError::Timeout(ref e) => {
                 tracing::error!("Request timeout: {:?}", e);
@@ -144,21 +149,30 @@ impl ResponseError for AppError {
         response_builder
             .insert_header((header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"))
             .insert_header((header::ACCESS_CONTROL_ALLOW_CREDENTIALS, "true"))
-            .insert_header((header::ACCESS_CONTROL_ALLOW_METHODS, "GET, POST, PUT, DELETE, PATCH, OPTIONS"))
-            .insert_header((header::ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Authorization, Accept, Cookie"))
+            .insert_header((
+                header::ACCESS_CONTROL_ALLOW_METHODS,
+                "GET, POST, PUT, DELETE, PATCH, OPTIONS",
+            ))
+            .insert_header((
+                header::ACCESS_CONTROL_ALLOW_HEADERS,
+                "Content-Type, Authorization, Accept, Cookie",
+            ))
             .insert_header((header::ACCESS_CONTROL_EXPOSE_HEADERS, "Set-Cookie"));
 
         // Clear auth cookies on authentication errors (matching Python backend behavior)
         if matches!(
             self,
-            AppError::Auth(_) | AppError::Unauthorized(_) | AppError::Jwt(_) | AppError::InvalidCredentials
+            AppError::Auth(_)
+                | AppError::Unauthorized(_)
+                | AppError::Jwt(_)
+                | AppError::InvalidCredentials
         ) {
             let mut token_cookie = Cookie::new("token", "");
             token_cookie.set_http_only(true);
             token_cookie.set_same_site(SameSite::Lax);
             token_cookie.set_path("/");
             token_cookie.set_max_age(time::Duration::seconds(-1));
-            
+
             response_builder.insert_header((header::SET_COOKIE, token_cookie.to_string()));
         }
 

@@ -15,9 +15,14 @@ pub async fn has_access(
     access_control: Option<&JsonValue>,
     strict: bool,
 ) -> AppResult<bool> {
-    tracing::debug!("has_access: user_id={}, access_type={}, strict={}", user_id, access_type, strict);
+    tracing::debug!(
+        "has_access: user_id={}, access_type={}, strict={}",
+        user_id,
+        access_type,
+        strict
+    );
     tracing::debug!("  access_control: {:?}", access_control);
-    
+
     // If no access control is set
     if access_control.is_none() {
         if strict {
@@ -39,7 +44,12 @@ pub async fn has_access(
     let user_groups = group_service.get_groups_by_member_id(user_id).await?;
     tracing::debug!("  User groups: {} groups found", user_groups.len());
     for group in &user_groups {
-        tracing::debug!("    - Group '{}' (id={}), user_ids={:?}", group.name, group.id, group.user_ids);
+        tracing::debug!(
+            "    - Group '{}' (id={}), user_ids={:?}",
+            group.name,
+            group.id,
+            group.user_ids
+        );
     }
     let user_group_ids: HashSet<String> = user_groups.iter().map(|g| g.id.clone()).collect();
     tracing::debug!("  User group IDs: {:?}", user_group_ids);
@@ -48,8 +58,14 @@ pub async fn has_access(
     // If the access_type key doesn't exist, treat it as an empty permission object
     // This matches Python backend behavior: access_control.get(type, {})
     let empty_permissions = serde_json::json!({});
-    let permission_access = access_control.get(access_type).unwrap_or(&empty_permissions);
-    tracing::debug!("  Permission access for '{}': {:?}", access_type, permission_access);
+    let permission_access = access_control
+        .get(access_type)
+        .unwrap_or(&empty_permissions);
+    tracing::debug!(
+        "  Permission access for '{}': {:?}",
+        access_type,
+        permission_access
+    );
 
     // Get permitted group IDs and user IDs
     let permitted_group_ids: Vec<String> = permission_access
@@ -84,7 +100,10 @@ pub async fn has_access(
     // Check if any of user's group IDs are in permitted group IDs
     for group_id in permitted_group_ids {
         if user_group_ids.contains(&group_id) {
-            tracing::info!("  ✓ User's group '{}' found in permitted_group_ids -> granting access", group_id);
+            tracing::info!(
+                "  ✓ User's group '{}' found in permitted_group_ids -> granting access",
+                group_id
+            );
             return Ok(true);
         }
     }
@@ -199,7 +218,6 @@ pub async fn get_users_with_access(
             users.push(user);
         }
     }
-    
+
     Ok(users)
 }
-
