@@ -81,7 +81,8 @@ impl<'a> ChannelService<'a> {
     }
 
     pub async fn get_channels_by_user_id(&self, user_id: &str) -> AppResult<Vec<Channel>> {
-        let mut channels = sqlx::query_as::<_, Channel>(
+        // Get all channels first
+        let mut all_channels = sqlx::query_as::<_, Channel>(
             r#"
             SELECT id, name, description, user_id, type as channel_type,
                    CAST(data AS TEXT) as data_str,
@@ -89,21 +90,45 @@ impl<'a> ChannelService<'a> {
                    CAST(access_control AS TEXT) as access_control_str,
                    created_at, updated_at
             FROM channel
-            WHERE user_id = $1
             ORDER BY updated_at DESC
             "#,
         )
-        .bind(user_id)
         .fetch_all(&self.db.pool)
         .await?;
 
-        for channel in &mut channels {
+        for channel in &mut all_channels {
             channel.parse_data();
             channel.parse_meta();
             channel.parse_access_control();
         }
 
-        Ok(channels)
+        // Filter channels based on ownership or access control
+        let mut accessible_channels = Vec::new();
+        for channel in all_channels {
+            // Owner always has access
+            if channel.user_id == user_id {
+                accessible_channels.push(channel);
+                continue;
+            }
+
+            // Check access control permissions for "read" access
+            // If access_control is None, the channel is public (readable by all)
+            let has_read_access = crate::utils::access_control::has_access(
+                self.db,
+                user_id,
+                "read",
+                channel.access_control.as_ref(),
+                true, // strict mode - if no access_control, read is allowed per Python logic
+            )
+            .await
+            .unwrap_or(false);
+
+            if has_read_access {
+                accessible_channels.push(channel);
+            }
+        }
+
+        Ok(accessible_channels)
     }
 
     pub async fn get_all_channels(&self) -> AppResult<Vec<Channel>> {
