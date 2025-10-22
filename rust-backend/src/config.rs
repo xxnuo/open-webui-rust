@@ -8,6 +8,7 @@ pub struct Config {
     // Server
     pub host: String,
     pub port: u16,
+    pub enable_random_port: bool,
     pub env: String,
     pub webui_secret_key: String,
 
@@ -259,13 +260,28 @@ impl Config {
         let config_dir =
             env::var("CONFIG_DIR").unwrap_or_else(|_| "~/.config/open-webui-lite".to_string());
 
+        // Check if random port is enabled
+        let enable_random_port = env::var("ENABLE_RANDOM_PORT")
+            .unwrap_or_else(|_| "false".to_string())
+            .to_lowercase()
+            .parse()
+            .unwrap_or(false);
+
+        // If random port is enabled, use 0 (OS will assign a random available port)
+        let port = if enable_random_port {
+            0
+        } else {
+            env::var("PORT")
+                .unwrap_or_else(|_| "8080".to_string())
+                .parse()
+                .unwrap_or(8080)
+        };
+
         Ok(Config {
             // Server
             host: env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
-            port: env::var("PORT")
-                .unwrap_or_else(|_| "8080".to_string())
-                .parse()
-                .unwrap_or(8080),
+            port,
+            enable_random_port,
             env: env::var("ENV").unwrap_or_else(|_| "production".to_string()),
             webui_secret_key: env::var("WEBUI_SECRET_KEY").unwrap_or_else(|_| {
                 let key = uuid::Uuid::new_v4().to_string();

@@ -139,6 +139,7 @@ async fn main() -> anyhow::Result<()> {
     // Start server
     let addr = SocketAddr::from((config.host.parse::<std::net::IpAddr>()?, config.port));
     let cors_allow_origin = config.cors_allow_origin.clone();
+    let enable_random_port = config.enable_random_port;
     
     // Check if static directory exists
     let static_dir = config.static_dir.clone();
@@ -150,9 +151,13 @@ async fn main() -> anyhow::Result<()> {
         info!("📁 External static directory not found ({}), using embedded static files", static_dir);
     }
 
-    info!("🚀 Server running at http://{}", addr);
+    if enable_random_port {
+        info!("🚀 Starting server with random port on host: {}", config.host);
+    } else {
+        info!("🚀 Server running at http://{}", addr);
+    }
 
-    HttpServer::new(move || {
+    let server = HttpServer::new(move || {
         // Create CORS middleware
         // NOTE: When credentials are needed (cookies/auth), we cannot use allow_any_origin()
         // Instead, we need to allow specific origins or use allowed_origin_fn to dynamically allow
@@ -282,10 +287,19 @@ async fn main() -> anyhow::Result<()> {
         std::time::Duration::from_secs(75),
     ))
     // CRITICAL: Set client timeout high for long-running streams
-    .client_request_timeout(std::time::Duration::from_secs(300))
-    .bind(addr)?
-    .run()
-    .await?;
+    .client_request_timeout(std::time::Duration::from_secs(300));
+
+    let server = server.bind(addr)?;
+    
+    // If random port is enabled, get the actual assigned port
+    if enable_random_port {
+        let addrs = server.addrs();
+        let actual_addr = addrs.first()
+            .ok_or_else(|| anyhow::anyhow!("Failed to get server address"))?;
+        info!("🚀 Server running at http://{}", actual_addr);
+    }
+    
+    server.run().await?;
 
     Ok(())
 }
