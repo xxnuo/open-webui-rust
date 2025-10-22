@@ -27,11 +27,11 @@ impl<'a> GroupService<'a> {
             .flatten();
 
         // Initialize all JSONB fields with proper defaults to match Python backend behavior
-        // Python GroupModel defaults: user_ids=[], data=None, meta=None
+        // Python GroupModel defaults: user_ids=[], meta=None
         sqlx::query(
             r#"
-            INSERT INTO "group" (id, user_id, name, description, data, meta, permissions, user_ids, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, NULL, NULL, $5::jsonb, '[]'::jsonb, $6, $7)
+            INSERT INTO "group" (id, user_id, name, description, meta, permissions, user_ids, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, NULL, $5::jsonb, '[]'::jsonb, $6, $7)
             "#,
         )
         .bind(&id)
@@ -50,10 +50,10 @@ impl<'a> GroupService<'a> {
     }
 
     pub async fn get_group_by_id(&self, id: &str) -> AppResult<Option<Group>> {
-        let result = sqlx::query_as::<_, Group>(
+        let mut result = sqlx::query_as::<_, Group>(
             r#"
             SELECT id, user_id, name, description,
-                   CAST(data AS TEXT) as data_str,
+                   NULL as data_str,
                    CAST(meta AS TEXT) as meta_str,
                    CAST(permissions AS TEXT) as permissions_str,
                    COALESCE(CAST(user_ids AS TEXT), '[]') as user_ids_str,
@@ -66,14 +66,19 @@ impl<'a> GroupService<'a> {
         .fetch_optional(&self.db.pool)
         .await?;
 
+        // Parse JSON fields if group exists
+        if let Some(ref mut group) = result {
+            group.parse_json_fields();
+        }
+
         Ok(result)
     }
 
     pub async fn get_all_groups(&self) -> AppResult<Vec<Group>> {
-        let groups = sqlx::query_as::<_, Group>(
+        let mut groups = sqlx::query_as::<_, Group>(
             r#"
             SELECT id, user_id, name, description,
-                   CAST(data AS TEXT) as data_str,
+                   NULL as data_str,
                    CAST(meta AS TEXT) as meta_str,
                    CAST(permissions AS TEXT) as permissions_str,
                    COALESCE(CAST(user_ids AS TEXT), '[]') as user_ids_str,
@@ -85,14 +90,45 @@ impl<'a> GroupService<'a> {
         .fetch_all(&self.db.pool)
         .await?;
 
+        // Parse JSON fields for each group
+        for group in &mut groups {
+            group.parse_json_fields();
+        }
+
         Ok(groups)
     }
 
     pub async fn get_groups_by_member_id(&self, user_id: &str) -> AppResult<Vec<Group>> {
-        let groups = sqlx::query_as::<_, Group>(
+        let search_pattern = format!("%\"{}\"%", user_id);
+        tracing::info!("get_groups_by_member_id: user_id={}, search_pattern={}", user_id, search_pattern);
+        
+        // First, let's see ALL groups in the database
+        let all_groups = sqlx::query_as::<_, Group>(
             r#"
             SELECT id, user_id, name, description,
-                   CAST(data AS TEXT) as data_str,
+                   NULL as data_str,
+                   CAST(meta AS TEXT) as meta_str,
+                   CAST(permissions AS TEXT) as permissions_str,
+                   COALESCE(CAST(user_ids AS TEXT), '[]') as user_ids_str,
+                   created_at, updated_at
+            FROM "group"
+            ORDER BY updated_at DESC
+            "#,
+        )
+        .fetch_all(&self.db.pool)
+        .await?;
+        
+        tracing::info!("  Total groups in database: {}", all_groups.len());
+        for group in &all_groups {
+            tracing::debug!("    Group '{}' (id={}): user_ids_str={}", group.name, group.id, 
+                group.user_ids_str.as_ref().unwrap_or(&"NULL".to_string()));
+        }
+        
+        // Now execute the filtered query
+        let mut groups = sqlx::query_as::<_, Group>(
+            r#"
+            SELECT id, user_id, name, description,
+                   NULL as data_str,
                    CAST(meta AS TEXT) as meta_str,
                    CAST(permissions AS TEXT) as permissions_str,
                    COALESCE(CAST(user_ids AS TEXT), '[]') as user_ids_str,
@@ -104,9 +140,18 @@ impl<'a> GroupService<'a> {
             ORDER BY updated_at DESC
             "#,
         )
-        .bind(format!("%\"{}\"", user_id))
+        .bind(&search_pattern)
         .fetch_all(&self.db.pool)
         .await?;
+
+        tracing::info!("  Groups matching pattern '{}': {}", search_pattern, groups.len());
+
+        // Parse JSON fields for each group
+        for group in &mut groups {
+            tracing::debug!("  Before parse - Group '{}': user_ids_str={:?}", group.name, group.user_ids_str);
+            group.parse_json_fields();
+            tracing::debug!("  After parse - Group '{}': user_ids={:?}", group.name, group.user_ids);
+        }
 
         Ok(groups)
     }

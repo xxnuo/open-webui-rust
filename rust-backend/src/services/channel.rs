@@ -96,6 +96,8 @@ impl<'a> ChannelService<'a> {
         .fetch_all(&self.db.pool)
         .await?;
 
+        tracing::info!("get_channels_by_user_id: Found {} total channels for user_id={}", all_channels.len(), user_id);
+
         for channel in &mut all_channels {
             channel.parse_data();
             channel.parse_meta();
@@ -105,8 +107,15 @@ impl<'a> ChannelService<'a> {
         // Filter channels based on ownership or access control
         let mut accessible_channels = Vec::new();
         for channel in all_channels {
+            tracing::info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            tracing::info!("Checking access for channel '{}' (id={})", channel.name, channel.id);
+            tracing::info!("  Channel owner: {}", channel.user_id);
+            tracing::info!("  Current user: {}", user_id);
+            tracing::info!("  Access control: {:?}", channel.access_control);
+            
             // Owner always has access
             if channel.user_id == user_id {
+                tracing::info!("  ✓ User is owner - granting access to channel '{}'", channel.name);
                 accessible_channels.push(channel);
                 continue;
             }
@@ -123,11 +132,17 @@ impl<'a> ChannelService<'a> {
             .await
             .unwrap_or(false);
 
+            tracing::debug!("  has_read_access result: {}", has_read_access);
+
             if has_read_access {
+                tracing::info!("  ✓ User has read access - granting access to channel '{}'", channel.name);
                 accessible_channels.push(channel);
+            } else {
+                tracing::warn!("  ✗ User does NOT have access to channel '{}'", channel.name);
             }
         }
 
+        tracing::info!("get_channels_by_user_id: Returning {} accessible channels for user {}", accessible_channels.len(), user_id);
         Ok(accessible_channels)
     }
 
