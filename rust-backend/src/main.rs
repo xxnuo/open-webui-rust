@@ -507,6 +507,11 @@ fn configure_socketio_routes(cfg: &mut web::ServiceConfig) {
         // Without trailing slash (after normalization)
         .route("/socket.io", web::get().to(socketio_connection_get))
         .route("/socket.io", web::post().to(socketio_connection_post))
+        // Alternative path with /ws prefix (for compatibility)
+        .route("/ws/socket.io/", web::get().to(socketio_connection_get))
+        .route("/ws/socket.io/", web::post().to(socketio_connection_post))
+        .route("/ws/socket.io", web::get().to(socketio_connection_get))
+        .route("/ws/socket.io", web::post().to(socketio_connection_post))
         // Other endpoints
         .route("/api/socketio/emit", web::post().to(socketio_native_emit))
         .route("/api/socketio/health", web::get().to(socketio_health))
