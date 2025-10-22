@@ -1,19 +1,18 @@
 /// Socket.IO Event Handlers
-/// 
+///
 /// Handles all Socket.IO events including:
 /// - Authentication (user-join)
 /// - Chat events (chat-events)
 /// - Channel events (channel-events)
 /// - Yjs collaborative editing (ydoc:*)
 /// - Usage tracking
-
 use crate::socketio::manager::SocketIOManager;
 use crate::socketio::protocol::{EnginePacket, SocketPacket};
 use actix_web::web;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
-use std::sync::Arc;
 use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Connection registry - maps session IDs to their websocket senders
@@ -56,13 +55,20 @@ impl EventHandler {
     }
 
     /// Emit event to a specific session
-    pub async fn emit_to_session(&self, sid: &str, event: &str, data: JsonValue) -> Result<(), String> {
+    pub async fn emit_to_session(
+        &self,
+        sid: &str,
+        event: &str,
+        data: JsonValue,
+    ) -> Result<(), String> {
         let connections = self.connections.read().await;
         if let Some(sender) = connections.get(sid) {
             let socket_packet = SocketPacket::event("/", event, data);
             let engine_packet = EnginePacket::message(socket_packet.encode().into_bytes());
-            
-            sender.send(engine_packet.encode()).map_err(|e| e.to_string())?;
+
+            sender
+                .send(engine_packet.encode())
+                .map_err(|e| e.to_string())?;
             Ok(())
         } else {
             Err(format!("Session not found: {}", sid))
@@ -70,12 +76,21 @@ impl EventHandler {
     }
 
     /// Emit event to all sessions of a user
-    pub async fn emit_to_user(&self, user_id: &str, event: &str, data: JsonValue) -> Result<usize, String> {
+    pub async fn emit_to_user(
+        &self,
+        user_id: &str,
+        event: &str,
+        data: JsonValue,
+    ) -> Result<usize, String> {
         let sids = self.manager.get_user_sessions(user_id).await;
         let mut sent = 0;
 
         for sid in sids {
-            if self.emit_to_session(&sid, event, data.clone()).await.is_ok() {
+            if self
+                .emit_to_session(&sid, event, data.clone())
+                .await
+                .is_ok()
+            {
                 sent += 1;
             }
         }
@@ -99,7 +114,11 @@ impl EventHandler {
                 continue;
             }
 
-            if self.emit_to_session(&sid, event, data.clone()).await.is_ok() {
+            if self
+                .emit_to_session(&sid, event, data.clone())
+                .await
+                .is_ok()
+            {
                 sent += 1;
             }
         }
@@ -114,16 +133,16 @@ impl EventHandler {
         data: JsonValue,
         http_client: &reqwest::Client,
     ) -> Result<JsonValue, String> {
-        let auth = data.get("auth")
-            .ok_or("Missing auth data")?;
-        
-        let token = auth.get("token")
+        let auth = data.get("auth").ok_or("Missing auth data")?;
+
+        let token = auth
+            .get("token")
             .and_then(|t| t.as_str())
             .ok_or("Missing token")?;
 
         // Authenticate with backend
         let auth_url = format!("{}/api/socketio/auth", self.auth_endpoint);
-        
+
         let response = http_client
             .post(&auth_url)
             .json(&serde_json::json!({"token": token}))
@@ -132,7 +151,8 @@ impl EventHandler {
             .map_err(|e| format!("Auth request failed: {}", e))?;
 
         if response.status().is_success() {
-            let user: JsonValue = response.json()
+            let user: JsonValue = response
+                .json()
                 .await
                 .map_err(|e| format!("Failed to parse user data: {}", e))?;
 
@@ -141,7 +161,9 @@ impl EventHandler {
 
             tracing::info!(
                 "User {} authenticated on session {}",
-                user.get("email").and_then(|e| e.as_str()).unwrap_or("unknown"),
+                user.get("email")
+                    .and_then(|e| e.as_str())
+                    .unwrap_or("unknown"),
                 sid
             );
 
@@ -171,16 +193,20 @@ impl EventHandler {
 
     /// Handle channel events (broadcast to channel room)
     pub async fn handle_channel_event(&self, sid: &str, data: JsonValue) -> Result<(), String> {
-        let channel_id = data.get("channel_id")
+        let channel_id = data
+            .get("channel_id")
             .and_then(|c| c.as_str())
             .ok_or("Missing channel_id")?;
 
         let room = format!("channel:{}", channel_id);
 
         // Get session user
-        let session = self.manager.get_session(sid).await
+        let session = self
+            .manager
+            .get_session(sid)
+            .await
             .ok_or("Session not found")?;
-        
+
         let user = session.user.clone().unwrap_or(serde_json::json!({}));
 
         // Broadcast to room (excluding sender)
@@ -191,7 +217,8 @@ impl EventHandler {
             "user": user,
         });
 
-        self.broadcast_to_room(&room, "channel-events", broadcast_data, Some(sid)).await?;
+        self.broadcast_to_room(&room, "channel-events", broadcast_data, Some(sid))
+            .await?;
         tracing::debug!("Broadcasted channel event to room: {}", room);
 
         Ok(())
@@ -199,7 +226,8 @@ impl EventHandler {
 
     /// Handle channel join (user joins a channel room)
     pub async fn handle_channel_join(&self, sid: &str, data: JsonValue) -> Result<(), String> {
-        let channel_id = data.get("channel_id")
+        let channel_id = data
+            .get("channel_id")
             .and_then(|c| c.as_str())
             .ok_or("Missing channel_id")?;
 
@@ -212,7 +240,8 @@ impl EventHandler {
 
     /// Handle channel leave (user leaves a channel room)
     pub async fn handle_channel_leave(&self, sid: &str, data: JsonValue) -> Result<(), String> {
-        let channel_id = data.get("channel_id")
+        let channel_id = data
+            .get("channel_id")
             .and_then(|c| c.as_str())
             .ok_or("Missing channel_id")?;
 
@@ -225,7 +254,8 @@ impl EventHandler {
 
     /// Handle Yjs document join
     pub async fn handle_ydoc_join(&self, sid: &str, data: JsonValue) -> Result<(), String> {
-        let doc_id = data.get("document_id")
+        let doc_id = data
+            .get("document_id")
             .and_then(|d| d.as_str())
             .ok_or("Missing document_id")?;
 
@@ -243,7 +273,8 @@ impl EventHandler {
 
     /// Handle Yjs document leave
     pub async fn handle_ydoc_leave(&self, sid: &str, data: JsonValue) -> Result<(), String> {
-        let doc_id = data.get("document_id")
+        let doc_id = data
+            .get("document_id")
             .and_then(|d| d.as_str())
             .ok_or("Missing document_id")?;
 
@@ -256,7 +287,8 @@ impl EventHandler {
 
     /// Handle Yjs document update (broadcast to room)
     pub async fn handle_ydoc_update(&self, sid: &str, data: JsonValue) -> Result<(), String> {
-        let doc_id = data.get("document_id")
+        let doc_id = data
+            .get("document_id")
             .and_then(|d| d.as_str())
             .ok_or("Missing document_id")?
             .to_string();
@@ -264,37 +296,49 @@ impl EventHandler {
         let room = format!("ydoc:{}", doc_id);
 
         // Broadcast update to all other clients in the room
-        self.broadcast_to_room(&room, "ydoc:document:update", data, Some(sid)).await?;
+        self.broadcast_to_room(&room, "ydoc:document:update", data, Some(sid))
+            .await?;
 
         tracing::debug!("Broadcasted Yjs update for document: {}", doc_id);
         Ok(())
     }
 
     /// Handle Yjs document state request
-    pub async fn handle_ydoc_state_request(&self, sid: &str, data: JsonValue) -> Result<(), String> {
-        let doc_id = data.get("document_id")
+    pub async fn handle_ydoc_state_request(
+        &self,
+        sid: &str,
+        data: JsonValue,
+    ) -> Result<(), String> {
+        let doc_id = data
+            .get("document_id")
             .and_then(|d| d.as_str())
             .ok_or("Missing document_id")?;
 
         // In a full implementation, we would:
         // 1. Fetch the current Yjs state from storage (e.g., database or Redis)
         // 2. Send it back to the requesting client
-        
+
         // For now, send an empty state
         let state_data = serde_json::json!({
             "document_id": doc_id,
             "state": [],
         });
 
-        self.emit_to_session(sid, "ydoc:document:state", state_data).await?;
+        self.emit_to_session(sid, "ydoc:document:state", state_data)
+            .await?;
 
         tracing::debug!("Sent Yjs state for document: {}", doc_id);
         Ok(())
     }
 
     /// Handle Yjs awareness update (broadcast to room)
-    pub async fn handle_ydoc_awareness_update(&self, _sid: &str, data: JsonValue) -> Result<(), String> {
-        let doc_id = data.get("document_id")
+    pub async fn handle_ydoc_awareness_update(
+        &self,
+        _sid: &str,
+        data: JsonValue,
+    ) -> Result<(), String> {
+        let doc_id = data
+            .get("document_id")
             .and_then(|d| d.as_str())
             .ok_or("Missing document_id")?
             .to_string();
@@ -303,9 +347,11 @@ impl EventHandler {
 
         // Broadcast awareness update to all clients in the room (including sender)
         let room_sids = self.manager.get_room_sessions(&room).await;
-        
+
         for session_sid in room_sids {
-            let _ = self.emit_to_session(&session_sid, "ydoc:awareness:update", data.clone()).await;
+            let _ = self
+                .emit_to_session(&session_sid, "ydoc:awareness:update", data.clone())
+                .await;
         }
 
         tracing::debug!("Broadcasted Yjs awareness update for document: {}", doc_id);
@@ -391,4 +437,3 @@ pub async fn handle_health_check(
         rooms: *stats.get("rooms").unwrap_or(&0),
     }))
 }
-

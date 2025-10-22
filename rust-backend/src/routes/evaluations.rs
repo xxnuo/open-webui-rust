@@ -47,10 +47,7 @@ struct EvaluationConfig {
 }
 
 /// GET /config - Get evaluation config (admin only)
-async fn get_config(
-    state: web::Data<AppState>,
-    auth_user: AuthUser,
-) -> AppResult<HttpResponse> {
+async fn get_config(state: web::Data<AppState>, auth_user: AuthUser) -> AppResult<HttpResponse> {
     if auth_user.user.role != "admin" {
         return Err(AppError::Forbidden("Admin access required".to_string()));
     }
@@ -155,10 +152,8 @@ async fn export_all_feedbacks(
 ) -> AppResult<HttpResponse> {
     let feedback_service = FeedbackService::new(&state.db);
     let feedbacks = feedback_service.get_all_feedbacks().await?;
-    let feedback_models: Vec<FeedbackModel> = feedbacks
-        .into_iter()
-        .map(FeedbackModel::from)
-        .collect();
+    let feedback_models: Vec<FeedbackModel> =
+        feedbacks.into_iter().map(FeedbackModel::from).collect();
     Ok(HttpResponse::Ok().json(feedback_models))
 }
 
@@ -171,10 +166,8 @@ async fn get_user_feedbacks(
     let feedbacks = feedback_service
         .get_feedbacks_by_user_id(&auth_user.user.id)
         .await?;
-    let feedback_models: Vec<FeedbackModel> = feedbacks
-        .into_iter()
-        .map(FeedbackModel::from)
-        .collect();
+    let feedback_models: Vec<FeedbackModel> =
+        feedbacks.into_iter().map(FeedbackModel::from).collect();
     Ok(HttpResponse::Ok().json(feedback_models))
 }
 
@@ -259,9 +252,7 @@ async fn delete_feedback_by_id(
     let feedback_service = FeedbackService::new(&state.db);
 
     let success = if auth_user.user.role == "admin" {
-        feedback_service
-            .delete_feedback_by_id(&feedback_id)
-            .await?
+        feedback_service.delete_feedback_by_id(&feedback_id).await?
     } else {
         feedback_service
             .delete_feedback_by_id_and_user_id(&feedback_id, &auth_user.user.id)

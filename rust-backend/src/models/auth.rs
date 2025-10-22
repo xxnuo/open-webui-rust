@@ -54,7 +54,7 @@ pub struct Claims {
     #[serde(rename = "id")]
     pub sub: String, // User ID (Python JWT uses "id" field)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub exp: Option<i64>,    // Expiration time (optional)
+    pub exp: Option<i64>, // Expiration time (optional)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub iat: Option<i64>,    // Issued at (optional)
+    pub iat: Option<i64>, // Issued at (optional)
 }

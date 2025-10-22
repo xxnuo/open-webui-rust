@@ -61,44 +61,44 @@ impl LdapClient {
 
         // In production, use ldap3 crate for actual LDAP operations
         // This is a simplified implementation showing the structure
-        
+
         // 1. Connect to LDAP server
         // let mut ldap = LdapConnAsync::new(&self.config.server_url).await?;
-        
+
         // 2. Bind with service account
         // ldap.simple_bind(&self.config.bind_dn, &self.config.bind_password).await?;
-        
+
         // 3. Search for user
         let user_filter = self.config.user_filter.replace("{username}", username);
         info!("LDAP search filter: {}", user_filter);
-        
+
         // let (rs, _res) = ldap
         //     .search(&self.config.search_base, Scope::Subtree, &user_filter, vec!["*"])
         //     .await?
         //     .success()?;
-        
+
         // if rs.is_empty() {
         //     return Err(AppError::Auth("User not found in LDAP".to_string()));
         // }
-        
+
         // let entry = &rs[0];
         // let user_dn = entry.dn.clone();
-        
+
         // 4. Try to bind with user credentials
         // let mut user_ldap = LdapConnAsync::new(&self.config.server_url).await?;
         // user_ldap.simple_bind(&user_dn, password).await
         //     .map_err(|_| AppError::InvalidCredentials)?;
-        
+
         // 5. Get user attributes
         // let username = self.get_attribute(entry, &self.config.user_attributes.username)?;
         // let email = self.get_attribute(entry, &self.config.user_attributes.email)?;
         // let display_name = self.get_attribute(entry, &self.config.user_attributes.display_name)?;
-        
+
         // 6. Get user groups
         let groups = self.get_user_groups(username).await?;
-        
+
         info!("Successfully authenticated user via LDAP: {}", username);
-        
+
         // Return mock user for now
         Ok(LdapUser {
             username: username.to_string(),
@@ -114,12 +114,12 @@ impl LdapClient {
     /// Get user's LDAP groups
     pub async fn get_user_groups(&self, username: &str) -> AppResult<Vec<String>> {
         info!("Fetching LDAP groups for user: {}", username);
-        
+
         // In production:
         // 1. Search for user to get DN
         // 2. Search for groups where member = user DN
         // 3. Parse group names
-        
+
         // For now, return empty list
         Ok(vec![])
     }
@@ -127,39 +127,43 @@ impl LdapClient {
     /// Sync LDAP groups to local database
     pub async fn sync_groups(&self) -> AppResult<Vec<LdapGroup>> {
         info!("Syncing LDAP groups");
-        
-        let _group_filter = self.config.group_filter.as_deref().unwrap_or("(objectClass=groupOfNames)");
-        
+
+        let _group_filter = self
+            .config
+            .group_filter
+            .as_deref()
+            .unwrap_or("(objectClass=groupOfNames)");
+
         // In production:
         // 1. Connect and bind
         // 2. Search for all groups
         // 3. Parse group members
         // 4. Update local database
-        
+
         Ok(vec![])
     }
 
     /// Validate LDAP configuration
     pub async fn validate_config(&self) -> AppResult<()> {
         info!("Validating LDAP configuration");
-        
+
         // In production:
         // 1. Try to connect to LDAP server
         // 2. Try to bind with service account
         // 3. Verify search base exists
-        
+
         Ok(())
     }
 
     /// Search for users in LDAP
     pub async fn search_users(&self, query: &str, _limit: usize) -> AppResult<Vec<LdapUser>> {
         info!("Searching LDAP users: {}", query);
-        
+
         // In production:
         // 1. Build search filter
         // 2. Execute LDAP search
         // 3. Parse results
-        
+
         Ok(vec![])
     }
 
@@ -175,7 +179,7 @@ impl LdapClient {
         // Map LDAP group names to application role names
         // This could be configured with a mapping table
         let mut roles = Vec::new();
-        
+
         for group in groups {
             if group.contains("admin") || group.contains("administrators") {
                 roles.push("admin".to_string());
@@ -183,11 +187,11 @@ impl LdapClient {
                 roles.push("user".to_string());
             }
         }
-        
+
         if roles.is_empty() {
             roles.push("user".to_string()); // Default role
         }
-        
+
         roles
     }
 }
@@ -238,8 +242,7 @@ mod tests {
         let client = LdapClient::new(config);
         let groups = vec!["cn=admin,dc=example,dc=com".to_string()];
         let roles = client.map_groups_to_roles(&groups);
-        
+
         assert!(roles.contains(&"admin".to_string()));
     }
 }
-

@@ -19,7 +19,10 @@ pub fn create_routes(cfg: &mut web::ServiceConfig) {
             .route("/import", web::post().to(import_models))
             .route("/sync", web::post().to(sync_models))
             .route("/model", web::get().to(get_model_by_id))
-            .route("/model/profile/image", web::get().to(get_model_profile_image))
+            .route(
+                "/model/profile/image",
+                web::get().to(get_model_profile_image),
+            )
             .route("/model/toggle", web::post().to(toggle_model_by_id))
             .route("/model/update", web::post().to(update_model_by_id))
             .route("/model/delete", web::delete().to(delete_model_by_id))
@@ -28,10 +31,7 @@ pub fn create_routes(cfg: &mut web::ServiceConfig) {
 }
 
 // GET / - Get models for current user
-async fn get_models(
-    state: web::Data<AppState>,
-    auth_user: AuthUser,
-) -> AppResult<HttpResponse> {
+async fn get_models(state: web::Data<AppState>, auth_user: AuthUser) -> AppResult<HttpResponse> {
     let model_service = ModelService::new(&state.db);
 
     // Admins with bypass can see all models
@@ -41,7 +41,9 @@ async fn get_models(
     let models = if auth_user.user.role == "admin" && bypass_admin_access_control {
         model_service.get_models().await?
     } else {
-        model_service.get_models_by_user_id(&auth_user.user.id).await?
+        model_service
+            .get_models_by_user_id(&auth_user.user.id)
+            .await?
     };
 
     Ok(HttpResponse::Ok().json(models))
@@ -72,10 +74,14 @@ async fn create_model(
     if auth_user.user.role != "admin" {
         let config = state.config.read().unwrap();
         let user_permissions = config.user_permissions.clone();
-        
+
         // Check if user has workspace.models permission
         if let Some(workspace) = user_permissions.get("workspace") {
-            if !workspace.get("models").and_then(|v| v.as_bool()).unwrap_or(false) {
+            if !workspace
+                .get("models")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+            {
                 return Err(AppError::Forbidden("Permission denied".to_string()));
             }
         } else {
@@ -98,10 +104,7 @@ async fn create_model(
 }
 
 // GET /export - Export all models (admin only)
-async fn export_models(
-    state: web::Data<AppState>,
-    auth_user: AuthUser,
-) -> AppResult<HttpResponse> {
+async fn export_models(state: web::Data<AppState>, auth_user: AuthUser) -> AppResult<HttpResponse> {
     if auth_user.user.role != "admin" {
         return Err(AppError::Forbidden("Admin access required".to_string()));
     }
@@ -135,7 +138,7 @@ async fn import_models(
             if let Some(existing) = model_service.get_model_by_id(model_id).await? {
                 // Update existing model
                 let mut updated_data = existing.clone();
-                
+
                 // Merge the imported data
                 if let Some(obj) = model_data.as_object() {
                     for (key, value) in obj {
@@ -144,10 +147,12 @@ async fn import_models(
                                 // These are handled by ModelForm
                             }
                             "meta" => {
-                                updated_data.meta = serde_json::from_value(value.clone()).unwrap_or_default();
+                                updated_data.meta =
+                                    serde_json::from_value(value.clone()).unwrap_or_default();
                             }
                             "params" => {
-                                updated_data.params = serde_json::from_value(value.clone()).unwrap_or_default();
+                                updated_data.params =
+                                    serde_json::from_value(value.clone()).unwrap_or_default();
                             }
                             _ => {}
                         }
@@ -168,8 +173,10 @@ async fn import_models(
                 // Insert new model
                 let form: ModelForm = serde_json::from_value(model_data.clone())
                     .map_err(|e| AppError::BadRequest(format!("Invalid model data: {}", e)))?;
-                
-                model_service.insert_new_model(form, &auth_user.user.id).await?;
+
+                model_service
+                    .insert_new_model(form, &auth_user.user.id)
+                    .await?;
             }
         }
     }
@@ -212,7 +219,7 @@ async fn get_model_by_id(
     query: web::Query<ModelQuery>,
 ) -> AppResult<HttpResponse> {
     let model_service = ModelService::new(&state.db);
-    
+
     let model = model_service
         .get_model_by_id(&query.id)
         .await?
@@ -230,23 +237,23 @@ async fn get_model_by_id(
         return Ok(HttpResponse::Ok().json(model));
     }
 
-        // Check access control
-        if let Some(ref access_control) = model.access_control {
-            if let Some(read_access) = access_control.get("read") {
-                if let Some(_group_ids) = read_access.get("group_ids").and_then(|v| v.as_array()) {
-                    // TODO: Check if user is in any of these groups
-                    // For now, just allow if access_control exists
-                    return Ok(HttpResponse::Ok().json(model));
-                }
-                if let Some(user_ids) = read_access.get("user_ids").and_then(|v| v.as_array()) {
-                    for user_id in user_ids {
-                        if user_id.as_str() == Some(&auth_user.user.id) {
-                            return Ok(HttpResponse::Ok().json(model));
-                        }
+    // Check access control
+    if let Some(ref access_control) = model.access_control {
+        if let Some(read_access) = access_control.get("read") {
+            if let Some(_group_ids) = read_access.get("group_ids").and_then(|v| v.as_array()) {
+                // TODO: Check if user is in any of these groups
+                // For now, just allow if access_control exists
+                return Ok(HttpResponse::Ok().json(model));
+            }
+            if let Some(user_ids) = read_access.get("user_ids").and_then(|v| v.as_array()) {
+                for user_id in user_ids {
+                    if user_id.as_str() == Some(&auth_user.user.id) {
+                        return Ok(HttpResponse::Ok().json(model));
                     }
                 }
             }
         }
+    }
 
     Err(AppError::Forbidden("Access denied".to_string()))
 }
@@ -258,7 +265,7 @@ async fn get_model_profile_image(
     query: web::Query<ModelQuery>,
 ) -> AppResult<HttpResponse> {
     let model_service = ModelService::new(&state.db);
-    
+
     let model = model_service
         .get_model_by_id(&query.id)
         .await?
@@ -277,7 +284,7 @@ async fn get_model_profile_image(
                 if let Some(comma_pos) = profile_image_url.find(',') {
                     let base64_data = &profile_image_url[comma_pos + 1..];
                     // Use base64 crate's Engine trait
-                    use base64::{Engine, engine::general_purpose};
+                    use base64::{engine::general_purpose, Engine};
                     if let Ok(image_data) = general_purpose::STANDARD.decode(base64_data) {
                         return Ok(HttpResponse::Ok()
                             .content_type("image/png")
@@ -291,12 +298,12 @@ async fn get_model_profile_image(
     // Return default favicon
     let static_dir = std::path::Path::new("../backend/open_webui/static");
     let favicon_path = static_dir.join("favicon.png");
-    
+
     match std::fs::read(favicon_path) {
         Ok(image_data) => Ok(HttpResponse::Ok()
             .content_type("image/png")
             .body(image_data)),
-        Err(_) => Err(AppError::NotFound("Default image not found".to_string()))
+        Err(_) => Err(AppError::NotFound("Default image not found".to_string())),
     }
 }
 
@@ -307,7 +314,7 @@ async fn toggle_model_by_id(
     query: web::Query<ModelQuery>,
 ) -> AppResult<HttpResponse> {
     let model_service = ModelService::new(&state.db);
-    
+
     let model = model_service
         .get_model_by_id(&query.id)
         .await?
@@ -323,7 +330,7 @@ async fn toggle_model_by_id(
                 .and_then(|ids| ids.as_array())
                 .map(|arr| arr.iter().any(|id| id.as_str() == Some(&auth_user.user.id)))
                 .unwrap_or(false);
-            
+
             if !has_write_access {
                 return Err(AppError::Forbidden("Access denied".to_string()));
             }
@@ -345,7 +352,7 @@ async fn update_model_by_id(
     form_data: web::Json<ModelForm>,
 ) -> AppResult<HttpResponse> {
     let model_service = ModelService::new(&state.db);
-    
+
     let model = model_service
         .get_model_by_id(&query.id)
         .await?
@@ -361,7 +368,7 @@ async fn update_model_by_id(
                 .and_then(|ids| ids.as_array())
                 .map(|arr| arr.iter().any(|id| id.as_str() == Some(&auth_user.user.id)))
                 .unwrap_or(false);
-            
+
             if !has_write_access {
                 return Err(AppError::Forbidden("Access denied".to_string()));
             }
@@ -384,7 +391,7 @@ async fn delete_model_by_id(
     query: web::Query<ModelQuery>,
 ) -> AppResult<HttpResponse> {
     let model_service = ModelService::new(&state.db);
-    
+
     let model = model_service
         .get_model_by_id(&query.id)
         .await?
@@ -400,7 +407,7 @@ async fn delete_model_by_id(
                 .and_then(|ids| ids.as_array())
                 .map(|arr| arr.iter().any(|id| id.as_str() == Some(&auth_user.user.id)))
                 .unwrap_or(false);
-            
+
             if !has_write_access {
                 return Err(AppError::Forbidden("Access denied".to_string()));
             }

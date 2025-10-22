@@ -48,7 +48,7 @@ impl ImageService {
         } else {
             self.config.image_generation_engine.as_str()
         };
-        
+
         match engine {
             "openai" => self.openai_generate(request).await,
             "automatic1111" => self.automatic1111_generate(request).await,
@@ -116,8 +116,8 @@ impl ImageService {
         &self,
         request: ImageGenerationRequest,
     ) -> AppResult<ImageGenerationResponse> {
-        let base_url =
-            std::env::var("AUTOMATIC1111_URL").unwrap_or_else(|_| "http://localhost:7860".to_string());
+        let base_url = std::env::var("AUTOMATIC1111_URL")
+            .unwrap_or_else(|_| "http://localhost:7860".to_string());
 
         let n = request.n.unwrap_or(1);
 
@@ -248,4 +248,3 @@ impl ImageService {
         })
     }
 }
-

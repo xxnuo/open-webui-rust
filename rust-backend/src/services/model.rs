@@ -46,9 +46,9 @@ impl<'a> ModelService<'a> {
         .execute(&self.db.pool)
         .await?;
 
-        self.get_model_by_id(id).await?.ok_or_else(|| {
-            AppError::InternalServerError("Failed to create model".to_string())
-        })
+        self.get_model_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::InternalServerError("Failed to create model".to_string()))
     }
 
     pub async fn get_model_by_id(&self, id: &str) -> AppResult<Option<Model>> {
@@ -146,9 +146,9 @@ impl<'a> ModelService<'a> {
 
         query.execute(&self.db.pool).await?;
 
-        self.get_model_by_id(id).await?.ok_or_else(|| {
-            AppError::NotFound("Model not found".to_string())
-        })
+        self.get_model_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Model not found".to_string()))
     }
 
     pub async fn toggle_model_active(&self, id: &str) -> AppResult<Model> {
@@ -163,9 +163,9 @@ impl<'a> ModelService<'a> {
         .execute(&self.db.pool)
         .await?;
 
-        self.get_model_by_id(id).await?.ok_or_else(|| {
-            AppError::NotFound("Model not found".to_string())
-        })
+        self.get_model_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Model not found".to_string()))
     }
 
     pub async fn delete_model(&self, id: &str) -> AppResult<()> {
@@ -198,12 +198,15 @@ impl<'a> ModelService<'a> {
 
         // Upsert models
         for model in &models {
-            let params_str = serde_json::to_string(&model.params).unwrap_or_else(|_| "{}".to_string());
+            let params_str =
+                serde_json::to_string(&model.params).unwrap_or_else(|_| "{}".to_string());
             let meta_str = serde_json::to_string(&model.meta).unwrap_or_else(|_| "{}".to_string());
-            let access_control_str = model.access_control.as_ref()
+            let access_control_str = model
+                .access_control
+                .as_ref()
                 .and_then(|ac| serde_json::to_string(ac).ok())
                 .unwrap_or_else(|| "null".to_string());
-            
+
             if existing.contains(&model.id) {
                 // Update existing
                 sqlx::query(
@@ -249,7 +252,7 @@ impl<'a> ModelService<'a> {
         if !model_ids.is_empty() {
             let placeholders = vec!["$1"; model_ids.len()].join(", ");
             let delete_query = format!("DELETE FROM model WHERE id NOT IN ({})", placeholders);
-            
+
             let mut query = sqlx::query(&delete_query);
             for id in &model_ids {
                 query = query.bind(id);
@@ -269,7 +272,8 @@ impl<'a> ModelService<'a> {
         let now = current_timestamp_seconds();
         let params_str = serde_json::to_string(&form.params).unwrap_or_else(|_| "{}".to_string());
         let meta_str = serde_json::to_string(&form.meta).unwrap_or_else(|_| "{}".to_string());
-        let access_control_str = form.access_control
+        let access_control_str = form
+            .access_control
             .as_ref()
             .and_then(|ac| serde_json::to_string(ac).ok())
             .unwrap_or_else(|| "null".to_string());
@@ -293,16 +297,17 @@ impl<'a> ModelService<'a> {
         .execute(&self.db.pool)
         .await?;
 
-        self.get_model_by_id(&form.id).await?.ok_or_else(|| {
-            AppError::InternalServerError("Failed to create model".to_string())
-        })
+        self.get_model_by_id(&form.id)
+            .await?
+            .ok_or_else(|| AppError::InternalServerError("Failed to create model".to_string()))
     }
 
     pub async fn update_model_by_id(&self, id: &str, form: ModelForm) -> AppResult<Model> {
         let now = current_timestamp_seconds();
         let params_str = serde_json::to_string(&form.params).unwrap_or_else(|_| "{}".to_string());
         let meta_str = serde_json::to_string(&form.meta).unwrap_or_else(|_| "{}".to_string());
-        let access_control_str = form.access_control
+        let access_control_str = form
+            .access_control
             .as_ref()
             .and_then(|ac| serde_json::to_string(ac).ok())
             .unwrap_or_else(|| "null".to_string());
@@ -324,9 +329,9 @@ impl<'a> ModelService<'a> {
         .execute(&self.db.pool)
         .await?;
 
-        self.get_model_by_id(id).await?.ok_or_else(|| {
-            AppError::NotFound("Model not found".to_string())
-        })
+        self.get_model_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Model not found".to_string()))
     }
 
     pub async fn toggle_model_by_id(&self, id: &str) -> AppResult<Model> {
@@ -338,5 +343,3 @@ impl<'a> ModelService<'a> {
         Ok(true)
     }
 }
-
-

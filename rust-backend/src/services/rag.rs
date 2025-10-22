@@ -49,9 +49,11 @@ impl RAGService {
             None, // api_key - would need to be added to config if using API
             vec![text.to_string()],
             None, // dimension
-        ).await?;
-        
-        embeddings.into_iter()
+        )
+        .await?;
+
+        embeddings
+            .into_iter()
             .next()
             .ok_or_else(|| AppError::InternalServerError("No embedding generated".to_string()))
     }
@@ -166,7 +168,7 @@ impl RAGService {
             .into_iter()
             .map(|mut result| {
                 let content_lower = result.chunk.content.to_lowercase();
-                
+
                 // Boost for exact phrase match
                 if content_lower.contains(&query_lower) {
                     result.score += 0.3;
@@ -187,4 +189,3 @@ impl RAGService {
         Ok(reranked)
     }
 }
-

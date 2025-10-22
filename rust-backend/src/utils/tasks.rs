@@ -44,7 +44,11 @@ pub struct TaskManager {
 
 #[allow(dead_code)]
 impl TaskManager {
-    pub fn new(redis: Option<deadpool_redis::Pool>, redis_url: Option<String>, redis_key_prefix: String) -> Self {
+    pub fn new(
+        redis: Option<deadpool_redis::Pool>,
+        redis_url: Option<String>,
+        redis_key_prefix: String,
+    ) -> Self {
         Self {
             tasks: Arc::new(RwLock::new(HashMap::new())),
             item_tasks: Arc::new(RwLock::new(HashMap::new())),
@@ -55,11 +59,7 @@ impl TaskManager {
     }
 
     /// Create a new task
-    pub async fn create_task<F>(
-        &self,
-        future: F,
-        item_id: Option<String>,
-    ) -> AppResult<String>
+    pub async fn create_task<F>(&self, future: F, item_id: Option<String>) -> AppResult<String>
     where
         F: std::future::Future<Output = ()> + Send + 'static,
     {
@@ -69,7 +69,10 @@ impl TaskManager {
         let task_handle = tokio::spawn(future);
 
         // Store in memory
-        self.tasks.write().await.insert(task_id.clone(), task_handle);
+        self.tasks
+            .write()
+            .await
+            .insert(task_id.clone(), task_handle);
 
         // Store item mapping
         if let Some(item_id) = &item_id {
@@ -87,16 +90,15 @@ impl TaskManager {
                 let item_value = item_id.as_deref().unwrap_or("");
 
                 // Store task -> item_id mapping
-                let _: Result<(), redis::RedisError> = conn
-                    .hset(&tasks_key, &task_id, item_value)
-                    .await;
+                let _: Result<(), redis::RedisError> =
+                    conn.hset(&tasks_key, &task_id, item_value).await;
 
                 // Store item -> task mapping
                 if let Some(item_id) = &item_id {
-                    let item_tasks_key = format!("{}:tasks:item:{}", self.redis_key_prefix, item_id);
-                    let _: Result<(), redis::RedisError> = conn
-                        .sadd(&item_tasks_key, &task_id)
-                        .await;
+                    let item_tasks_key =
+                        format!("{}:tasks:item:{}", self.redis_key_prefix, item_id);
+                    let _: Result<(), redis::RedisError> =
+                        conn.sadd(&item_tasks_key, &task_id).await;
                 }
             }
         }
@@ -115,7 +117,7 @@ impl TaskManager {
                 .find(|(_, tasks)| tasks.contains(&task_id.to_string()))
                 .map(|(id, _)| id.clone())
         };
-        
+
         // Stop local task
         if let Some(handle) = self.tasks.write().await.remove(task_id) {
             handle.abort();
@@ -131,9 +133,8 @@ impl TaskManager {
                     "task_id": task_id,
                 });
 
-                let _: Result<(), redis::RedisError> = conn
-                    .publish(&pubsub_channel, command.to_string())
-                    .await;
+                let _: Result<(), redis::RedisError> =
+                    conn.publish(&pubsub_channel, command.to_string()).await;
 
                 info!("Published stop command for task {} to Redis", task_id);
             }
@@ -167,24 +168,21 @@ impl TaskManager {
                 let tasks_key = format!("{}:tasks", self.redis_key_prefix);
 
                 // Get item_id from Redis if not provided
-                let redis_item_id: Result<Option<String>, redis::RedisError> = conn
-                    .hget(&tasks_key, task_id)
-                    .await;
+                let redis_item_id: Result<Option<String>, redis::RedisError> =
+                    conn.hget(&tasks_key, task_id).await;
 
                 let item_id_to_clean = item_id.or_else(|| redis_item_id.ok().flatten());
 
                 // Remove task from hash
-                let _: Result<(), redis::RedisError> = conn
-                    .hdel(&tasks_key, task_id)
-                    .await;
+                let _: Result<(), redis::RedisError> = conn.hdel(&tasks_key, task_id).await;
 
                 // Remove from item set
                 if let Some(item_id) = item_id_to_clean {
                     if !item_id.is_empty() {
-                        let item_tasks_key = format!("{}:tasks:item:{}", self.redis_key_prefix, item_id);
-                        let _: Result<(), redis::RedisError> = conn
-                            .srem(&item_tasks_key, task_id)
-                            .await;
+                        let item_tasks_key =
+                            format!("{}:tasks:item:{}", self.redis_key_prefix, item_id);
+                        let _: Result<(), redis::RedisError> =
+                            conn.srem(&item_tasks_key, task_id).await;
                     }
                 }
             }
@@ -202,9 +200,8 @@ impl TaskManager {
         if let Some(redis) = &self.redis {
             if let Ok(mut conn) = redis.get().await {
                 let tasks_key = format!("{}:tasks", self.redis_key_prefix);
-                let redis_tasks: Result<Vec<String>, redis::RedisError> = conn
-                    .hkeys(&tasks_key)
-                    .await;
+                let redis_tasks: Result<Vec<String>, redis::RedisError> =
+                    conn.hkeys(&tasks_key).await;
 
                 if let Ok(tasks) = redis_tasks {
                     // Combine local and Redis tasks (deduplicated)
@@ -225,7 +222,10 @@ impl TaskManager {
     /// List tasks for a specific item (e.g., chat, note)
     pub async fn list_tasks_by_item(&self, item_id: &str) -> AppResult<Vec<String>> {
         // Get local tasks
-        let local_tasks = self.item_tasks.read().await
+        let local_tasks = self
+            .item_tasks
+            .read()
+            .await
             .get(item_id)
             .cloned()
             .unwrap_or_default();
@@ -234,9 +234,8 @@ impl TaskManager {
         if let Some(redis) = &self.redis {
             if let Ok(mut conn) = redis.get().await {
                 let item_tasks_key = format!("{}:tasks:item:{}", self.redis_key_prefix, item_id);
-                let redis_tasks: Result<Vec<String>, redis::RedisError> = conn
-                    .smembers(&item_tasks_key)
-                    .await;
+                let redis_tasks: Result<Vec<String>, redis::RedisError> =
+                    conn.smembers(&item_tasks_key).await;
 
                 if let Ok(tasks) = redis_tasks {
                     // Combine local and Redis tasks (deduplicated)
@@ -270,7 +269,6 @@ impl TaskManager {
     /// Start listening to Redis pub/sub commands
     pub async fn start_redis_listener(&self) -> AppResult<()> {
         if let Some(redis) = &self.redis {
-            
             let pubsub_channel = format!("{}:tasks:commands", self.redis_key_prefix);
 
             info!("Starting Redis task command listener on {}", pubsub_channel);
@@ -280,13 +278,14 @@ impl TaskManager {
             let _redis_key_prefix = self.redis_key_prefix.clone();
 
             // Get a dedicated connection for pubsub by creating a new client
-            let redis_url = self.redis_url.clone().ok_or_else(|| {
-                AppError::Redis("Redis URL not configured".to_string())
-            })?;
-            
-            let client = redis::Client::open(redis_url)
-                .map_err(|e| AppError::Redis(e.to_string()))?;
-            
+            let redis_url = self
+                .redis_url
+                .clone()
+                .ok_or_else(|| AppError::Redis("Redis URL not configured".to_string()))?;
+
+            let client =
+                redis::Client::open(redis_url).map_err(|e| AppError::Redis(e.to_string()))?;
+
             tokio::spawn(async move {
                 let mut pubsub = match client.get_async_pubsub().await {
                     Ok(pubsub) => pubsub,
@@ -295,7 +294,7 @@ impl TaskManager {
                         return;
                     }
                 };
-                
+
                 if let Err(e) = pubsub.subscribe(&pubsub_channel).await {
                     error!("Failed to subscribe to Redis channel: {}", e);
                     return;
@@ -315,10 +314,16 @@ impl TaskManager {
 
                             match serde_json::from_str::<serde_json::Value>(&payload) {
                                 Ok(command) => {
-                                    if let Some("stop") = command.get("action").and_then(|v| v.as_str()) {
-                                        if let Some(task_id) = command.get("task_id").and_then(|v| v.as_str()) {
+                                    if let Some("stop") =
+                                        command.get("action").and_then(|v| v.as_str())
+                                    {
+                                        if let Some(task_id) =
+                                            command.get("task_id").and_then(|v| v.as_str())
+                                        {
                                             // Stop local task if it exists
-                                            if let Some(handle) = tasks.write().await.remove(task_id) {
+                                            if let Some(handle) =
+                                                tasks.write().await.remove(task_id)
+                                            {
                                                 handle.abort();
                                                 info!("Stopped task {} via Redis command", task_id);
                                             }
@@ -350,11 +355,14 @@ mod tests {
     #[tokio::test]
     async fn test_task_manager_create() {
         let manager = TaskManager::new(None, None, "test".to_string());
-        
+
         let task_id = manager
-            .create_task(async {
-                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-            }, None)
+            .create_task(
+                async {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                },
+                None,
+            )
             .await
             .unwrap();
 
@@ -368,11 +376,14 @@ mod tests {
     #[tokio::test]
     async fn test_task_manager_stop() {
         let manager = TaskManager::new(None, None, "test".to_string());
-        
+
         let task_id = manager
-            .create_task(async {
-                tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
-            }, None)
+            .create_task(
+                async {
+                    tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+                },
+                None,
+            )
             .await
             .unwrap();
 
@@ -386,18 +397,24 @@ mod tests {
     async fn test_task_manager_item_tasks() {
         let manager = TaskManager::new(None, None, "test".to_string());
         let item_id = "test-item".to_string();
-        
+
         let task_id1 = manager
-            .create_task(async {
-                tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
-            }, Some(item_id.clone()))
+            .create_task(
+                async {
+                    tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+                },
+                Some(item_id.clone()),
+            )
             .await
             .unwrap();
 
         let task_id2 = manager
-            .create_task(async {
-                tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
-            }, Some(item_id.clone()))
+            .create_task(
+                async {
+                    tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+                },
+                Some(item_id.clone()),
+            )
             .await
             .unwrap();
 
@@ -412,4 +429,3 @@ mod tests {
         assert_eq!(item_tasks.len(), 0);
     }
 }
-

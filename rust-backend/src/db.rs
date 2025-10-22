@@ -40,24 +40,35 @@ impl Database {
             include_str!("../migrations/postgres/009_make_message_chat_id_nullable.sql"),
             include_str!("../migrations/postgres/010_fix_chat_timestamps.sql"),
         ];
-        
+
         for (idx, migration_sql) in migrations.iter().enumerate() {
             tracing::info!("Running migration {}", idx + 1);
-            
+
             // Parse and execute SQL statements, handling PL/pgSQL blocks
             let statements = Self::parse_sql_statements(migration_sql);
             for statement in statements {
                 let trimmed = statement.trim();
                 if !trimmed.is_empty() && !trimmed.starts_with("--") {
                     match sqlx::query(trimmed).execute(&self.pool).await {
-                        Ok(_) => {},
+                        Ok(_) => {}
                         Err(e) => {
                             // Log error but continue if it's a "already exists" or "does not exist" error
                             let error_msg = e.to_string();
-                            if error_msg.contains("already exists") || error_msg.contains("does not exist") {
-                                tracing::debug!("Skipping non-fatal migration error in migration {}: {}", idx + 1, e);
+                            if error_msg.contains("already exists")
+                                || error_msg.contains("does not exist")
+                            {
+                                tracing::debug!(
+                                    "Skipping non-fatal migration error in migration {}: {}",
+                                    idx + 1,
+                                    e
+                                );
                             } else {
-                                tracing::warn!("Error in migration {} statement: {} - Error: {}", idx + 1, trimmed.chars().take(100).collect::<String>(), e);
+                                tracing::warn!(
+                                    "Error in migration {} statement: {} - Error: {}",
+                                    idx + 1,
+                                    trimmed.chars().take(100).collect::<String>(),
+                                    e
+                                );
                             }
                         }
                     }
@@ -75,15 +86,17 @@ impl Database {
         let mut current_statement = String::new();
         let mut in_do_block = false;
         let mut dollar_quote_tag: Option<String> = None;
-        
+
         for line in sql.lines() {
             let trimmed_line = line.trim();
-            
+
             // Skip empty lines and comments at the start
-            if current_statement.is_empty() && (trimmed_line.is_empty() || trimmed_line.starts_with("--")) {
+            if current_statement.is_empty()
+                && (trimmed_line.is_empty() || trimmed_line.starts_with("--"))
+            {
                 continue;
             }
-            
+
             // Check if we're entering a DO block
             if trimmed_line.starts_with("DO $$") || trimmed_line.starts_with("DO $") {
                 in_do_block = true;
@@ -97,15 +110,16 @@ impl Database {
                     }
                 }
             }
-            
+
             current_statement.push_str(line);
             current_statement.push('\n');
-            
+
             // Check if we're ending a DO block
             if in_do_block {
                 if let Some(ref tag) = dollar_quote_tag {
                     // Look for END followed by the dollar quote tag and semicolon
-                    if trimmed_line.contains(&format!("END {}", tag)) && trimmed_line.ends_with(';') {
+                    if trimmed_line.contains(&format!("END {}", tag)) && trimmed_line.ends_with(';')
+                    {
                         statements.push(current_statement.clone());
                         current_statement.clear();
                         in_do_block = false;
@@ -118,12 +132,12 @@ impl Database {
                 current_statement.clear();
             }
         }
-        
+
         // Add any remaining statement
         if !current_statement.trim().is_empty() {
             statements.push(current_statement);
         }
-        
+
         statements
     }
 
@@ -132,7 +146,10 @@ impl Database {
     }
 
     // User methods
-    pub async fn get_user_by_id(&self, user_id: &str) -> Result<crate::models::user::User, sqlx::Error> {
+    pub async fn get_user_by_id(
+        &self,
+        user_id: &str,
+    ) -> Result<crate::models::user::User, sqlx::Error> {
         let user: crate::models::user::User = sqlx::query_as(
             r#"
             SELECT id, name, email, username, role, profile_image_url, bio, gender, 
@@ -140,7 +157,7 @@ impl Database {
                    api_key, oauth_sub, last_active_at, updated_at, created_at
             FROM "user" 
             WHERE id = $1
-            "#
+            "#,
         )
         .bind(user_id)
         .fetch_one(&self.pool)
@@ -156,7 +173,7 @@ impl Database {
                    date_of_birth, info, settings,
                    api_key, oauth_sub, last_active_at, updated_at, created_at
             FROM "user"
-            "#
+            "#,
         )
         .fetch_all(&self.pool)
         .await?;
@@ -165,14 +182,17 @@ impl Database {
     }
 
     // Group methods
-    pub async fn get_group_by_id(&self, group_id: &str) -> Result<crate::models::group::Group, sqlx::Error> {
+    pub async fn get_group_by_id(
+        &self,
+        group_id: &str,
+    ) -> Result<crate::models::group::Group, sqlx::Error> {
         let group: crate::models::group::Group = sqlx::query_as(
             r#"
             SELECT id, user_id, name, description, 
                    permissions, user_ids, meta, created_at, updated_at
             FROM "group" 
             WHERE id = $1
-            "#
+            "#,
         )
         .bind(group_id)
         .fetch_one(&self.pool)
@@ -187,7 +207,7 @@ impl Database {
             SELECT id, user_id, name, description, 
                    permissions, user_ids, meta, created_at, updated_at
             FROM "group"
-            "#
+            "#,
         )
         .fetch_all(&self.pool)
         .await?;
@@ -196,7 +216,10 @@ impl Database {
     }
 
     // Model methods
-    pub async fn get_model_by_id(&self, model_id: &str) -> Result<crate::models::model::Model, sqlx::Error> {
+    pub async fn get_model_by_id(
+        &self,
+        model_id: &str,
+    ) -> Result<crate::models::model::Model, sqlx::Error> {
         let model: crate::models::model::Model = sqlx::query_as(
             r#"
             SELECT id, user_id, base_model_id, name, 
@@ -204,7 +227,7 @@ impl Database {
                    is_active, created_at, updated_at
             FROM model 
             WHERE id = $1
-            "#
+            "#,
         )
         .bind(model_id)
         .fetch_one(&self.pool)
@@ -220,7 +243,7 @@ impl Database {
                    params, meta, access_control,
                    is_active, created_at, updated_at
             FROM model
-            "#
+            "#,
         )
         .fetch_all(&self.pool)
         .await?;

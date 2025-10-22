@@ -1,7 +1,7 @@
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
 use sqlx::types::JsonValue;
+use sqlx::FromRow;
 use validator::Validate;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]

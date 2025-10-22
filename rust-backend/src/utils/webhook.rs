@@ -55,12 +55,7 @@ impl WebhookPayload {
         )
     }
 
-    pub fn message_created(
-        chat_id: &str,
-        message_id: &str,
-        user_id: &str,
-        content: &str,
-    ) -> Self {
+    pub fn message_created(chat_id: &str, message_id: &str, user_id: &str, content: &str) -> Self {
         Self::new(
             "message.created",
             json!({
@@ -81,19 +76,17 @@ pub async fn post_webhook(webhook_url: &str, payload: WebhookPayload) -> Result<
         return Ok(());
     }
 
-    debug!("Posting webhook to {} with payload: {:?}", webhook_url, payload);
+    debug!(
+        "Posting webhook to {} with payload: {:?}",
+        webhook_url, payload
+    );
 
     let client = Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()
         .map_err(|e| AppError::Internal(format!("Failed to create HTTP client: {}", e)))?;
 
-    match client
-        .post(webhook_url)
-        .json(&payload)
-        .send()
-        .await
-    {
+    match client.post(webhook_url).json(&payload).send().await {
         Ok(response) => {
             if response.status().is_success() {
                 debug!("Webhook posted successfully: {}", response.status());
@@ -127,7 +120,7 @@ pub async fn post_user_webhook(
     }
 
     let mut enriched_payload = payload;
-    
+
     // Add user_id to payload data
     if let Some(data_obj) = enriched_payload.data.as_object_mut() {
         data_obj.insert("user_id".to_string(), json!(user_id));
@@ -143,7 +136,7 @@ mod tests {
     #[test]
     fn test_webhook_payload_creation() {
         let payload = WebhookPayload::user_signup("testuser", Some("test@example.com"));
-        
+
         assert_eq!(payload.event_type, "user.signup");
         assert!(payload.timestamp.is_some());
         assert_eq!(payload.data["username"], "testuser");
@@ -153,11 +146,10 @@ mod tests {
     #[test]
     fn test_chat_created_payload() {
         let payload = WebhookPayload::chat_created("chat123", "user456", Some("Test Chat"));
-        
+
         assert_eq!(payload.event_type, "chat.created");
         assert_eq!(payload.data["chat_id"], "chat123");
         assert_eq!(payload.data["user_id"], "user456");
         assert_eq!(payload.data["title"], "Test Chat");
     }
 }
-

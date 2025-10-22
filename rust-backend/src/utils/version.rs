@@ -36,24 +36,24 @@ pub async fn check_for_updates(current_version: &str) -> AppResult<VersionInfo> 
 
     // Fetch latest release from GitHub API
     let url = "https://api.github.com/repos/knoxchat/open-webui-rust/releases/latest";
-    
+
     let response = client.get(url).send().await;
 
     match response {
         Ok(resp) if resp.status().is_success() => {
             let release: GitHubRelease = resp.json().await?;
-            
+
             // Remove 'v' prefix from tag_name if present
             let latest_version = release.tag_name.trim_start_matches('v');
             let current = current_version.trim_start_matches('v');
-            
+
             let update_available = is_newer_version(current, latest_version);
-            
+
             info!(
                 "Version check: current={}, latest={}, update_available={}",
                 current, latest_version, update_available
             );
-            
+
             Ok(VersionInfo {
                 current: current.to_string(),
                 latest: latest_version.to_string(),
@@ -66,7 +66,7 @@ pub async fn check_for_updates(current_version: &str) -> AppResult<VersionInfo> 
             let status = resp.status();
             let error_text = resp.text().await.unwrap_or_default();
             error!("GitHub API error: {} - {}", status, error_text);
-            
+
             // Return current version as both current and latest if check fails
             Ok(VersionInfo {
                 current: current_version.to_string(),
@@ -78,7 +78,7 @@ pub async fn check_for_updates(current_version: &str) -> AppResult<VersionInfo> 
         }
         Err(e) => {
             error!("Failed to check for updates: {}", e);
-            
+
             // Return current version as both current and latest if check fails
             Ok(VersionInfo {
                 current: current_version.to_string(),
@@ -95,28 +95,22 @@ pub async fn check_for_updates(current_version: &str) -> AppResult<VersionInfo> 
 /// Returns true if `latest` is newer than `current`
 #[allow(dead_code)]
 fn is_newer_version(current: &str, latest: &str) -> bool {
-    let current_parts: Vec<u32> = current
-        .split('.')
-        .filter_map(|s| s.parse().ok())
-        .collect();
-    
-    let latest_parts: Vec<u32> = latest
-        .split('.')
-        .filter_map(|s| s.parse().ok())
-        .collect();
-    
+    let current_parts: Vec<u32> = current.split('.').filter_map(|s| s.parse().ok()).collect();
+
+    let latest_parts: Vec<u32> = latest.split('.').filter_map(|s| s.parse().ok()).collect();
+
     // Compare major.minor.patch
     for i in 0..3 {
         let curr = current_parts.get(i).copied().unwrap_or(0);
         let late = latest_parts.get(i).copied().unwrap_or(0);
-        
+
         if late > curr {
             return true;
         } else if late < curr {
             return false;
         }
     }
-    
+
     false
 }
 
@@ -138,7 +132,7 @@ mod tests {
     fn test_version_stripping() {
         let v1 = "v0.6.30";
         let v2 = "0.6.30";
-        
+
         assert_eq!(v1.trim_start_matches('v'), v2);
         assert!(!is_newer_version(
             v1.trim_start_matches('v'),
@@ -146,4 +140,3 @@ mod tests {
         ));
     }
 }
-

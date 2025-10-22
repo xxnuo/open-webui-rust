@@ -57,9 +57,9 @@ impl<'a> FeedbackService<'a> {
         .execute(&self.db.pool)
         .await?;
 
-        self.get_feedback_by_id(&id).await?.ok_or_else(|| {
-            AppError::InternalServerError("Failed to create feedback".to_string())
-        })
+        self.get_feedback_by_id(&id)
+            .await?
+            .ok_or_else(|| AppError::InternalServerError("Failed to create feedback".to_string()))
     }
 
     pub async fn get_feedback_by_id(&self, id: &str) -> AppResult<Option<Feedback>> {
@@ -182,9 +182,9 @@ impl<'a> FeedbackService<'a> {
         .execute(&self.db.pool)
         .await?;
 
-        self.get_feedback_by_id(id).await?.ok_or_else(|| {
-            AppError::NotFound("Feedback not found".to_string())
-        })
+        self.get_feedback_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Feedback not found".to_string()))
     }
 
     pub async fn update_feedback_by_id_and_user_id(
@@ -277,4 +277,3 @@ impl<'a> FeedbackService<'a> {
         Ok(result.rows_affected() > 0)
     }
 }
-

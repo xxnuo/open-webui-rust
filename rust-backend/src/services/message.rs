@@ -1,6 +1,6 @@
 use crate::db::Database;
 use crate::error::{AppError, AppResult};
-use crate::models::message::{Message, MessageForm, MessageReaction, Reaction, MessageResponse};
+use crate::models::message::{Message, MessageForm, MessageReaction, MessageResponse, Reaction};
 use crate::models::user::UserNameResponse;
 use crate::services::user::UserService;
 use crate::utils::time::current_timestamp;
@@ -25,10 +25,14 @@ impl<'a> MessageService<'a> {
     ) -> AppResult<Message> {
         let id = uuid::Uuid::new_v4().to_string();
         let now = current_timestamp();
-        
-        let data_str = form_data.data.as_ref()
+
+        let data_str = form_data
+            .data
+            .as_ref()
             .map(|v| serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string()));
-        let meta_str = form_data.meta.as_ref()
+        let meta_str = form_data
+            .meta
+            .as_ref()
             .map(|v| serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string()));
 
         sqlx::query(
@@ -50,7 +54,8 @@ impl<'a> MessageService<'a> {
         .execute(&self.db.pool)
         .await?;
 
-        self.get_message_by_id(&id).await?
+        self.get_message_by_id(&id)
+            .await?
             .ok_or_else(|| AppError::InternalServerError("Failed to create message".to_string()))
     }
 
@@ -160,19 +165,18 @@ impl<'a> MessageService<'a> {
     }
 
     pub async fn get_thread_replies_count(&self, message_id: &str) -> AppResult<i64> {
-        let result = sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM message WHERE parent_id = $1"
-        )
-        .bind(message_id)
-        .fetch_one(&self.db.pool)
-        .await?;
+        let result =
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM message WHERE parent_id = $1")
+                .bind(message_id)
+                .fetch_one(&self.db.pool)
+                .await?;
 
         Ok(result)
     }
 
     pub async fn get_latest_thread_reply_at(&self, message_id: &str) -> AppResult<Option<i64>> {
         let result = sqlx::query_scalar::<_, Option<i64>>(
-            "SELECT created_at FROM message WHERE parent_id = $1 ORDER BY created_at DESC LIMIT 1"
+            "SELECT created_at FROM message WHERE parent_id = $1 ORDER BY created_at DESC LIMIT 1",
         )
         .bind(message_id)
         .fetch_optional(&self.db.pool)
@@ -187,13 +191,17 @@ impl<'a> MessageService<'a> {
         form_data: &MessageForm,
     ) -> AppResult<Message> {
         // Get existing message to merge data and meta
-        let existing = self.get_message_by_id(message_id).await?
+        let existing = self
+            .get_message_by_id(message_id)
+            .await?
             .ok_or_else(|| AppError::NotFound("Message not found".to_string()))?;
 
         // Merge data
         let mut merged_data = existing.get_data().unwrap_or_else(|| serde_json::json!({}));
         if let Some(new_data) = &form_data.data {
-            if let (Some(merged_obj), Some(new_obj)) = (merged_data.as_object_mut(), new_data.as_object()) {
+            if let (Some(merged_obj), Some(new_obj)) =
+                (merged_data.as_object_mut(), new_data.as_object())
+            {
                 for (k, v) in new_obj {
                     merged_obj.insert(k.clone(), v.clone());
                 }
@@ -203,7 +211,9 @@ impl<'a> MessageService<'a> {
         // Merge meta
         let mut merged_meta = existing.get_meta().unwrap_or_else(|| serde_json::json!({}));
         if let Some(new_meta) = &form_data.meta {
-            if let (Some(merged_obj), Some(new_obj)) = (merged_meta.as_object_mut(), new_meta.as_object()) {
+            if let (Some(merged_obj), Some(new_obj)) =
+                (merged_meta.as_object_mut(), new_meta.as_object())
+            {
                 for (k, v) in new_obj {
                     merged_obj.insert(k.clone(), v.clone());
                 }
@@ -229,7 +239,8 @@ impl<'a> MessageService<'a> {
         .execute(&self.db.pool)
         .await?;
 
-        self.get_message_by_id(message_id).await?
+        self.get_message_by_id(message_id)
+            .await?
             .ok_or_else(|| AppError::NotFound("Message not found".to_string()))
     }
 
@@ -288,7 +299,7 @@ impl<'a> MessageService<'a> {
         name: &str,
     ) -> AppResult<()> {
         sqlx::query(
-            "DELETE FROM message_reaction WHERE message_id = $1 AND user_id = $2 AND name = $3"
+            "DELETE FROM message_reaction WHERE message_id = $1 AND user_id = $2 AND name = $3",
         )
         .bind(message_id)
         .bind(user_id)
@@ -310,7 +321,8 @@ impl<'a> MessageService<'a> {
         // Group by name
         let mut grouped: HashMap<String, Vec<String>> = HashMap::new();
         for reaction in reactions {
-            grouped.entry(reaction.name.clone())
+            grouped
+                .entry(reaction.name.clone())
                 .or_insert_with(Vec::new)
                 .push(reaction.user_id);
         }
@@ -339,12 +351,15 @@ impl<'a> MessageService<'a> {
     /// Convert Message to MessageResponse with user information populated
     pub async fn to_message_response(&self, message: Message) -> AppResult<MessageResponse> {
         let user_service = UserService::new(self.db);
-        let user = user_service.get_user_by_id(&message.user_id).await.ok().flatten();
-        
+        let user = user_service
+            .get_user_by_id(&message.user_id)
+            .await
+            .ok()
+            .flatten();
+
         let mut response = MessageResponse::from(message);
         response.user = user.map(UserNameResponse::from);
-        
+
         Ok(response)
     }
 }
-
