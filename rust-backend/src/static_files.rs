@@ -8,6 +8,9 @@ use rust_embed::RustEmbed;
 #[folder = "../../frontend/build/"]
 pub struct FrontendAssets;
 
+// Re-export RustEmbed trait so other modules can use FrontendAssets::get()
+pub use rust_embed::RustEmbed as _;
+
 /// Serve embedded static files with SPA fallback
 /// This handler serves both static assets and handles SPA routing
 pub async fn serve(req: HttpRequest) -> HttpResponse {
@@ -32,10 +35,18 @@ pub async fn serve(req: HttpRequest) -> HttpResponse {
 
     // For SPA routing: if file not found and it doesn't look like an API request,
     // serve index.html to let the frontend router handle it
+    // Exclude all backend routes from SPA fallback
     if !path.starts_with("api/")
         && !path.starts_with("openai/")
         && !path.starts_with("oauth/")
-        && !path.starts_with("socket.io/")
+        && !path.starts_with("socket.io")
+        && !path.starts_with("ws/")
+        && !path.starts_with("cache/")
+        && !path.starts_with("health")
+        && path != "manifest.json"
+        && path != "opensearch.xml"
+        && path != "favicon.png"
+        && path != "user.png"
     {
         if let Some(index) = FrontendAssets::get("index.html") {
             return HttpResponse::Ok()

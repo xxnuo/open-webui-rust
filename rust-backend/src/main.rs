@@ -139,6 +139,16 @@ async fn main() -> anyhow::Result<()> {
     // Start server
     let addr = SocketAddr::from((config.host.parse::<std::net::IpAddr>()?, config.port));
     let cors_allow_origin = config.cors_allow_origin.clone();
+    
+    // Check if static directory exists
+    let static_dir = config.static_dir.clone();
+    let static_dir_exists = std::path::Path::new(&static_dir).exists();
+    
+    if static_dir_exists {
+        info!("📁 Using external static files directory: {}", static_dir);
+    } else {
+        info!("📁 External static directory not found ({}), using embedded static files", static_dir);
+    }
 
     info!("🚀 Server running at http://{}", addr);
 
@@ -253,8 +263,16 @@ async fn main() -> anyhow::Result<()> {
             .route("/cache/{path:.*}", web::get().to(serve_cache_file))
             // Serve default user avatar at root (for backward compatibility)
             .route("/user.png", web::get().to(serve_user_avatar))
-            // Serve static files from static directory (if exists, for development)
-            .service(Files::new("/static", "../static/static"))
+            // Conditionally serve static files from external directory if it exists
+            .configure({
+                let static_dir = static_dir.clone();
+                move |cfg| {
+                    if static_dir_exists {
+                        // Use external static directory if it exists
+                        cfg.service(Files::new("/static", static_dir.clone()));
+                    }
+                }
+            })
             // Serve embedded frontend static files as default service (SPA fallback)
             // This catches all unmatched routes and serves frontend or index.html
             .default_service(web::get().to(static_files::serve))
@@ -273,17 +291,55 @@ async fn main() -> anyhow::Result<()> {
 }
 
 // Serve default user avatar
-async fn serve_user_avatar() -> Result<actix_files::NamedFile, crate::error::AppError> {
-    let path = std::path::Path::new("../static/static/user.png");
-    actix_files::NamedFile::open(path)
-        .map_err(|_| crate::error::AppError::NotFound("User avatar not found".to_string()))
+async fn serve_user_avatar(state: web::Data<AppState>) -> Result<HttpResponse, crate::error::AppError> {
+    let config = state.config.read().unwrap();
+    let static_dir = &config.static_dir;
+    let user_avatar_path = std::path::Path::new(static_dir).join("user.png");
+    
+    // Try external file first
+    if user_avatar_path.exists() {
+        if let Ok(image_data) = std::fs::read(&user_avatar_path) {
+            return Ok(HttpResponse::Ok()
+                .content_type("image/png")
+                .body(image_data));
+        }
+    }
+    
+    // Fall back to embedded file
+    use crate::static_files::FrontendAssets;
+    if let Some(content) = FrontendAssets::get("static/user.png") {
+        return Ok(HttpResponse::Ok()
+            .content_type("image/png")
+            .body(content.data.into_owned()));
+    }
+    
+    Err(crate::error::AppError::NotFound("User avatar not found".to_string()))
 }
 
 // Serve favicon
-async fn serve_favicon() -> Result<actix_files::NamedFile, crate::error::AppError> {
-    let path = std::path::Path::new("../static/static/favicon.png");
-    actix_files::NamedFile::open(path)
-        .map_err(|_| crate::error::AppError::NotFound("Favicon not found".to_string()))
+async fn serve_favicon(state: web::Data<AppState>) -> Result<HttpResponse, crate::error::AppError> {
+    let config = state.config.read().unwrap();
+    let static_dir = &config.static_dir;
+    let favicon_path = std::path::Path::new(static_dir).join("favicon.png");
+    
+    // Try external file first
+    if favicon_path.exists() {
+        if let Ok(image_data) = std::fs::read(&favicon_path) {
+            return Ok(HttpResponse::Ok()
+                .content_type("image/png")
+                .body(image_data));
+        }
+    }
+    
+    // Fall back to embedded file
+    use crate::static_files::FrontendAssets;
+    if let Some(content) = FrontendAssets::get("static/favicon.png") {
+        return Ok(HttpResponse::Ok()
+            .content_type("image/png")
+            .body(content.data.into_owned()));
+    }
+    
+    Err(crate::error::AppError::NotFound("Favicon not found".to_string()))
 }
 
 // Health check endpoints
