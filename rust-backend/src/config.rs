@@ -310,13 +310,13 @@ impl Config {
             // Authentication
             jwt_expires_in: env::var("JWT_EXPIRES_IN").unwrap_or_else(|_| "168h".to_string()),
             enable_signup: env::var("ENABLE_SIGNUP")
-                .unwrap_or_else(|_| "true".to_string())
+                .unwrap_or_else(|_| "false".to_string())
                 .parse()
-                .unwrap_or(true),
+                .unwrap_or(false),
             enable_login_form: env::var("ENABLE_LOGIN_FORM")
-                .unwrap_or_else(|_| "true".to_string())
+                .unwrap_or_else(|_| "false".to_string())
                 .parse()
-                .unwrap_or(true),
+                .unwrap_or(false),
             enable_api_key: env::var("ENABLE_API_KEY")
                 .unwrap_or_else(|_| "true".to_string())
                 .parse()
