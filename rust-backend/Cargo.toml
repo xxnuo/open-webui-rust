@@ -116,7 +116,8 @@ base64-simd = "0.8.0"
 
 # Optional features
 [features]
-default = []
+default = ["embed-frontend"]
+embed-frontend = []
 embeddings = ["candle-core", "candle-nn", "candle-transformers", "hf-hub", "tokenizers"]
 
 [profile.release]
