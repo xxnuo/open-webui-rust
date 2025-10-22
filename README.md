@@ -2,6 +2,14 @@
 
 Open WebUI Rust后端,比原 Python 后端性能更优、可靠性和可扩展性。
 
+## 没时间往下看，快速开始：
+
+```
+git clone https://github.com/knoxchat/open-webui-rust.git && cd open-webui-rust
+docker compose up -d
+```
+> 确保Docker和Docker Compose就绪
+
 https://github.com/user-attachments/assets/d1bf00a3-1838-4658-84da-d8bfc84a9ec3
 
 ## 概述
