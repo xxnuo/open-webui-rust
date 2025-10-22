@@ -5,7 +5,7 @@ use rust_embed::RustEmbed;
 // Embed the frontend build directory into the binary
 // The path is relative to the Cargo.toml directory
 #[derive(RustEmbed)]
-#[folder = "../../frontend/build/"]
+#[folder = "../build/"]
 pub struct FrontendAssets;
 
 // Re-export RustEmbed trait so other modules can use FrontendAssets::get()
