@@ -2,6 +2,7 @@ use crate::db::Database;
 use crate::error::{AppError, AppResult};
 use crate::models::User;
 use crate::utils::time::current_timestamp_seconds;
+use chrono::NaiveDate;
 use sqlx::Row;
 
 pub struct UserService<'a> {
@@ -219,6 +220,84 @@ impl<'a> UserService<'a> {
         .bind(id)
         .execute(&self.db.pool)
         .await?;
+
+        Ok(())
+    }
+
+    /// Update user profile information (name, profile_image_url, bio, gender, date_of_birth)
+    pub async fn update_user_profile(
+        &self,
+        id: &str,
+        name: Option<&str>,
+        profile_image_url: Option<&str>,
+        bio: Option<&str>,
+        gender: Option<&str>,
+        date_of_birth: Option<NaiveDate>,
+    ) -> AppResult<()> {
+        let now = current_timestamp_seconds();
+
+        // Build dynamic SQL query based on which fields are provided
+        let mut query_parts = Vec::new();
+        let mut bind_index = 1;
+
+        if name.is_some() {
+            query_parts.push(format!("name = ${}", bind_index));
+            bind_index += 1;
+        }
+        if profile_image_url.is_some() {
+            query_parts.push(format!("profile_image_url = ${}", bind_index));
+            bind_index += 1;
+        }
+        if bio.is_some() {
+            query_parts.push(format!("bio = ${}", bind_index));
+            bind_index += 1;
+        }
+        if gender.is_some() {
+            query_parts.push(format!("gender = ${}", bind_index));
+            bind_index += 1;
+        }
+        if date_of_birth.is_some() {
+            query_parts.push(format!("date_of_birth = ${}", bind_index));
+            bind_index += 1;
+        }
+
+        // Always update updated_at
+        query_parts.push(format!("updated_at = ${}", bind_index));
+        bind_index += 1;
+
+        if query_parts.len() == 1 {
+            // Only updated_at would be updated, nothing to do
+            return Ok(());
+        }
+
+        let query_str = format!(
+            r#"UPDATE "user" SET {} WHERE id = ${}"#,
+            query_parts.join(", "),
+            bind_index
+        );
+
+        let mut query = sqlx::query(&query_str);
+
+        if let Some(n) = name {
+            query = query.bind(n);
+        }
+        if let Some(p) = profile_image_url {
+            query = query.bind(p);
+        }
+        if let Some(b) = bio {
+            query = query.bind(b);
+        }
+        if let Some(g) = gender {
+            query = query.bind(g);
+        }
+        if let Some(d) = date_of_birth {
+            query = query.bind(d);
+        }
+
+        query = query.bind(now);
+        query = query.bind(id);
+
+        query.execute(&self.db.pool).await?;
 
         Ok(())
     }

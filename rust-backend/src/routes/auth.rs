@@ -384,20 +384,22 @@ async fn update_profile(
     let user_service = UserService::new(&state.db);
 
     // Extract update fields from request
-    let mut update_data = std::collections::HashMap::new();
+    let name = req.get("name").and_then(|v| v.as_str());
+    let profile_image_url = req.get("profile_image_url").and_then(|v| v.as_str());
 
-    if let Some(name) = req.get("name").and_then(|v| v.as_str()) {
-        update_data.insert("name".to_string(), name.to_string());
-    }
-    if let Some(profile_image_url) = req.get("profile_image_url").and_then(|v| v.as_str()) {
-        update_data.insert(
-            "profile_image_url".to_string(),
-            profile_image_url.to_string(),
-        );
-    }
+    // Update user profile in the database
+    user_service
+        .update_user_profile(
+            &auth_user.user.id,
+            name,
+            profile_image_url,
+            None, // bio
+            None, // gender
+            None, // date_of_birth
+        )
+        .await?;
 
-    // Update user profile (you'll need to implement this in your UserService)
-    // For now, just return the current user
+    // Retrieve and return updated user
     let user = user_service
         .get_user_by_id(&auth_user.user.id)
         .await?
