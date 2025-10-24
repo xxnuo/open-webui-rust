@@ -6,6 +6,7 @@
 /// - Channel events (channel-events)
 /// - Yjs collaborative editing (ydoc:*)
 /// - Usage tracking
+use crate::db::Database;
 use crate::socketio::manager::SocketIOManager;
 use crate::socketio::protocol::{EnginePacket, SocketPacket};
 use crate::socketio::redis_adapter::RedisAdapter;
@@ -38,6 +39,7 @@ pub struct EventHandler {
     rate_limiter: Arc<RateLimiter>,
     presence_manager: Arc<PresenceManager>,
     recovery_manager: Arc<RecoveryManager>,
+    db: Database,
 }
 
 impl EventHandler {
@@ -50,6 +52,7 @@ impl EventHandler {
         rate_limiter: Arc<RateLimiter>,
         presence_manager: Arc<PresenceManager>,
         recovery_manager: Arc<RecoveryManager>,
+        db: Database,
     ) -> Self {
         Self {
             manager,
@@ -61,6 +64,7 @@ impl EventHandler {
             rate_limiter,
             presence_manager,
             recovery_manager,
+            db,
         }
     }
 
@@ -377,8 +381,73 @@ impl EventHandler {
 
         tracing::info!("Session {} joining Yjs document: {}", sid, doc_id);
 
-        // TODO: Add access control check for notes (note:xxx format)
-        // For now, allow all authenticated users
+        // Get the session user
+        let session = self
+            .manager
+            .get_session(sid)
+            .await
+            .ok_or("Session not found")?;
+
+        let user = session.user.clone().ok_or("User not authenticated")?;
+
+        let user_id = user
+            .get("id")
+            .and_then(|id| id.as_str())
+            .ok_or("User ID not found")?;
+
+        let user_role = user.get("role").and_then(|r| r.as_str()).unwrap_or("user");
+
+        // Access control check for notes (note:xxx format)
+        if doc_id.starts_with("note:") {
+            let note_id = doc_id
+                .strip_prefix("note:")
+                .ok_or("Invalid note document ID")?;
+
+            tracing::debug!("Checking access for user {} to note {}", user_id, note_id);
+
+            // Check note access in database
+            use crate::services::group::GroupService;
+            use crate::services::note::NoteService;
+
+            let note_service = NoteService::new(&self.db);
+            let mut note = note_service
+                .get_note_by_id(note_id)
+                .await
+                .map_err(|e| format!("Database error: {}", e))?
+                .ok_or_else(|| format!("Note {} not found", note_id))?;
+
+            note.parse_json_fields();
+
+            // Admin has full access
+            if user_role != "admin" {
+                // Owner has full access
+                if user_id != note.user_id {
+                    // Check access control for other users
+                    let group_service = GroupService::new(&self.db);
+                    let user_groups = group_service
+                        .get_groups_by_member_id(user_id)
+                        .await
+                        .map_err(|e| format!("Failed to get user groups: {}", e))?;
+                    let user_group_ids: std::collections::HashSet<String> =
+                        user_groups.into_iter().map(|g| g.id).collect();
+
+                    use crate::utils::misc::has_access;
+                    if !has_access(user_id, "read", &note.access_control, &user_group_ids) {
+                        return Err(format!(
+                            "User {} does not have access to note {}",
+                            user_id, note_id
+                        ));
+                    }
+                }
+            }
+
+            tracing::info!(
+                "User {} (role: {}) granted access to note document {}",
+                user_id,
+                user_role,
+                note_id
+            );
+        }
 
         // Join the Socket.IO room
         let room = format!("doc_{}", doc_id);
@@ -502,8 +571,50 @@ impl EventHandler {
 
         tracing::debug!("Stored and broadcasted Yjs update for document: {}", doc_id);
 
-        // TODO: Implement debounced save to database (like Python backend)
-        // This would require integration with the notes service
+        // Save to database for notes (debounced)
+        if doc_id.starts_with("note:") {
+            if let Some(note_data) = data.get("data") {
+                let doc_id_clone = doc_id.to_string();
+                let note_data_clone = note_data.clone();
+                let db_clone = self.db.clone();
+                let sid_clone = sid.to_string();
+
+                // Spawn debounced save task
+                tokio::spawn(async move {
+                    // Wait 500ms before saving (debounce)
+                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+                    if let Some(note_id) = doc_id_clone.strip_prefix("note:") {
+                        use crate::models::note::NoteUpdateForm;
+                        use crate::services::note::NoteService;
+
+                        let note_service = NoteService::new(&db_clone);
+                        let update_form = NoteUpdateForm {
+                            title: None,
+                            data: Some(note_data_clone),
+                            meta: None,
+                            access_control: None,
+                        };
+
+                        match note_service.update_note_by_id(note_id, &update_form).await {
+                            Ok(_) => {
+                                tracing::debug!(
+                                    "Saved note {} to database after Yjs update",
+                                    note_id
+                                );
+                            }
+                            Err(e) => {
+                                tracing::error!(
+                                    "Failed to save note {} to database: {}",
+                                    note_id,
+                                    e
+                                );
+                            }
+                        }
+                    }
+                });
+            }
+        }
 
         Ok(())
     }

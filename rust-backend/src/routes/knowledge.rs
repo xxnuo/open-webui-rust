@@ -242,7 +242,7 @@ async fn remove_file_from_knowledge(
     state: web::Data<AppState>,
     auth_user: AuthUser,
     knowledge_id: web::Path<String>,
-    form: web::Json<serde_json::Value>,
+    _form: web::Json<serde_json::Value>,
 ) -> AppResult<HttpResponse> {
     let service = KnowledgeService::new(&state.db);
 

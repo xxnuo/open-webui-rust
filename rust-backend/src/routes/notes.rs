@@ -312,8 +312,19 @@ async fn update_note_by_id(
 
     let updated_note = note_service.update_note_by_id(&note_id, &form_data).await?;
 
-    // TODO: Emit Socket.IO event
-    // await sio.emit("note-events", note.model_dump(), to=f"note:{note.id}")
+    // Emit Socket.IO event to notify all connected clients
+    if let Some(event_handler) = &state.socketio_handler {
+        let note_model = NoteModel::from(updated_note.clone());
+        let note_json = serde_json::to_value(&note_model).unwrap_or(serde_json::json!({}));
+        let room = format!("note:{}", note_id);
+
+        if let Err(e) = event_handler
+            .broadcast_to_room(&room, "note-events", note_json, None)
+            .await
+        {
+            tracing::warn!("Failed to emit note-events: {}", e);
+        }
+    }
 
     Ok(HttpResponse::Ok().json(NoteModel::from(updated_note)))
 }

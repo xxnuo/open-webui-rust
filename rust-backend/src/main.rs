@@ -167,6 +167,7 @@ async fn main() -> anyhow::Result<()> {
             rate_limiter.clone(),
             presence_manager.clone(),
             recovery_manager.clone(),
+            db.clone(),
         );
 
         // Spawn background cleanup tasks

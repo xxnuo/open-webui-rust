@@ -115,7 +115,7 @@ async fn reset_memory(db: web::Data<Database>, user: AuthUser) -> AppResult<Http
     // TODO: Implement vector DB operations
     // VECTOR_DB_CLIENT.delete_collection(f"user-memory-{user.id}")
 
-    let memories = service.get_memories_by_user_id(&user.id).await?;
+    let _memories = service.get_memories_by_user_id(&user.id).await?;
 
     // TODO: Re-index all memories in vector DB
     // VECTOR_DB_CLIENT.upsert(

@@ -158,13 +158,11 @@ impl YDocManager {
     pub async fn get_state_as_update(&self, doc_id: &str) -> Result<Vec<u8>, String> {
         let updates = self.get_updates(doc_id).await?;
 
-        if updates.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        // Merge all updates into a single document
+        // Create a new Yjs document
         let doc = Doc::new();
-        {
+
+        // Apply all updates if any exist
+        if !updates.is_empty() {
             let mut txn = doc.transact_mut();
 
             for update_bytes in updates {
@@ -181,7 +179,7 @@ impl YDocManager {
             }
         }
 
-        // Encode entire state as update
+        // Encode entire state as update (even if empty, this produces a valid Yjs update)
         let state_vector = StateVector::default();
         let txn = doc.transact();
         let update = txn.encode_diff_v1(&state_vector);
