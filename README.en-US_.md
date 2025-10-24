@@ -26,7 +26,6 @@ The Rust backend is a drop-in replacement for the Python backend, offering:
 - [Development](#development)
 - [Testing](#testing)
 - [Deployment](#deployment)
-- [Migration Guide](#migration-guide)
 
 ## Architecture
 
