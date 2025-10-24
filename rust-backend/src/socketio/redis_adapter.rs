@@ -40,11 +40,16 @@ pub enum RedisMessageType {
     },
 }
 
+use std::time::Duration;
+use tokio::time::sleep;
+
 /// Redis adapter for Socket.IO scaling
 pub struct RedisAdapter {
     redis_client: redis::Client,
     server_id: String,
     channel: String,
+    reconnect_attempts: usize,
+    reconnect_delay: Duration,
 }
 
 impl RedisAdapter {
@@ -57,6 +62,26 @@ impl RedisAdapter {
             redis_client,
             server_id,
             channel: "socketio:events".to_string(),
+            reconnect_attempts: 10,
+            reconnect_delay: Duration::from_secs(1),
+        })
+    }
+
+    /// Create with custom reconnection settings
+    pub fn new_with_config(
+        redis_url: &str,
+        server_id: String,
+        reconnect_attempts: usize,
+        reconnect_delay: Duration,
+    ) -> Result<Self, redis::RedisError> {
+        let redis_client = redis::Client::open(redis_url)?;
+
+        Ok(Self {
+            redis_client,
+            server_id,
+            channel: "socketio:events".to_string(),
+            reconnect_attempts,
+            reconnect_delay,
         })
     }
 
@@ -65,31 +90,88 @@ impl RedisAdapter {
         &self.server_id
     }
 
-    /// Publish an event to Redis
+    /// Publish an event to Redis with automatic retry on failure
     pub async fn publish(&self, message: RedisMessage) -> Result<(), Box<dyn std::error::Error>> {
-        let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
         let serialized = serde_json::to_string(&message)?;
 
-        conn.publish::<_, _, ()>(&self.channel, serialized).await?;
-        tracing::debug!("Published message to Redis: {:?}", message.message_type);
+        for attempt in 0..self.reconnect_attempts {
+            match self.redis_client.get_multiplexed_async_connection().await {
+                Ok(mut conn) => match conn.publish::<_, _, ()>(&self.channel, &serialized).await {
+                    Ok(_) => {
+                        tracing::debug!("Published message to Redis: {:?}", message.message_type);
+                        return Ok(());
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to publish to Redis (attempt {}/{}): {}",
+                            attempt + 1,
+                            self.reconnect_attempts,
+                            e
+                        );
 
-        Ok(())
+                        if attempt < self.reconnect_attempts - 1 {
+                            sleep(self.reconnect_delay * (attempt as u32 + 1)).await;
+                        }
+                    }
+                },
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to connect to Redis (attempt {}/{}): {}",
+                        attempt + 1,
+                        self.reconnect_attempts,
+                        e
+                    );
+
+                    if attempt < self.reconnect_attempts - 1 {
+                        sleep(self.reconnect_delay * (attempt as u32 + 1)).await;
+                    }
+                }
+            }
+        }
+
+        Err("Failed to publish to Redis after all retry attempts".into())
     }
 
-    /// Subscribe to Redis channel and handle incoming messages
-    pub async fn subscribe<F>(&self, mut handler: F) -> Result<(), Box<dyn std::error::Error>>
+    /// Subscribe to Redis channel and handle incoming messages with automatic reconnection
+    pub async fn subscribe<F>(&self, mut handler: F) -> Result<(), String>
     where
         F: FnMut(RedisMessage) + Send + 'static,
     {
-        let mut pubsub = self.redis_client.get_async_pubsub().await?;
-        pubsub.subscribe(&self.channel).await?;
+        loop {
+            match self.subscribe_with_reconnect(&mut handler).await {
+                Ok(_) => {
+                    tracing::info!("Redis subscription ended normally");
+                    break Ok(());
+                }
+                Err(e) => {
+                    tracing::error!("Redis subscription error: {}, reconnecting...", e);
+                    sleep(self.reconnect_delay).await;
+                }
+            }
+        }
+    }
+
+    /// Internal subscribe method with connection handling
+    async fn subscribe_with_reconnect<F>(&self, handler: &mut F) -> Result<(), String>
+    where
+        F: FnMut(RedisMessage) + Send + 'static,
+    {
+        let mut pubsub = self
+            .redis_client
+            .get_async_pubsub()
+            .await
+            .map_err(|e| e.to_string())?;
+        pubsub
+            .subscribe(&self.channel)
+            .await
+            .map_err(|e| e.to_string())?;
 
         tracing::info!("Subscribed to Redis channel: {}", self.channel);
 
         let mut stream = pubsub.on_message();
 
         while let Some(msg) = stream.next().await {
-            let payload: String = msg.get_payload()?;
+            let payload: String = msg.get_payload().map_err(|e| e.to_string())?;
 
             match serde_json::from_str::<RedisMessage>(&payload) {
                 Ok(redis_msg) => {

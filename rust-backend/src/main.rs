@@ -94,13 +94,82 @@ async fn main() -> anyhow::Result<()> {
         == "true";
 
     let socketio_handler = if socketio_enabled {
-        use crate::socketio::{EventHandler, SocketIOManager};
+        use crate::socketio::redis_adapter::RedisAdapter;
+        use crate::socketio::{
+            EventHandler, PresenceConfig, PresenceManager, RateLimitConfig, RateLimiter,
+            RecoveryConfig, RecoveryManager, SocketIOManager, SocketIOMetrics, YDocManager,
+        };
 
         let manager = SocketIOManager::new();
         let auth_endpoint = format!("http://{}:{}", config.host, config.port);
-        let handler = EventHandler::new(manager.clone(), auth_endpoint);
 
-        // Spawn a background task to clean up stale sessions periodically
+        // Initialize metrics
+        let metrics = SocketIOMetrics::new();
+
+        // Initialize rate limiter
+        let rate_limit_config = RateLimitConfig::default();
+        let rate_limiter = Arc::new(RateLimiter::new(rate_limit_config));
+
+        // Initialize presence manager
+        let presence_config = PresenceConfig::default();
+        let presence_manager = Arc::new(PresenceManager::new(presence_config));
+
+        // Initialize recovery manager with Redis if available
+        let recovery_config = RecoveryConfig::default();
+        let recovery_manager = Arc::new(RecoveryManager::new(redis.clone(), recovery_config));
+
+        // Initialize YDoc manager with Redis if available
+        let ydoc_manager = YDocManager::new(redis.clone());
+
+        // Initialize Redis adapter if SOCKETIO_REDIS_URL is set
+        let redis_adapter = if let Ok(redis_url) = std::env::var("SOCKETIO_REDIS_URL") {
+            let server_id = uuid::Uuid::new_v4().to_string();
+            match RedisAdapter::new(&redis_url, server_id.clone()) {
+                Ok(adapter) => {
+                    let adapter_arc = Arc::new(adapter);
+
+                    // Spawn Redis subscription handler
+                    let adapter_sub = adapter_arc.clone();
+                    tokio::spawn(async move {
+                        // TODO: Handle incoming Redis messages and route to local sessions
+                        if let Err(e) = adapter_sub
+                            .subscribe(move |msg| {
+                                tracing::debug!("Received Redis message: {:?}", msg);
+                                // Route message to local connections
+                            })
+                            .await
+                        {
+                            tracing::error!("Redis subscription error: {:?}", e);
+                        }
+                    });
+
+                    info!(
+                        "✅ Redis adapter initialized for horizontal scaling (server: {})",
+                        server_id
+                    );
+                    Some(adapter_arc)
+                }
+                Err(e) => {
+                    tracing::error!("Failed to initialize Redis adapter: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        let handler = EventHandler::new(
+            manager.clone(),
+            auth_endpoint,
+            ydoc_manager,
+            redis_adapter,
+            metrics.clone(),
+            rate_limiter.clone(),
+            presence_manager.clone(),
+            recovery_manager.clone(),
+        );
+
+        // Spawn background cleanup tasks
         let manager_cleanup = manager.clone();
         tokio::spawn(async move {
             loop {
@@ -110,7 +179,49 @@ async fn main() -> anyhow::Result<()> {
             }
         });
 
-        info!("✅ Native Rust Socket.IO initialized with periodic cleanup");
+        // Spawn rate limiter cleanup task
+        let rate_limiter_cleanup = rate_limiter.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_secs(600)).await; // Every 10 minutes
+                rate_limiter_cleanup.cleanup_old_buckets().await;
+            }
+        });
+
+        // Spawn presence cleanup tasks
+        let presence_cleanup = presence_manager.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
+                presence_cleanup.update_away_statuses().await;
+                presence_cleanup.cleanup_typing_indicators().await;
+            }
+        });
+
+        let presence_cleanup2 = presence_manager.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_secs(3600)).await; // Every hour
+                presence_cleanup2.cleanup_old_presences().await;
+            }
+        });
+
+        // Spawn recovery cleanup task
+        let recovery_cleanup = recovery_manager.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_secs(300)).await; // Every 5 minutes
+                recovery_cleanup.cleanup_old_states().await;
+            }
+        });
+
+        info!("✅ Native Rust Socket.IO initialized with:");
+        info!("   - Yjs collaborative editing");
+        info!("   - Metrics and observability");
+        info!("   - Rate limiting and backpressure");
+        info!("   - Presence tracking and typing indicators");
+        info!("   - Connection recovery");
+        info!("   - Periodic cleanup tasks");
         Some(Arc::new(handler))
     } else {
         info!("⚠️  Socket.IO disabled");

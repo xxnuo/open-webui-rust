@@ -111,6 +111,9 @@ url = "2.5"
 serde_bytes = "0.11.19"
 base64-simd = "0.8.0"
 
+# Yjs CRDT for collaborative editing
+yrs = "0.24.0"
+
 # Optional features
 [features]
 default = []

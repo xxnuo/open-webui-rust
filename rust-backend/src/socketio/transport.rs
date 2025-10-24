@@ -224,6 +224,21 @@ async fn handle_socket_packet(
                     "ydoc:awareness:update" => {
                         event_handler.handle_ydoc_awareness_update(sid, data).await
                     }
+                    "presence:status" => event_handler.handle_presence_status(sid, data).await,
+                    "typing:start" => event_handler.handle_typing_start(sid, data).await,
+                    "typing:stop" => event_handler.handle_typing_stop(sid, data).await,
+                    "presence:get" => {
+                        match event_handler.handle_get_presences(sid, data).await {
+                            Ok(response) => {
+                                // Send response back to client
+                                let _ = event_handler
+                                    .emit_to_session(sid, "presence:data", response)
+                                    .await;
+                                Ok(())
+                            }
+                            Err(e) => Err(e),
+                        }
+                    }
                     _ => {
                         tracing::debug!("Unknown event: {}", event);
                         Ok(())

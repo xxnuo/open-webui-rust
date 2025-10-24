@@ -173,6 +173,85 @@ pub struct SocketPacket {
     pub id: Option<u64>,
 }
 
+/// Acknowledgment tracker for reliable message delivery
+pub struct AckTracker {
+    next_id: std::sync::atomic::AtomicU64,
+    pending_acks: Arc<RwLock<HashMap<u64, PendingAck>>>,
+}
+
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+struct PendingAck {
+    created_at: std::time::Instant,
+    timeout: std::time::Duration,
+    callback: Option<Box<dyn FnOnce(JsonValue) + Send>>,
+}
+
+impl AckTracker {
+    pub fn new() -> Self {
+        Self {
+            next_id: std::sync::atomic::AtomicU64::new(1),
+            pending_acks: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    /// Generate a new ACK ID
+    pub fn next_ack_id(&self) -> u64 {
+        self.next_id
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Register a pending ACK with callback
+    pub async fn register_ack<F>(&self, id: u64, timeout: std::time::Duration, callback: F)
+    where
+        F: FnOnce(JsonValue) + Send + 'static,
+    {
+        let mut pending = self.pending_acks.write().await;
+        pending.insert(
+            id,
+            PendingAck {
+                created_at: std::time::Instant::now(),
+                timeout,
+                callback: Some(Box::new(callback)),
+            },
+        );
+    }
+
+    /// Process an ACK response
+    pub async fn process_ack(&self, id: u64, data: JsonValue) -> bool {
+        let mut pending = self.pending_acks.write().await;
+        if let Some(ack) = pending.remove(&id) {
+            if let Some(callback) = ack.callback {
+                callback(data);
+            }
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Clean up expired ACKs
+    pub async fn cleanup_expired(&self) {
+        let mut pending = self.pending_acks.write().await;
+        let now = std::time::Instant::now();
+
+        pending.retain(|_, ack| now.duration_since(ack.created_at) < ack.timeout);
+    }
+
+    /// Get pending count
+    pub async fn pending_count(&self) -> usize {
+        self.pending_acks.read().await.len()
+    }
+}
+
+impl Default for AckTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SocketPacket {
     pub fn new(packet_type: SocketPacketType) -> Self {
         Self {
@@ -219,6 +298,31 @@ impl SocketPacket {
     pub fn event(namespace: &str, event: &str, data: JsonValue) -> Self {
         Self {
             packet_type: SocketPacketType::Event,
+            namespace: namespace.to_string(),
+            data: Some(serde_json::json!([event, data])),
+            id: None,
+        }
+    }
+
+    /// Create an event with ACK ID for reliable delivery
+    pub fn event_with_ack(namespace: &str, event: &str, data: JsonValue, ack_id: u64) -> Self {
+        Self {
+            packet_type: SocketPacketType::Event,
+            namespace: namespace.to_string(),
+            data: Some(serde_json::json!([event, data])),
+            id: Some(ack_id),
+        }
+    }
+
+    /// Create a binary event packet
+    pub fn binary_event(
+        namespace: &str,
+        event: &str,
+        data: JsonValue,
+        _attachments: usize,
+    ) -> Self {
+        Self {
+            packet_type: SocketPacketType::BinaryEvent,
             namespace: namespace.to_string(),
             data: Some(serde_json::json!([event, data])),
             id: None,
