@@ -1137,10 +1137,12 @@ async fn process_streaming_via_socketio(
         let model_id_clone = model_id.clone();
         let messages_clone = messages.clone();
         let chat_id_clone = chat_id.clone().unwrap();
+        let message_id_clone = message_id.clone();
         let user_id_clone = user_id.to_string();
         let model_item_clone = model_item.clone();
         let endpoint_url_clone = endpoint_url.clone();
         let endpoint_key_clone = endpoint_key.clone();
+        let socket_state_clone = state.socket_state.clone();
 
         tokio::spawn(async move {
             if let Err(e) = generate_and_update_title(
@@ -1148,10 +1150,12 @@ async fn process_streaming_via_socketio(
                 &model_id_clone,
                 &messages_clone,
                 &chat_id_clone,
+                &message_id_clone,
                 &user_id_clone,
                 &model_item_clone,
                 &endpoint_url_clone,
                 &endpoint_key_clone,
+                socket_state_clone,
             )
             .await
             {
@@ -1252,10 +1256,12 @@ async fn generate_and_update_title(
     model_id: &str,
     messages: &[serde_json::Value],
     chat_id: &str,
+    message_id: &Option<String>,
     user_id: &str,
     model_item: &serde_json::Value,
     endpoint_url: &str,
     endpoint_key: &str,
+    socket_state: Option<crate::socket::SocketState>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use crate::services::chat::ChatService;
 
@@ -1375,6 +1381,44 @@ async fn generate_and_update_title(
                                     .update_chat(chat_id, &chat.user_id, update_req)
                                     .await?;
                                 tracing::info!("Updated chat {} with title: {}", chat_id, title);
+
+                                // Emit chat:title event to notify frontend
+                                if let Some(socket_state) = &socket_state {
+                                    let event_payload = json!({
+                                        "chat_id": chat_id,
+                                        "message_id": message_id.as_deref(),
+                                        "data": {
+                                            "type": "chat:title",
+                                            "data": title,
+                                        }
+                                    });
+
+                                    tracing::info!("📤 Attempting to emit chat:title event to user: {}, chat: {}, message: {:?}, title: {}", 
+                                        user_id, chat_id, message_id, title);
+                                    tracing::debug!(
+                                        "Event payload: {}",
+                                        serde_json::to_string_pretty(&event_payload)
+                                            .unwrap_or_default()
+                                    );
+
+                                    match socket_state
+                                        .native_handler
+                                        .emit_to_user(user_id, "chat-events", event_payload)
+                                        .await
+                                    {
+                                        Ok(sent_count) => {
+                                            tracing::info!("✅ Emitted chat:title event to {} session(s) for chat {}: {}", sent_count, chat_id, title);
+                                        }
+                                        Err(e) => {
+                                            tracing::error!(
+                                                "❌ Failed to emit chat:title event: {}",
+                                                e
+                                            );
+                                        }
+                                    }
+                                } else {
+                                    tracing::warn!("⚠️  Socket state not available, cannot emit chat:title event");
+                                }
                             }
                         }
                     }
