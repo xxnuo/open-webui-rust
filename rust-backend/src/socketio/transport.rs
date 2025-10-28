@@ -210,6 +210,7 @@ async fn handle_socket_packet(
                         .handle_user_join(sid, data, http_client)
                         .await
                         .map(|_| ()),
+                    "join-channels" => event_handler.handle_join_channels(sid, data).await,
                     "usage" => event_handler.handle_usage(sid, data).await,
                     "chat-events" => event_handler.handle_chat_event(sid, data).await,
                     "channel-events" => event_handler.handle_channel_event(sid, data).await,

@@ -278,19 +278,72 @@ impl EventHandler {
                 sid
             );
 
-            // TODO: Auto-join user to their channels (like Python backend)
-            // This would require fetching user's channels from database
-            // Example:
-            // let user_id = user.get("id").and_then(|id| id.as_str())?;
-            // let channels = fetch_user_channels(user_id).await?;
-            // for channel in channels {
-            //     self.manager.join_room(sid, &format!("channel:{}", channel.id)).await?;
-            // }
+            // Auto-join user to their channels (like Python backend)
+            if let Err(e) = self.auto_join_user_channels(sid, user_id).await {
+                tracing::warn!("Failed to auto-join user {} to channels: {}", user_id, e);
+            }
 
             Ok(user)
         } else {
             Err(format!("Authentication failed: {}", response.status()))
         }
+    }
+
+    /// Auto-join user to all their accessible channels
+    async fn auto_join_user_channels(&self, sid: &str, user_id: &str) -> Result<(), String> {
+        use crate::services::channel::ChannelService;
+
+        let channel_service = ChannelService::new(&self.db);
+
+        match channel_service.get_channels_by_user_id(user_id).await {
+            Ok(channels) => {
+                tracing::info!(
+                    "Auto-joining user {} to {} channels",
+                    user_id,
+                    channels.len()
+                );
+
+                for channel in channels {
+                    let room = format!("channel:{}", channel.id);
+                    if let Err(e) = self.manager.join_room(sid, &room).await {
+                        tracing::warn!(
+                            "Failed to join user {} to channel {}: {}",
+                            user_id,
+                            channel.id,
+                            e
+                        );
+                    } else {
+                        tracing::debug!("User {} joined channel room: {}", user_id, channel.id);
+                    }
+                }
+
+                Ok(())
+            }
+            Err(e) => Err(format!("Failed to fetch user channels: {}", e)),
+        }
+    }
+
+    /// Handle join-channels event - manually join user to their channels
+    pub async fn handle_join_channels(&self, sid: &str, _data: JsonValue) -> Result<(), String> {
+        // Get the session user
+        let session = self
+            .manager
+            .get_session(sid)
+            .await
+            .ok_or("Session not found")?;
+
+        let user = session.user.clone().ok_or("User not authenticated")?;
+
+        let user_id = user
+            .get("id")
+            .and_then(|id| id.as_str())
+            .ok_or("Missing user ID")?;
+
+        // Join all user's channels
+        self.auto_join_user_channels(sid, user_id).await?;
+
+        tracing::info!("User {} manually joined their channels", user_id);
+        Ok(())
     }
 
     /// Handle usage tracking
