@@ -104,6 +104,44 @@ impl Tool {
     }
 }
 
+#[derive(Debug, Serialize)]
+pub struct ToolUserResponse {
+    pub id: String,
+    pub user_id: String,
+    pub name: String,
+    pub meta: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub access_control: Option<serde_json::Value>,
+    pub updated_at: i64,
+    pub created_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub has_user_valves: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<serde_json::Value>,
+}
+
+impl ToolUserResponse {
+    pub fn from_tool_and_user(
+        tool: Tool,
+        user: Option<serde_json::Value>,
+        has_user_valves: Option<bool>,
+    ) -> Self {
+        let meta = tool.get_meta().unwrap_or_else(|| serde_json::json!({"description": ""}));
+        let access_control = tool.get_access_control();
+        ToolUserResponse {
+            id: tool.id.clone(),
+            user_id: tool.user_id.clone(),
+            name: tool.name.clone(),
+            meta,
+            access_control,
+            updated_at: tool.updated_at,
+            created_at: tool.created_at,
+            has_user_valves,
+            user,
+        }
+    }
+}
+
 impl From<Tool> for ToolResponse {
     fn from(mut tool: Tool) -> Self {
         tool.parse_specs();

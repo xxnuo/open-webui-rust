@@ -93,6 +93,45 @@ impl<'a> KnowledgeService<'a> {
         Ok(knowledge)
     }
 
+    pub async fn create_knowledge_with_access_control(
+        &self,
+        id: &str,
+        user_id: &str,
+        name: &str,
+        description: Option<&str>,
+        data: Option<serde_json::Value>,
+        access_control: Option<serde_json::Value>,
+    ) -> AppResult<Knowledge> {
+        let now = current_timestamp_seconds();
+        let data_str = data
+            .as_ref()
+            .map(|v| serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string()));
+        let access_control_str = access_control
+            .as_ref()
+            .map(|v| serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string()));
+
+        sqlx::query(
+            r#"
+            INSERT INTO knowledge (id, user_id, name, description, data, access_control, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            "#,
+        )
+        .bind(id)
+        .bind(user_id)
+        .bind(name)
+        .bind(description)
+        .bind(&data_str)
+        .bind(&access_control_str)
+        .bind(now)
+        .bind(now)
+        .execute(&self.db.pool)
+        .await?;
+
+        self.get_knowledge_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::InternalServerError("Failed to create knowledge".to_string()))
+    }
+
     pub async fn update_knowledge(
         &self,
         id: &str,
@@ -102,31 +141,123 @@ impl<'a> KnowledgeService<'a> {
     ) -> AppResult<Knowledge> {
         let now = current_timestamp_seconds();
 
-        let mut query_parts = vec!["UPDATE knowledge SET updated_at = $2"];
-        let mut bind_values: Vec<String> = vec![now.to_string()];
+        let mut updates = vec!["updated_at = $1".to_string()];
+        let mut bind_count = 2;
 
-        if let Some(name) = name {
-            query_parts.push("name = $1");
-            bind_values.push(name.to_string());
+        if name.is_some() {
+            updates.push(format!("name = ${}", bind_count));
+            bind_count += 1;
         }
-        if let Some(description) = description {
-            query_parts.push("description = ?");
-            bind_values.push(description.to_string());
+        if description.is_some() {
+            updates.push(format!("description = ${}", bind_count));
+            bind_count += 1;
         }
-        if let Some(data) = data {
-            query_parts.push("data = ?");
-            bind_values.push(serde_json::to_string(&data).unwrap());
+        if data.is_some() {
+            updates.push(format!("data = ${}", bind_count));
+            bind_count += 1;
         }
 
-        let query_str = format!("{} WHERE id = $1", query_parts.join(", "));
+        let query_str = format!(
+            "UPDATE knowledge SET {} WHERE id = ${}",
+            updates.join(", "),
+            bind_count
+        );
 
         let mut query = sqlx::query(&query_str);
-        for value in bind_values {
-            query = query.bind(value);
+        query = query.bind(now);
+
+        if let Some(n) = name {
+            query = query.bind(n);
+        }
+        if let Some(d) = description {
+            query = query.bind(d);
+        }
+        if let Some(data_val) = data {
+            query = query.bind(serde_json::to_string(&data_val).unwrap());
         }
         query = query.bind(id);
 
         query.execute(&self.db.pool).await?;
+
+        self.get_knowledge_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Knowledge not found".to_string()))
+    }
+
+    pub async fn update_knowledge_full(
+        &self,
+        id: &str,
+        name: Option<&str>,
+        description: Option<&str>,
+        data: Option<serde_json::Value>,
+        access_control: Option<serde_json::Value>,
+    ) -> AppResult<Knowledge> {
+        let now = current_timestamp_seconds();
+
+        let mut updates = vec!["updated_at = $1".to_string()];
+        let mut bind_count = 2;
+
+        if name.is_some() {
+            updates.push(format!("name = ${}", bind_count));
+            bind_count += 1;
+        }
+        if description.is_some() {
+            updates.push(format!("description = ${}", bind_count));
+            bind_count += 1;
+        }
+        if data.is_some() {
+            updates.push(format!("data = ${}", bind_count));
+            bind_count += 1;
+        }
+        if access_control.is_some() {
+            updates.push(format!("access_control = ${}", bind_count));
+            bind_count += 1;
+        }
+
+        let query_str = format!(
+            "UPDATE knowledge SET {} WHERE id = ${}",
+            updates.join(", "),
+            bind_count
+        );
+
+        let mut query = sqlx::query(&query_str);
+        query = query.bind(now);
+
+        if let Some(n) = name {
+            query = query.bind(n);
+        }
+        if let Some(d) = description {
+            query = query.bind(d);
+        }
+        if let Some(data_val) = data {
+            query = query.bind(serde_json::to_string(&data_val).unwrap());
+        }
+        if let Some(ac) = access_control {
+            query = query.bind(serde_json::to_string(&ac).unwrap());
+        }
+        query = query.bind(id);
+
+        query.execute(&self.db.pool).await?;
+
+        self.get_knowledge_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Knowledge not found".to_string()))
+    }
+
+    pub async fn update_knowledge_data(
+        &self,
+        id: &str,
+        data: serde_json::Value,
+    ) -> AppResult<Knowledge> {
+        let now = current_timestamp_seconds();
+        let data_str = serde_json::to_string(&data).unwrap();
+
+        sqlx::query("UPDATE knowledge SET data = $1, updated_at = $2 WHERE id = $3")
+            .bind(&data_str)
+            .bind(now)
+            .bind(id)
+            .execute(&self.db.pool)
+            .await?;
 
         self.get_knowledge_by_id(id)
             .await?

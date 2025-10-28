@@ -1,10 +1,15 @@
 use actix_web::{web, HttpResponse};
 use serde::Deserialize;
+use serde_json::json;
+use std::collections::{HashMap, HashSet};
 
 use crate::error::{AppError, AppResult};
 use crate::middleware::{AuthMiddleware, AuthUser};
-use crate::models::model::{Model, ModelForm};
+use crate::models::model::{Model, ModelForm, ModelUserResponse};
+use crate::services::group::GroupService;
 use crate::services::model::ModelService;
+use crate::services::user::UserService;
+use crate::utils::misc::{has_access, has_permission};
 use crate::AppState;
 
 pub fn create_routes(cfg: &mut web::ServiceConfig) {
@@ -33,20 +38,66 @@ pub fn create_routes(cfg: &mut web::ServiceConfig) {
 // GET / - Get models for current user
 async fn get_models(state: web::Data<AppState>, auth_user: AuthUser) -> AppResult<HttpResponse> {
     let model_service = ModelService::new(&state.db);
+    let user_service = UserService::new(&state.db);
 
     // Admins with bypass can see all models
     let config = state.config.read().unwrap();
     let bypass_admin_access_control = config.bypass_admin_access_control.unwrap_or(false);
+    drop(config);
 
     let models = if auth_user.user.role == "admin" && bypass_admin_access_control {
         model_service.get_models().await?
     } else {
-        model_service
-            .get_models_by_user_id(&auth_user.user.id)
-            .await?
+        // Get user's groups for access control
+        let group_service = GroupService::new(&state.db);
+        let groups = group_service.get_groups_by_member_id(&auth_user.user.id).await?;
+        let user_group_ids: HashSet<String> = groups.into_iter().map(|g| g.id).collect();
+
+        // Filter models by user ownership or access control
+        let all_models = model_service.get_models().await?;
+        all_models
+            .into_iter()
+            .filter(|model| {
+                model.user_id == auth_user.user.id
+                    || has_access(
+                        &auth_user.user.id,
+                        "read",
+                        &model.access_control,
+                        &user_group_ids,
+                    )
+            })
+            .collect()
     };
 
-    Ok(HttpResponse::Ok().json(models))
+    // Get unique user IDs
+    let user_ids: HashSet<String> = models.iter().map(|m| m.user_id.clone()).collect();
+
+    // Fetch users
+    let mut users_map: HashMap<String, serde_json::Value> = HashMap::new();
+    for user_id in user_ids {
+        if let Ok(Some(user)) = user_service.get_user_by_id(&user_id).await {
+            users_map.insert(
+                user_id.clone(),
+                json!({
+                    "id": user.id,
+                    "name": user.name,
+                    "email": user.email,
+                    "role": user.role,
+                    "profile_image_url": user.profile_image_url,
+                }),
+            );
+        }
+    }
+
+    let response: Vec<ModelUserResponse> = models
+        .into_iter()
+        .map(|m| {
+            let user = users_map.get(&m.user_id).cloned();
+            ModelUserResponse::from_model_and_user(m, user)
+        })
+        .collect();
+
+    Ok(HttpResponse::Ok().json(response))
 }
 
 // GET /base - Get base models (admin only)
@@ -74,17 +125,10 @@ async fn create_model(
     if auth_user.user.role != "admin" {
         let config = state.config.read().unwrap();
         let user_permissions = config.user_permissions.clone();
+        drop(config);
 
         // Check if user has workspace.models permission
-        if let Some(workspace) = user_permissions.get("workspace") {
-            if !workspace
-                .get("models")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false)
-            {
-                return Err(AppError::Forbidden("Permission denied".to_string()));
-            }
-        } else {
+        if !has_permission(&auth_user.user.id, "workspace.models", &user_permissions) {
             return Err(AppError::Forbidden("Permission denied".to_string()));
         }
     }
@@ -92,7 +136,7 @@ async fn create_model(
     let model_service = ModelService::new(&state.db);
 
     // Check if model ID already exists
-    if let Some(_) = model_service.get_model_by_id(&form_data.id).await? {
+    if model_service.get_model_by_id(&form_data.id).await?.is_some() {
         return Err(AppError::BadRequest("Model ID already taken".to_string()));
     }
 
@@ -137,35 +181,28 @@ async fn import_models(
             // Check if model exists
             if let Some(existing) = model_service.get_model_by_id(model_id).await? {
                 // Update existing model
-                let mut updated_data = existing.clone();
-
-                // Merge the imported data
-                if let Some(obj) = model_data.as_object() {
-                    for (key, value) in obj {
-                        match key.as_str() {
-                            "id" | "base_model_id" | "name" => {
-                                // These are handled by ModelForm
-                            }
-                            "meta" => {
-                                updated_data.meta =
-                                    serde_json::from_value(value.clone()).unwrap_or_default();
-                            }
-                            "params" => {
-                                updated_data.params =
-                                    serde_json::from_value(value.clone()).unwrap_or_default();
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-
                 let form = ModelForm {
-                    id: updated_data.id.clone(),
-                    base_model_id: updated_data.base_model_id.clone(),
-                    name: updated_data.name.clone(),
-                    meta: updated_data.meta.unwrap_or_else(|| serde_json::json!({})),
-                    params: updated_data.params,
-                    access_control: updated_data.access_control,
+                    id: existing.id.clone(),
+                    base_model_id: model_data
+                        .get("base_model_id")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string())
+                        .or(existing.base_model_id),
+                    name: model_data
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string())
+                        .unwrap_or(existing.name),
+                    meta: model_data
+                        .get("meta")
+                        .cloned()
+                        .or(existing.meta)
+                        .unwrap_or_else(|| json!({})),
+                    params: model_data.get("params").cloned().unwrap_or(existing.params),
+                    access_control: model_data
+                        .get("access_control")
+                        .cloned()
+                        .or(existing.access_control),
                 };
 
                 model_service.update_model_by_id(model_id, form).await?;
@@ -228,6 +265,7 @@ async fn get_model_by_id(
     // Check access
     let config = state.config.read().unwrap();
     let bypass_admin_access_control = config.bypass_admin_access_control.unwrap_or(false);
+    drop(config);
 
     if auth_user.user.role == "admin" && bypass_admin_access_control {
         return Ok(HttpResponse::Ok().json(model));
@@ -238,21 +276,17 @@ async fn get_model_by_id(
     }
 
     // Check access control
-    if let Some(ref access_control) = model.access_control {
-        if let Some(read_access) = access_control.get("read") {
-            if let Some(_group_ids) = read_access.get("group_ids").and_then(|v| v.as_array()) {
-                // TODO: Check if user is in any of these groups
-                // For now, just allow if access_control exists
-                return Ok(HttpResponse::Ok().json(model));
-            }
-            if let Some(user_ids) = read_access.get("user_ids").and_then(|v| v.as_array()) {
-                for user_id in user_ids {
-                    if user_id.as_str() == Some(&auth_user.user.id) {
-                        return Ok(HttpResponse::Ok().json(model));
-                    }
-                }
-            }
-        }
+    let group_service = GroupService::new(&state.db);
+    let groups = group_service.get_groups_by_member_id(&auth_user.user.id).await?;
+    let user_group_ids: HashSet<String> = groups.into_iter().map(|g| g.id).collect();
+
+    if has_access(
+        &auth_user.user.id,
+        "read",
+        &model.access_control,
+        &user_group_ids,
+    ) {
+        return Ok(HttpResponse::Ok().json(model));
     }
 
     Err(AppError::Forbidden("Access denied".to_string()))
@@ -283,7 +317,6 @@ async fn get_model_profile_image(
                 // Return base64 encoded image
                 if let Some(comma_pos) = profile_image_url.find(',') {
                     let base64_data = &profile_image_url[comma_pos + 1..];
-                    // Use base64 crate's Engine trait
                     use base64::{engine::general_purpose, Engine};
                     if let Ok(image_data) = general_purpose::STANDARD.decode(base64_data) {
                         return Ok(HttpResponse::Ok()
@@ -323,18 +356,16 @@ async fn toggle_model_by_id(
     // Check permissions
     if auth_user.user.role != "admin" && model.user_id != auth_user.user.id {
         // Check write access
-        if let Some(ref access_control) = model.access_control {
-            let has_write_access = access_control
-                .get("write")
-                .and_then(|w| w.get("user_ids"))
-                .and_then(|ids| ids.as_array())
-                .map(|arr| arr.iter().any(|id| id.as_str() == Some(&auth_user.user.id)))
-                .unwrap_or(false);
+        let group_service = GroupService::new(&state.db);
+        let groups = group_service.get_groups_by_member_id(&auth_user.user.id).await?;
+        let user_group_ids: HashSet<String> = groups.into_iter().map(|g| g.id).collect();
 
-            if !has_write_access {
-                return Err(AppError::Forbidden("Access denied".to_string()));
-            }
-        } else {
+        if !has_access(
+            &auth_user.user.id,
+            "write",
+            &model.access_control,
+            &user_group_ids,
+        ) {
             return Err(AppError::Forbidden("Access denied".to_string()));
         }
     }
@@ -361,18 +392,16 @@ async fn update_model_by_id(
     // Check permissions
     if model.user_id != auth_user.user.id && auth_user.user.role != "admin" {
         // Check write access
-        if let Some(ref access_control) = model.access_control {
-            let has_write_access = access_control
-                .get("write")
-                .and_then(|w| w.get("user_ids"))
-                .and_then(|ids| ids.as_array())
-                .map(|arr| arr.iter().any(|id| id.as_str() == Some(&auth_user.user.id)))
-                .unwrap_or(false);
+        let group_service = GroupService::new(&state.db);
+        let groups = group_service.get_groups_by_member_id(&auth_user.user.id).await?;
+        let user_group_ids: HashSet<String> = groups.into_iter().map(|g| g.id).collect();
 
-            if !has_write_access {
-                return Err(AppError::Forbidden("Access denied".to_string()));
-            }
-        } else {
+        if !has_access(
+            &auth_user.user.id,
+            "write",
+            &model.access_control,
+            &user_group_ids,
+        ) {
             return Err(AppError::Forbidden("Access denied".to_string()));
         }
     }
@@ -400,18 +429,16 @@ async fn delete_model_by_id(
     // Check permissions
     if auth_user.user.role != "admin" && model.user_id != auth_user.user.id {
         // Check write access
-        if let Some(ref access_control) = model.access_control {
-            let has_write_access = access_control
-                .get("write")
-                .and_then(|w| w.get("user_ids"))
-                .and_then(|ids| ids.as_array())
-                .map(|arr| arr.iter().any(|id| id.as_str() == Some(&auth_user.user.id)))
-                .unwrap_or(false);
+        let group_service = GroupService::new(&state.db);
+        let groups = group_service.get_groups_by_member_id(&auth_user.user.id).await?;
+        let user_group_ids: HashSet<String> = groups.into_iter().map(|g| g.id).collect();
 
-            if !has_write_access {
-                return Err(AppError::Forbidden("Access denied".to_string()));
-            }
-        } else {
+        if !has_access(
+            &auth_user.user.id,
+            "write",
+            &model.access_control,
+            &user_group_ids,
+        ) {
             return Err(AppError::Forbidden("Access denied".to_string()));
         }
     }

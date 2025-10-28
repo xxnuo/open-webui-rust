@@ -65,6 +65,22 @@ pub struct ModelResponse {
     pub updated_at: i64,
 }
 
+#[derive(Debug, Serialize)]
+pub struct ModelUserResponse {
+    pub id: String,
+    pub user_id: String,
+    pub base_model_id: Option<String>,
+    pub name: String,
+    pub params: JsonValue,
+    pub meta: Option<JsonValue>,
+    pub access_control: Option<JsonValue>,
+    pub is_active: bool,
+    pub created_at: i64,
+    pub updated_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<serde_json::Value>,
+}
+
 impl From<Model> for ModelResponse {
     fn from(model: Model) -> Self {
         ModelResponse {
@@ -78,6 +94,24 @@ impl From<Model> for ModelResponse {
             is_active: model.is_active,
             created_at: model.created_at,
             updated_at: model.updated_at,
+        }
+    }
+}
+
+impl ModelUserResponse {
+    pub fn from_model_and_user(model: Model, user: Option<serde_json::Value>) -> Self {
+        ModelUserResponse {
+            id: model.id,
+            user_id: model.user_id.clone(),
+            base_model_id: model.base_model_id,
+            name: model.name,
+            params: model.params,
+            meta: model.meta,
+            access_control: model.access_control,
+            is_active: model.is_active,
+            created_at: model.created_at,
+            updated_at: model.updated_at,
+            user,
         }
     }
 }

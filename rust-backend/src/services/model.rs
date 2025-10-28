@@ -54,9 +54,9 @@ impl<'a> ModelService<'a> {
     pub async fn get_model_by_id(&self, id: &str) -> AppResult<Option<Model>> {
         let result = sqlx::query_as::<_, Model>(
             r#"
-            SELECT id, user_id, base_model_id, name, params, meta, created_at, updated_at, is_active
+            SELECT id, user_id, base_model_id, name, params, meta, access_control, created_at, updated_at, is_active
             FROM model
-            WHERE id = $8
+            WHERE id = $1
             "#,
         )
         .bind(id)
@@ -69,8 +69,9 @@ impl<'a> ModelService<'a> {
     pub async fn get_all_models(&self) -> AppResult<Vec<Model>> {
         let models = sqlx::query_as::<_, Model>(
             r#"
-            SELECT id, user_id, base_model_id, name, params, meta, created_at, updated_at, is_active
+            SELECT id, user_id, base_model_id, name, params, meta, access_control, created_at, updated_at, is_active
             FROM model
+            WHERE base_model_id IS NOT NULL
             ORDER BY created_at DESC
             "#,
         )
@@ -83,9 +84,9 @@ impl<'a> ModelService<'a> {
     pub async fn get_base_models(&self) -> AppResult<Vec<Model>> {
         let models = sqlx::query_as::<_, Model>(
             r#"
-            SELECT id, user_id, base_model_id, name, params, meta, created_at, updated_at, is_active
+            SELECT id, user_id, base_model_id, name, params, meta, access_control, created_at, updated_at, is_active
             FROM model
-            WHERE base_model_id IS NOT NULL
+            WHERE base_model_id IS NULL
             ORDER BY created_at DESC
             "#,
         )
@@ -98,9 +99,9 @@ impl<'a> ModelService<'a> {
     pub async fn get_models_by_user_id(&self, user_id: &str) -> AppResult<Vec<Model>> {
         let models = sqlx::query_as::<_, Model>(
             r#"
-            SELECT id, user_id, base_model_id, name, params, meta, created_at, updated_at, is_active
+            SELECT id, user_id, base_model_id, name, params, meta, access_control, created_at, updated_at, is_active
             FROM model
-            WHERE user_id = $1
+            WHERE user_id = $1 AND base_model_id IS NOT NULL
             ORDER BY created_at DESC
             "#,
         )
@@ -155,11 +156,12 @@ impl<'a> ModelService<'a> {
         sqlx::query(
             r#"
             UPDATE model
-            SET is_active = CASE WHEN is_active = true THEN false ELSE true END
-            WHERE id = $4
+            SET is_active = CASE WHEN is_active = true THEN false ELSE true END, updated_at = $2
+            WHERE id = $1
             "#,
         )
         .bind(id)
+        .bind(current_timestamp_seconds())
         .execute(&self.db.pool)
         .await?;
 
