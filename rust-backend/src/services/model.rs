@@ -200,14 +200,19 @@ impl<'a> ModelService<'a> {
 
         // Upsert models
         for model in &models {
-            let params_str =
-                serde_json::to_string(&model.params).unwrap_or_else(|_| "{}".to_string());
-            let meta_str = serde_json::to_string(&model.meta).unwrap_or_else(|_| "{}".to_string());
-            let access_control_str = model
-                .access_control
+            // Ensure params is always a valid JSON object
+            let params_json = model
+                .meta
                 .as_ref()
-                .and_then(|ac| serde_json::to_string(ac).ok())
-                .unwrap_or_else(|| "null".to_string());
+                .map(|m| m.clone())
+                .unwrap_or_else(|| serde_json::json!({}));
+
+            // Ensure meta is always a valid JSON object
+            let meta_json = model
+                .meta
+                .as_ref()
+                .map(|m| m.clone())
+                .unwrap_or_else(|| serde_json::json!({}));
 
             if existing.contains(&model.id) {
                 // Update existing
@@ -219,10 +224,10 @@ impl<'a> ModelService<'a> {
                     "#,
                 )
                 .bind(&model.name)
-                .bind(&params_str)
-                .bind(&meta_str)
+                .bind(&model.params)
+                .bind(&meta_json)
                 .bind(now)
-                .bind(&access_control_str)
+                .bind(&model.access_control)
                 .bind(&model.id)
                 .execute(&self.db.pool)
                 .await?;
@@ -238,9 +243,9 @@ impl<'a> ModelService<'a> {
                 .bind(user_id)
                 .bind(&model.base_model_id)
                 .bind(&model.name)
-                .bind(&params_str)
-                .bind(&meta_str)
-                .bind(&access_control_str)
+                .bind(&model.params)
+                .bind(&meta_json)
+                .bind(&model.access_control)
                 .bind(now)
                 .bind(now)
                 .bind(true)
@@ -272,13 +277,20 @@ impl<'a> ModelService<'a> {
 
     pub async fn insert_new_model(&self, form: ModelForm, user_id: &str) -> AppResult<Model> {
         let now = current_timestamp_seconds();
-        let params_str = serde_json::to_string(&form.params).unwrap_or_else(|_| "{}".to_string());
-        let meta_str = serde_json::to_string(&form.meta).unwrap_or_else(|_| "{}".to_string());
-        let access_control_str = form
-            .access_control
-            .as_ref()
-            .and_then(|ac| serde_json::to_string(ac).ok())
-            .unwrap_or_else(|| "null".to_string());
+
+        // Ensure params is always a valid JSON object
+        let params_json = if form.params.is_null() {
+            serde_json::json!({})
+        } else {
+            form.params
+        };
+
+        // Ensure meta is always a valid JSON object
+        let meta_json = if form.meta.is_null() {
+            serde_json::json!({})
+        } else {
+            form.meta
+        };
 
         sqlx::query(
             r#"
@@ -290,9 +302,9 @@ impl<'a> ModelService<'a> {
         .bind(user_id)
         .bind(&form.base_model_id)
         .bind(&form.name)
-        .bind(&params_str)
-        .bind(&meta_str)
-        .bind(&access_control_str)
+        .bind(&params_json)
+        .bind(&meta_json)
+        .bind(&form.access_control)
         .bind(now)
         .bind(now)
         .bind(true)
@@ -306,13 +318,20 @@ impl<'a> ModelService<'a> {
 
     pub async fn update_model_by_id(&self, id: &str, form: ModelForm) -> AppResult<Model> {
         let now = current_timestamp_seconds();
-        let params_str = serde_json::to_string(&form.params).unwrap_or_else(|_| "{}".to_string());
-        let meta_str = serde_json::to_string(&form.meta).unwrap_or_else(|_| "{}".to_string());
-        let access_control_str = form
-            .access_control
-            .as_ref()
-            .and_then(|ac| serde_json::to_string(ac).ok())
-            .unwrap_or_else(|| "null".to_string());
+
+        // Ensure params is always a valid JSON object
+        let params_json = if form.params.is_null() {
+            serde_json::json!({})
+        } else {
+            form.params
+        };
+
+        // Ensure meta is always a valid JSON object
+        let meta_json = if form.meta.is_null() {
+            serde_json::json!({})
+        } else {
+            form.meta
+        };
 
         sqlx::query(
             r#"
@@ -323,9 +342,9 @@ impl<'a> ModelService<'a> {
         )
         .bind(&form.base_model_id)
         .bind(&form.name)
-        .bind(&params_str)
-        .bind(&meta_str)
-        .bind(&access_control_str)
+        .bind(&params_json)
+        .bind(&meta_json)
+        .bind(&form.access_control)
         .bind(now)
         .bind(id)
         .execute(&self.db.pool)

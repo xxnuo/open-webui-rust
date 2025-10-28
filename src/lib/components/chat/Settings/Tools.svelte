@@ -1,14 +1,13 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
-	import { createEventDispatcher, onMount, getContext, tick } from 'svelte';
+	import { createEventDispatcher, onMount, getContext } from 'svelte';
 	import { getModels as _getModels, getToolServersData } from '$lib/apis';
 
 	const dispatch = createEventDispatcher();
 	const i18n = getContext('i18n');
 
-	import { models, settings, toolServers, user } from '$lib/stores';
+	import { settings, toolServers } from '$lib/stores';
 
-	import Switch from '$lib/components/common/Switch.svelte';
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import Plus from '$lib/components/icons/Plus.svelte';
@@ -114,14 +113,6 @@
 								'CORS must be properly configured by the provider to allow requests from Open WebUI.'
 							)}
 						</div>
-					</div>
-
-					<div class=" text-xs text-gray-600 dark:text-gray-300 mb-2">
-						<a
-							class="underline"
-							href="https://github.com/open-webui/openapi-servers"
-							target="_blank">{$i18n.t('Learn more about OpenAPI tool servers.')}</a
-						>
 					</div>
 				</div>
 			</div>

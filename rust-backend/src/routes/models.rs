@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::error::{AppError, AppResult};
 use crate::middleware::{AuthMiddleware, AuthUser};
-use crate::models::model::{Model, ModelForm, ModelUserResponse};
+use crate::models::model::{Model, ModelForm, ModelResponse, ModelUserResponse};
 use crate::services::group::GroupService;
 use crate::services::model::ModelService;
 use crate::services::user::UserService;
@@ -114,7 +114,9 @@ async fn get_base_models(
     let model_service = ModelService::new(&state.db);
     let models = model_service.get_base_models().await?;
 
-    Ok(HttpResponse::Ok().json(models))
+    let response: Vec<ModelResponse> = models.into_iter().map(ModelResponse::from).collect();
+
+    Ok(HttpResponse::Ok().json(response))
 }
 
 // POST /create - Create a new model
@@ -150,7 +152,7 @@ async fn create_model(
         .insert_new_model(form_data.into_inner(), &auth_user.user.id)
         .await?;
 
-    Ok(HttpResponse::Ok().json(model))
+    Ok(HttpResponse::Ok().json(ModelResponse::from(model)))
 }
 
 // GET /export - Export all models (admin only)
@@ -162,7 +164,9 @@ async fn export_models(state: web::Data<AppState>, auth_user: AuthUser) -> AppRe
     let model_service = ModelService::new(&state.db);
     let models = model_service.get_models().await?;
 
-    Ok(HttpResponse::Ok().json(models))
+    let response: Vec<ModelResponse> = models.into_iter().map(ModelResponse::from).collect();
+
+    Ok(HttpResponse::Ok().json(response))
 }
 
 // POST /import - Import models (admin only)
@@ -274,11 +278,11 @@ async fn get_model_by_id(
     drop(config);
 
     if auth_user.user.role == "admin" && bypass_admin_access_control {
-        return Ok(HttpResponse::Ok().json(model));
+        return Ok(HttpResponse::Ok().json(ModelResponse::from(model)));
     }
 
     if model.user_id == auth_user.user.id {
-        return Ok(HttpResponse::Ok().json(model));
+        return Ok(HttpResponse::Ok().json(ModelResponse::from(model)));
     }
 
     // Check access control
@@ -294,7 +298,7 @@ async fn get_model_by_id(
         &model.access_control,
         &user_group_ids,
     ) {
-        return Ok(HttpResponse::Ok().json(model));
+        return Ok(HttpResponse::Ok().json(ModelResponse::from(model)));
     }
 
     Err(AppError::Forbidden("Access denied".to_string()))
@@ -382,7 +386,7 @@ async fn toggle_model_by_id(
 
     let toggled = model_service.toggle_model_by_id(&query.id).await?;
 
-    Ok(HttpResponse::Ok().json(toggled))
+    Ok(HttpResponse::Ok().json(ModelResponse::from(toggled)))
 }
 
 // POST /model/update?id= - Update model
@@ -422,7 +426,7 @@ async fn update_model_by_id(
         .update_model_by_id(&query.id, form_data.into_inner())
         .await?;
 
-    Ok(HttpResponse::Ok().json(updated))
+    Ok(HttpResponse::Ok().json(ModelResponse::from(updated)))
 }
 
 // DELETE /model/delete?id= - Delete model by ID
