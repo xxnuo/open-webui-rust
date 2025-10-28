@@ -23,7 +23,7 @@ Rust 后端是 Python 后端的直接替代品, 有这些好处:
 - **零拷贝流式传输**用于聊天生成
 - **生产就绪**具有全面的错误处理
 
-## **重要‼️** Rust后端当前完整代码状态：82% (可运行项目、部分功能缺失)
+## **重要‼️** Rust后端当前完整代码状态：83% (可运行项目、部分功能缺失)
 
 - **初始版本基于Open WebUI 0.6.32开发**
 本项目初始版本开发根据赞助数量更新文件数，根据打赏/赞助添加后端文件直至添加完整的后端文件：
@@ -356,26 +356,6 @@ docker build -t open-webui-rust .
 docker run -p 8080:8080 --env-file .env open-webui-rust
 ```
 
-### Systemd 服务 (Linux)
-
-```ini
-[Unit]
-Description=Open WebUI Rust Backend
-After=network.target postgresql.service redis.service
-
-[Service]
-Type=simple
-User=webui
-WorkingDirectory=/opt/open-webui-rust
-EnvironmentFile=/opt/open-webui-rust/.env
-ExecStart=/opt/open-webui-rust/target/release/open-webui-rust
-Restart=on-failure
-RestartSec=5s
-
-[Install]
-WantedBy=multi-user.target
-```
-
 ## 🔌 API 兼容性
 
 Rust 后端对核心端点保持与 Python 后端 **100% API 兼容性**:
@@ -529,16 +509,6 @@ cargo build --release
 
 # 去除符号 (减小大小)
 strip ./target/release/open-webui-rust
-```
-
-### Docker 部署
-
-```bash
-# 多阶段 Docker 构建
-docker build -t open-webui-rust:latest .
-
-# 使用 docker-compose 运行
-docker-compose up -d
 ```
 
 ### 性能调优
