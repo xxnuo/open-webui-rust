@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
 use crate::middleware::{AuthMiddleware, AuthUser};
-use crate::models::knowledge::{KnowledgeFilesResponse, KnowledgeUserResponse};
+use crate::models::knowledge::{KnowledgeFilesResponse, KnowledgeResponse, KnowledgeUserResponse};
 use crate::services::file::FileService;
 use crate::services::group::GroupService;
 use crate::services::knowledge::KnowledgeService;
@@ -336,7 +336,7 @@ async fn create_knowledge(
         )
         .await?;
 
-    Ok(HttpResponse::Ok().json(knowledge))
+    Ok(HttpResponse::Ok().json(KnowledgeResponse::from(knowledge)))
 }
 
 // GET /{id} - Get knowledge by ID

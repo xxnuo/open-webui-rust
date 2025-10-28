@@ -23,9 +23,6 @@ impl<'a> KnowledgeService<'a> {
         data: Option<serde_json::Value>,
     ) -> AppResult<Knowledge> {
         let now = current_timestamp_seconds();
-        let data_str = data
-            .as_ref()
-            .map(|v| serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string()));
 
         sqlx::query(
             r#"
@@ -37,7 +34,7 @@ impl<'a> KnowledgeService<'a> {
         .bind(user_id)
         .bind(name)
         .bind(description)
-        .bind(&data_str)
+        .bind(&data)
         .bind(now)
         .bind(now)
         .execute(&self.db.pool)
@@ -51,7 +48,16 @@ impl<'a> KnowledgeService<'a> {
     pub async fn get_knowledge_by_id(&self, id: &str) -> AppResult<Option<Knowledge>> {
         let result = sqlx::query_as::<_, Knowledge>(
             r#"
-            SELECT id, user_id, name, description, data, meta, access_control, created_at, updated_at
+            SELECT 
+                id, 
+                user_id, 
+                name, 
+                description, 
+                COALESCE(data, '{}'::jsonb) as data, 
+                COALESCE(meta, '{}'::jsonb) as meta, 
+                access_control, 
+                created_at, 
+                updated_at
             FROM knowledge
             WHERE id = $1
             "#,
@@ -66,7 +72,16 @@ impl<'a> KnowledgeService<'a> {
     pub async fn get_knowledge_by_user_id(&self, user_id: &str) -> AppResult<Vec<Knowledge>> {
         let knowledge = sqlx::query_as::<_, Knowledge>(
             r#"
-            SELECT id, user_id, name, description, data, meta, access_control, created_at, updated_at
+            SELECT 
+                id, 
+                user_id, 
+                name, 
+                description, 
+                COALESCE(data, '{}'::jsonb) as data, 
+                COALESCE(meta, '{}'::jsonb) as meta, 
+                access_control, 
+                created_at, 
+                updated_at
             FROM knowledge
             WHERE user_id = $1
             ORDER BY updated_at DESC
@@ -82,7 +97,16 @@ impl<'a> KnowledgeService<'a> {
     pub async fn get_all_knowledge(&self) -> AppResult<Vec<Knowledge>> {
         let knowledge = sqlx::query_as::<_, Knowledge>(
             r#"
-            SELECT id, user_id, name, description, data, meta, access_control, created_at, updated_at
+            SELECT 
+                id, 
+                user_id, 
+                name, 
+                description, 
+                COALESCE(data, '{}'::jsonb) as data, 
+                COALESCE(meta, '{}'::jsonb) as meta, 
+                access_control, 
+                created_at, 
+                updated_at
             FROM knowledge
             ORDER BY updated_at DESC
             "#,
@@ -103,12 +127,6 @@ impl<'a> KnowledgeService<'a> {
         access_control: Option<serde_json::Value>,
     ) -> AppResult<Knowledge> {
         let now = current_timestamp_seconds();
-        let data_str = data
-            .as_ref()
-            .map(|v| serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string()));
-        let access_control_str = access_control
-            .as_ref()
-            .map(|v| serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string()));
 
         sqlx::query(
             r#"
@@ -120,8 +138,8 @@ impl<'a> KnowledgeService<'a> {
         .bind(user_id)
         .bind(name)
         .bind(description)
-        .bind(&data_str)
-        .bind(&access_control_str)
+        .bind(&data)
+        .bind(&access_control)
         .bind(now)
         .bind(now)
         .execute(&self.db.pool)
@@ -172,8 +190,8 @@ impl<'a> KnowledgeService<'a> {
         if let Some(d) = description {
             query = query.bind(d);
         }
-        if let Some(data_val) = data {
-            query = query.bind(serde_json::to_string(&data_val).unwrap());
+        if let Some(ref data_val) = data {
+            query = query.bind(data_val);
         }
         query = query.bind(id);
 
@@ -229,11 +247,11 @@ impl<'a> KnowledgeService<'a> {
         if let Some(d) = description {
             query = query.bind(d);
         }
-        if let Some(data_val) = data {
-            query = query.bind(serde_json::to_string(&data_val).unwrap());
+        if let Some(ref data_val) = data {
+            query = query.bind(data_val);
         }
-        if let Some(ac) = access_control {
-            query = query.bind(serde_json::to_string(&ac).unwrap());
+        if let Some(ref ac) = access_control {
+            query = query.bind(ac);
         }
         query = query.bind(id);
 
@@ -250,10 +268,9 @@ impl<'a> KnowledgeService<'a> {
         data: serde_json::Value,
     ) -> AppResult<Knowledge> {
         let now = current_timestamp_seconds();
-        let data_str = serde_json::to_string(&data).unwrap();
 
         sqlx::query("UPDATE knowledge SET data = $1, updated_at = $2 WHERE id = $3")
-            .bind(&data_str)
+            .bind(&data)
             .bind(now)
             .bind(id)
             .execute(&self.db.pool)
