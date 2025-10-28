@@ -41,8 +41,7 @@ pub struct TypingIndicator {
     pub user_name: String,
     pub room_id: String,
     pub started_at: u64, // Unix timestamp
-    #[serde(skip)]
-    #[serde(default = "default_instant")]
+    #[serde(skip, default = "default_instant")]
     pub expires_at: Instant, // Internal expiry tracking
 }
 

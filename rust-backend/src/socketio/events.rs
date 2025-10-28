@@ -577,7 +577,6 @@ impl EventHandler {
                 let doc_id_clone = doc_id.to_string();
                 let note_data_clone = note_data.clone();
                 let db_clone = self.db.clone();
-                let sid_clone = sid.to_string();
 
                 // Spawn debounced save task
                 tokio::spawn(async move {
@@ -673,14 +672,13 @@ impl EventHandler {
     /// Handle Yjs awareness update (broadcast to room)
     pub async fn handle_ydoc_awareness_update(
         &self,
-        sid: &str,
+        _sid: &str,
         data: JsonValue,
     ) -> Result<(), String> {
         let doc_id = data
             .get("document_id")
             .and_then(|d| d.as_str())
-            .ok_or("Missing document_id")?
-            .to_string();
+            .ok_or("Missing document_id")?;
 
         let room = format!("doc_{}", doc_id);
 

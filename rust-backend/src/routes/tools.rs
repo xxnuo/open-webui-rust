@@ -233,7 +233,12 @@ async fn get_tools(state: web::Data<AppState>, auth_user: AuthUser) -> AppResult
             .into_iter()
             .filter(|t| {
                 t.user_id == auth_user.user.id
-                    || has_access(&auth_user.user.id, "read", &t.get_access_control(), &user_group_ids)
+                    || has_access(
+                        &auth_user.user.id,
+                        "read",
+                        &t.get_access_control(),
+                        &user_group_ids,
+                    )
             })
             .collect()
     };
@@ -296,7 +301,12 @@ async fn get_tool_list(state: web::Data<AppState>, auth_user: AuthUser) -> AppRe
             .into_iter()
             .filter(|t| {
                 t.user_id == auth_user.user.id
-                    || has_access(&auth_user.user.id, "write", &t.get_access_control(), &user_group_ids)
+                    || has_access(
+                        &auth_user.user.id,
+                        "write",
+                        &t.get_access_control(),
+                        &user_group_ids,
+                    )
             })
             .collect()
     };

@@ -50,7 +50,9 @@ async fn get_models(state: web::Data<AppState>, auth_user: AuthUser) -> AppResul
     } else {
         // Get user's groups for access control
         let group_service = GroupService::new(&state.db);
-        let groups = group_service.get_groups_by_member_id(&auth_user.user.id).await?;
+        let groups = group_service
+            .get_groups_by_member_id(&auth_user.user.id)
+            .await?;
         let user_group_ids: HashSet<String> = groups.into_iter().map(|g| g.id).collect();
 
         // Filter models by user ownership or access control
@@ -136,7 +138,11 @@ async fn create_model(
     let model_service = ModelService::new(&state.db);
 
     // Check if model ID already exists
-    if model_service.get_model_by_id(&form_data.id).await?.is_some() {
+    if model_service
+        .get_model_by_id(&form_data.id)
+        .await?
+        .is_some()
+    {
         return Err(AppError::BadRequest("Model ID already taken".to_string()));
     }
 
@@ -277,7 +283,9 @@ async fn get_model_by_id(
 
     // Check access control
     let group_service = GroupService::new(&state.db);
-    let groups = group_service.get_groups_by_member_id(&auth_user.user.id).await?;
+    let groups = group_service
+        .get_groups_by_member_id(&auth_user.user.id)
+        .await?;
     let user_group_ids: HashSet<String> = groups.into_iter().map(|g| g.id).collect();
 
     if has_access(
@@ -357,7 +365,9 @@ async fn toggle_model_by_id(
     if auth_user.user.role != "admin" && model.user_id != auth_user.user.id {
         // Check write access
         let group_service = GroupService::new(&state.db);
-        let groups = group_service.get_groups_by_member_id(&auth_user.user.id).await?;
+        let groups = group_service
+            .get_groups_by_member_id(&auth_user.user.id)
+            .await?;
         let user_group_ids: HashSet<String> = groups.into_iter().map(|g| g.id).collect();
 
         if !has_access(
@@ -393,7 +403,9 @@ async fn update_model_by_id(
     if model.user_id != auth_user.user.id && auth_user.user.role != "admin" {
         // Check write access
         let group_service = GroupService::new(&state.db);
-        let groups = group_service.get_groups_by_member_id(&auth_user.user.id).await?;
+        let groups = group_service
+            .get_groups_by_member_id(&auth_user.user.id)
+            .await?;
         let user_group_ids: HashSet<String> = groups.into_iter().map(|g| g.id).collect();
 
         if !has_access(
@@ -430,7 +442,9 @@ async fn delete_model_by_id(
     if auth_user.user.role != "admin" && model.user_id != auth_user.user.id {
         // Check write access
         let group_service = GroupService::new(&state.db);
-        let groups = group_service.get_groups_by_member_id(&auth_user.user.id).await?;
+        let groups = group_service
+            .get_groups_by_member_id(&auth_user.user.id)
+            .await?;
         let user_group_ids: HashSet<String> = groups.into_iter().map(|g| g.id).collect();
 
         if !has_access(

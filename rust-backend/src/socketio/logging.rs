@@ -15,6 +15,7 @@ impl CorrelationId {
         Self(Uuid::new_v4().to_string())
     }
 
+    #[allow(dead_code)]
     pub fn from_string(id: String) -> Self {
         Self(id)
     }
@@ -23,6 +24,7 @@ impl CorrelationId {
         &self.0
     }
 
+    #[allow(clippy::inherent_to_string)]
     pub fn to_string(&self) -> String {
         self.0.clone()
     }
@@ -55,27 +57,32 @@ impl LogContext {
         }
     }
 
+    #[allow(dead_code)]
     pub fn with_session(mut self, session_id: String) -> Self {
         self.session_id = Some(session_id);
         self
     }
 
+    #[allow(dead_code)]
     pub fn with_user(mut self, user_id: String) -> Self {
         self.user_id = Some(user_id);
         self
     }
 
+    #[allow(dead_code)]
     pub fn with_event(mut self, event: String) -> Self {
         self.event = Some(event);
         self
     }
 
+    #[allow(dead_code)]
     pub fn with_metadata(mut self, key: String, value: String) -> Self {
         self.metadata.insert(key, value);
         self
     }
 
     /// Format context for structured logging
+    #[allow(dead_code)]
     pub fn format(&self) -> String {
         let mut parts = vec![format!("correlation_id={}", self.correlation_id.as_str())];
 
@@ -118,6 +125,7 @@ impl StructuredLogger {
     }
 
     /// Create a log context for a session
+    #[allow(dead_code)]
     pub async fn create_context(&self, session_id: &str) -> LogContext {
         let context = LogContext::new().with_session(session_id.to_string());
 
@@ -128,12 +136,14 @@ impl StructuredLogger {
     }
 
     /// Get log context for a session
+    #[allow(dead_code)]
     pub async fn get_context(&self, session_id: &str) -> Option<LogContext> {
         let contexts = self.contexts.read().await;
         contexts.get(session_id).cloned()
     }
 
     /// Update log context
+    #[allow(dead_code)]
     pub async fn update_context<F>(&self, session_id: &str, updater: F)
     where
         F: FnOnce(LogContext) -> LogContext,
@@ -147,12 +157,14 @@ impl StructuredLogger {
     }
 
     /// Remove log context
+    #[allow(dead_code)]
     pub async fn remove_context(&self, session_id: &str) {
         let mut contexts = self.contexts.write().await;
         contexts.remove(session_id);
     }
 
     /// Log with context
+    #[allow(dead_code)]
     pub async fn log_info(&self, session_id: &str, message: &str) {
         if let Some(context) = self.get_context(session_id).await {
             tracing::info!("[{}] {}", context.format(), message);
@@ -161,6 +173,7 @@ impl StructuredLogger {
         }
     }
 
+    #[allow(dead_code)]
     pub async fn log_warn(&self, session_id: &str, message: &str) {
         if let Some(context) = self.get_context(session_id).await {
             tracing::warn!("[{}] {}", context.format(), message);
@@ -169,6 +182,7 @@ impl StructuredLogger {
         }
     }
 
+    #[allow(dead_code)]
     pub async fn log_error(&self, session_id: &str, message: &str) {
         if let Some(context) = self.get_context(session_id).await {
             tracing::error!("[{}] {}", context.format(), message);
@@ -177,6 +191,7 @@ impl StructuredLogger {
         }
     }
 
+    #[allow(dead_code)]
     pub async fn log_debug(&self, session_id: &str, message: &str) {
         if let Some(context) = self.get_context(session_id).await {
             tracing::debug!("[{}] {}", context.format(), message);

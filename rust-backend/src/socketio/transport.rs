@@ -345,8 +345,8 @@ pub async fn polling_handler(
                 tracing::debug!("Received polling POST from {}: {}", sid, body_str);
 
                 // Handle messages if event_handler is provided
-                if let Some(handler) = event_handler {
-                    let http_client = reqwest::Client::new();
+                if let Some(_handler) = event_handler {
+                    let _http_client = reqwest::Client::new();
 
                     // Split by packet separator
                     for packet_str in body_str.split('\x1e') {
@@ -431,6 +431,7 @@ pub async fn polling_handler(
 }
 
 /// Emit event to a session
+#[allow(dead_code)]
 pub async fn emit_to_session(
     session: &mut actix_ws::Session,
     event: &str,
@@ -444,12 +445,8 @@ pub async fn emit_to_session(
 }
 
 /// Broadcast event to multiple sessions
-pub async fn broadcast_to_sessions(sids: Vec<String>, event: &str, data: serde_json::Value) {
-    let socket_packet = SocketPacket::event("/", event, data);
-    let engine_packet = EnginePacket::message(socket_packet.encode().into_bytes());
-    let _message = engine_packet.encode();
-
-    // In a real implementation, we'd need to maintain connections
-    // This will be improved in the events module
-    tracing::debug!("Broadcasting to {} sessions: {}", sids.len(), event);
+#[allow(dead_code)]
+pub async fn broadcast_to_sessions(_sids: Vec<String>, _event: &str, _data: serde_json::Value) {
+    // This is now handled by EventHandler in events.rs
+    // Keeping this as a placeholder for backward compatibility
 }

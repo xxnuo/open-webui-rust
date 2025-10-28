@@ -124,7 +124,12 @@ async fn get_knowledge_bases(
             .into_iter()
             .filter(|k| {
                 k.user_id == auth_user.user.id
-                    || has_access(&auth_user.user.id, "read", &k.access_control, &user_group_ids)
+                    || has_access(
+                        &auth_user.user.id,
+                        "read",
+                        &k.access_control,
+                        &user_group_ids,
+                    )
             })
             .collect()
     };
@@ -213,7 +218,12 @@ async fn get_knowledge_list(
             .into_iter()
             .filter(|k| {
                 k.user_id == auth_user.user.id
-                    || has_access(&auth_user.user.id, "write", &k.access_control, &user_group_ids)
+                    || has_access(
+                        &auth_user.user.id,
+                        "write",
+                        &k.access_control,
+                        &user_group_ids,
+                    )
             })
             .collect()
     };
@@ -600,7 +610,9 @@ async fn add_file_to_knowledge(
         return Ok(HttpResponse::Ok().json(response));
     }
 
-    Err(AppError::BadRequest("File already in knowledge base".to_string()))
+    Err(AppError::BadRequest(
+        "File already in knowledge base".to_string(),
+    ))
 }
 
 // POST /{id}/file/update - Update file in knowledge

@@ -110,10 +110,7 @@ impl KnowledgeUserResponse {
 }
 
 impl KnowledgeFilesResponse {
-    pub fn from_knowledge_and_files(
-        knowledge: Knowledge,
-        files: Vec<serde_json::Value>,
-    ) -> Self {
+    pub fn from_knowledge_and_files(knowledge: Knowledge, files: Vec<serde_json::Value>) -> Self {
         KnowledgeFilesResponse {
             id: knowledge.id,
             user_id: knowledge.user_id,

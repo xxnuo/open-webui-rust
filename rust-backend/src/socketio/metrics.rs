@@ -320,11 +320,13 @@ pub struct LatencyStats {
 }
 
 /// Latency tracker helper
+#[allow(dead_code)]
 pub struct LatencyTracker {
     start: Instant,
     metrics: SocketIOMetrics,
 }
 
+#[allow(dead_code)]
 impl LatencyTracker {
     pub fn new(metrics: SocketIOMetrics) -> Self {
         Self {

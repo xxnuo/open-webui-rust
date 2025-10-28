@@ -126,7 +126,9 @@ impl ToolUserResponse {
         user: Option<serde_json::Value>,
         has_user_valves: Option<bool>,
     ) -> Self {
-        let meta = tool.get_meta().unwrap_or_else(|| serde_json::json!({"description": ""}));
+        let meta = tool
+            .get_meta()
+            .unwrap_or_else(|| serde_json::json!({"description": ""}));
         let access_control = tool.get_access_control();
         ToolUserResponse {
             id: tool.id.clone(),

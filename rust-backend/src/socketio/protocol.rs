@@ -117,6 +117,7 @@ impl EnginePacket {
     }
 
     /// Encode packet to binary format (for websocket binary frames)
+    #[allow(dead_code)]
     pub fn encode_binary(&self) -> Vec<u8> {
         let mut result = Vec::with_capacity(1 + self.data.len());
         result.push(self.packet_type.to_u8());
@@ -124,7 +125,8 @@ impl EnginePacket {
         result
     }
 
-    /// Decode packet from string format
+    /// Decode packet to string format
+    #[allow(dead_code)]
     pub fn decode(s: &str) -> Result<Self, String> {
         if s.is_empty() {
             return Err("Empty packet".to_string());
@@ -146,6 +148,7 @@ impl EnginePacket {
     }
 
     /// Decode packet from binary format
+    #[allow(dead_code)]
     pub fn decode_binary(bytes: &[u8]) -> Result<Self, String> {
         if bytes.is_empty() {
             return Err("Empty packet".to_string());
@@ -174,6 +177,7 @@ pub struct SocketPacket {
 }
 
 /// Acknowledgment tracker for reliable message delivery
+#[allow(dead_code)]
 pub struct AckTracker {
     next_id: std::sync::atomic::AtomicU64,
     pending_acks: Arc<RwLock<HashMap<u64, PendingAck>>>,
@@ -189,6 +193,7 @@ struct PendingAck {
     callback: Option<Box<dyn FnOnce(JsonValue) + Send>>,
 }
 
+#[allow(dead_code)]
 impl AckTracker {
     pub fn new() -> Self {
         Self {
@@ -276,6 +281,7 @@ impl SocketPacket {
 
     /// Create a CONNECT request packet (client sends)
     /// In Socket.IO v5, client can send auth data in the CONNECT packet
+    #[allow(dead_code)]
     pub fn connect_request(namespace: &str, auth: Option<JsonValue>) -> Self {
         Self {
             packet_type: SocketPacketType::Connect,
@@ -305,6 +311,7 @@ impl SocketPacket {
     }
 
     /// Create an event with ACK ID for reliable delivery
+    #[allow(dead_code)]
     pub fn event_with_ack(namespace: &str, event: &str, data: JsonValue, ack_id: u64) -> Self {
         Self {
             packet_type: SocketPacketType::Event,
@@ -315,6 +322,7 @@ impl SocketPacket {
     }
 
     /// Create a binary event packet
+    #[allow(dead_code)]
     pub fn binary_event(
         namespace: &str,
         event: &str,
@@ -341,6 +349,7 @@ impl SocketPacket {
 
     /// Create a CONNECT_ERROR packet
     /// In Socket.IO v5, error data must be an object instead of plain string
+    #[allow(dead_code)]
     pub fn connect_error(namespace: &str, message: &str) -> Self {
         Self {
             packet_type: SocketPacketType::ConnectError,
