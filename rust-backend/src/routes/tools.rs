@@ -196,6 +196,11 @@ pub fn create_routes(cfg: &mut web::ServiceConfig) {
         web::resource("/id/{id}/execute")
             .wrap(AuthMiddleware)
             .route(web::post().to(execute_tool)),
+    )
+    .service(
+        web::resource("/id/{id}/chain")
+            .wrap(AuthMiddleware)
+            .route(web::post().to(execute_tool_chain)),
     );
 }
 
@@ -805,6 +810,82 @@ async fn execute_tool(
     // Execute tool
     let runtime_service = ToolRuntimeService::new();
     let response = runtime_service.execute_tool(&state.db, request).await?;
+
+    Ok(HttpResponse::Ok().json(response))
+}
+
+#[derive(Debug, Deserialize)]
+struct ToolChainExecuteForm {
+    chain_name: String,
+    initial_parameters: HashMap<String, Value>,
+    #[serde(default)]
+    environment: HashMap<String, String>,
+}
+
+// POST /id/{id}/chain - Execute a tool chain
+async fn execute_tool_chain(
+    state: web::Data<AppState>,
+    auth_user: AuthUser,
+    id: web::Path<String>,
+    form: web::Json<ToolChainExecuteForm>,
+) -> AppResult<HttpResponse> {
+    let tool_service = ToolService::new(&state.db);
+
+    // Check if tool exists and user has access
+    let tool = tool_service
+        .get_tool_by_id(&id)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Tool not found".to_string()))?;
+
+    // Check access
+    if auth_user.user.role != "admin" && tool.user_id != auth_user.user.id {
+        let group_service = GroupService::new(&state.db);
+        let groups = group_service
+            .get_groups_by_member_id(&auth_user.user.id)
+            .await?;
+        let user_group_ids: HashSet<String> = groups.into_iter().map(|g| g.id).collect();
+
+        if !has_access(
+            &auth_user.user.id,
+            "read",
+            &tool.get_access_control(),
+            &user_group_ids,
+        ) {
+            return Err(AppError::Unauthorized("Tool not found".to_string()));
+        }
+    }
+
+    // Get environment variables
+    let mut environment = form.environment.clone();
+    if let Ok(val) = std::env::var("OPENWEATHER_API_KEY") {
+        environment
+            .entry("OPENWEATHER_API_KEY".to_string())
+            .or_insert(val);
+    }
+
+    // Build execution context
+    let context = ExecutionContext {
+        user: Some(UserContext {
+            id: auth_user.user.id.clone(),
+            name: auth_user.user.name.clone(),
+            email: auth_user.user.email.clone(),
+            role: Some(auth_user.user.role.clone()),
+        }),
+        environment,
+        session: HashMap::new(),
+    };
+
+    // Execute tool chain
+    let runtime_service = ToolRuntimeService::new();
+    let response = runtime_service
+        .execute_tool_chain(
+            &state.db,
+            &id,
+            &form.chain_name,
+            form.initial_parameters.clone(),
+            context,
+        )
+        .await?;
 
     Ok(HttpResponse::Ok().json(response))
 }

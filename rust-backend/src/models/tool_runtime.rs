@@ -14,6 +14,12 @@ pub struct ToolDefinition {
     pub mcp_servers: HashMap<String, McpServerConfig>,
     #[serde(default)]
     pub environment: EnvironmentConfig,
+    #[serde(default)]
+    pub rate_limits: HashMap<String, RateLimitConfig>,
+    #[serde(default)]
+    pub cache_config: Option<CacheConfig>,
+    #[serde(default)]
+    pub tool_chains: Vec<ToolChain>,
 }
 
 /// Individual tool specification
@@ -26,6 +32,10 @@ pub struct ToolSpec {
     #[serde(default)]
     pub parameters: HashMap<String, ParameterSpec>,
     pub handler: ToolHandler,
+    #[serde(default)]
+    pub error_handling: Option<ErrorHandlingStrategy>,
+    #[serde(default)]
+    pub cache_enabled: bool,
 }
 
 /// Tool types supported
@@ -180,6 +190,78 @@ pub struct ExecutionMetadata {
     pub http_status: Option<u16>,
 }
 
+/// Rate limit configuration per tool
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RateLimitConfig {
+    /// Number of requests allowed
+    pub requests: u32,
+    /// Time window in seconds
+    pub window_seconds: u64,
+}
+
+/// Cache configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CacheConfig {
+    /// Cache TTL in seconds
+    pub ttl_seconds: u64,
+    /// Maximum cache size in MB
+    #[serde(default)]
+    pub max_size_mb: Option<u64>,
+}
+
+/// Error handling strategy
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ErrorHandlingStrategy {
+    /// Retry with exponential backoff
+    Retry {
+        max_attempts: u32,
+        initial_delay_ms: u64,
+        max_delay_ms: u64,
+    },
+    /// Fallback to another tool
+    Fallback { fallback_tool: String },
+    /// Return default value on error
+    Default { value: serde_json::Value },
+    /// Fail immediately
+    Fail,
+}
+
+/// Tool chaining configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolChain {
+    pub name: String,
+    pub description: String,
+    pub steps: Vec<ToolChainStep>,
+}
+
+/// Individual step in a tool chain
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolChainStep {
+    pub tool_name: String,
+    /// Map output from previous step to this step's parameters
+    #[serde(default)]
+    pub parameter_mapping: HashMap<String, String>,
+    /// Condition to execute this step (expression)
+    #[serde(default)]
+    pub condition: Option<String>,
+    /// Error handling for this step
+    #[serde(default)]
+    pub error_handling: Option<ErrorHandlingStrategy>,
+}
+
+/// Conditional execution rule
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConditionalExecution {
+    /// Condition expression (e.g., "{{result.status}} == 'success'")
+    pub condition: String,
+    /// Tool to execute if condition is true
+    pub then_tool: String,
+    /// Tool to execute if condition is false (optional)
+    #[serde(default)]
+    pub else_tool: Option<String>,
+}
+
 impl ToolDefinition {
     /// Parse tool definition from JSON content
     pub fn from_json(content: &str) -> Result<Self, serde_json::Error> {
@@ -189,6 +271,16 @@ impl ToolDefinition {
     /// Find a tool by name
     pub fn find_tool(&self, name: &str) -> Option<&ToolSpec> {
         self.tools.iter().find(|t| t.name == name)
+    }
+
+    /// Get rate limit for a specific tool
+    pub fn get_rate_limit(&self, tool_name: &str) -> Option<&RateLimitConfig> {
+        self.rate_limits.get(tool_name)
+    }
+
+    /// Find a tool chain by name
+    pub fn find_chain(&self, name: &str) -> Option<&ToolChain> {
+        self.tool_chains.iter().find(|c| c.name == name)
     }
 
     /// Convert to OpenAI function calling specs

@@ -67,6 +67,9 @@ pub enum AppError {
 
     #[error("Request timeout: {0}")]
     Timeout(String),
+
+    #[error("Too many requests: {0}")]
+    TooManyRequests(String),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -137,6 +140,7 @@ impl ResponseError for AppError {
                 tracing::error!("Request timeout: {:?}", e);
                 (StatusCode::GATEWAY_TIMEOUT, e.clone())
             }
+            AppError::TooManyRequests(ref e) => (StatusCode::TOO_MANY_REQUESTS, e.clone()),
         };
 
         let body = ErrorResponse {
@@ -201,6 +205,7 @@ impl ResponseError for AppError {
             AppError::Http(_) => StatusCode::BAD_GATEWAY,
             AppError::RedisPool(_) => StatusCode::INTERNAL_SERVER_ERROR,
             AppError::Timeout(_) => StatusCode::GATEWAY_TIMEOUT,
+            AppError::TooManyRequests(_) => StatusCode::TOO_MANY_REQUESTS,
         }
     }
 }
