@@ -57,7 +57,7 @@ export const executeCode = async (token: string, code: string) => {
 	return res;
 };
 
-export const formatPythonCode = async (token: string, code: string) => {
+export const formatCode = async (token: string, code: string) => {
 	let error = null;
 
 	const res = await fetch(`${WEBUI_API_BASE_URL}/utils/code/format`, {
@@ -90,6 +90,9 @@ export const formatPythonCode = async (token: string, code: string) => {
 
 	return res;
 };
+
+// Backward compatibility alias
+export const formatPythonCode = formatCode;
 
 export const downloadChatAsPDF = async (token: string, title: string, messages: object[]) => {
 	let error = null;

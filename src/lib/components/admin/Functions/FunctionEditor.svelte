@@ -10,6 +10,9 @@
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte';
 
+	/**
+	 * @type {HTMLFormElement | null}
+	 */
 	let formElement = null;
 	let loading = false;
 	let showConfirm = false;
@@ -39,6 +42,9 @@
 		id = name.replace(/\s+/g, '_').toLowerCase();
 	}
 
+	/**
+	 * @type {CodeEditor}
+	 */
 	let codeEditor;
 	let boilerplate = `"""
 title: Example Filter
@@ -270,7 +276,7 @@ class Pipe:
 			content = _content;
 			await tick();
 
-			const res = await codeEditor.formatPythonCodeHandler();
+			const res = await codeEditor.formatCodeHandler();
 			await tick();
 
 			content = _content;
@@ -372,8 +378,8 @@ class Pipe:
 						value={content}
 						lang="python"
 						{boilerplate}
-						onChange={(e) => {
-							_content = e;
+						onChange={(/** @type {string} */ e) => {
+							return _content = e;
 						}}
 						onSave={async () => {
 							if (formElement) {

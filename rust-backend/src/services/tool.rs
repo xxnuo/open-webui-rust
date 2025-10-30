@@ -35,7 +35,7 @@ impl<'a> ToolService<'a> {
         sqlx::query(
             r#"
             INSERT INTO tool (id, user_id, name, content, specs, meta, access_control, is_active, valves, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8, $9::jsonb, $10, $11)
             "#,
         )
         .bind(id)
@@ -61,10 +61,10 @@ impl<'a> ToolService<'a> {
         let mut result = sqlx::query_as::<_, Tool>(
             r#"
             SELECT id, user_id, name, content, is_active,
-                   specs as specs_str, 
-                   meta as meta_str, 
-                   access_control as access_control_str,
-                   valves as valves_str,
+                   specs::text as specs_str, 
+                   meta::text as meta_str, 
+                   access_control::text as access_control_str,
+                   valves::text as valves_str,
                    created_at, updated_at
             FROM tool
             WHERE id = $1
@@ -88,10 +88,10 @@ impl<'a> ToolService<'a> {
         let mut tools = sqlx::query_as::<_, Tool>(
             r#"
             SELECT id, user_id, name, content, is_active,
-                   specs as specs_str, 
-                   meta as meta_str, 
-                   access_control as access_control_str,
-                   valves as valves_str,
+                   specs::text as specs_str, 
+                   meta::text as meta_str, 
+                   access_control::text as access_control_str,
+                   valves::text as valves_str,
                    created_at, updated_at
             FROM tool
             WHERE user_id = $1
@@ -116,10 +116,10 @@ impl<'a> ToolService<'a> {
         let mut tools = sqlx::query_as::<_, Tool>(
             r#"
             SELECT id, user_id, name, content, is_active,
-                   specs as specs_str, 
-                   meta as meta_str, 
-                   access_control as access_control_str,
-                   valves as valves_str,
+                   specs::text as specs_str, 
+                   meta::text as meta_str, 
+                   access_control::text as access_control_str,
+                   valves::text as valves_str,
                    created_at, updated_at
             FROM tool
             ORDER BY updated_at DESC
@@ -162,15 +162,15 @@ impl<'a> ToolService<'a> {
             bind_count += 1;
         }
         if specs.is_some() {
-            updates.push(format!("specs = ${}", bind_count));
+            updates.push(format!("specs = ${}::jsonb", bind_count));
             bind_count += 1;
         }
         if meta.is_some() {
-            updates.push(format!("meta = ${}", bind_count));
+            updates.push(format!("meta = ${}::jsonb", bind_count));
             bind_count += 1;
         }
         if access_control.is_some() {
-            updates.push(format!("access_control = ${}", bind_count));
+            updates.push(format!("access_control = ${}::jsonb", bind_count));
             bind_count += 1;
         }
 
@@ -212,7 +212,7 @@ impl<'a> ToolService<'a> {
         let now = current_timestamp_seconds();
         let valves_str = serde_json::to_string(&valves).unwrap();
 
-        sqlx::query("UPDATE tool SET valves = $1, updated_at = $2 WHERE id = $3")
+        sqlx::query("UPDATE tool SET valves = $1::jsonb, updated_at = $2 WHERE id = $3")
             .bind(&valves_str)
             .bind(now)
             .bind(id)

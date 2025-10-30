@@ -1,6 +1,6 @@
 use actix_web::{web, HttpResponse};
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use validator::Validate;
 
@@ -12,6 +12,90 @@ use crate::services::tool::ToolService;
 use crate::services::user::UserService;
 use crate::utils::misc::{has_access, has_permission};
 use crate::AppState;
+
+/// Parse JSON tool definition and extract OpenAI-compatible function specs
+fn parse_json_tool_specs(content: &str) -> AppResult<Value> {
+    // Parse the JSON content
+    let tool_def: Value = serde_json::from_str(content)
+        .map_err(|e| AppError::BadRequest(format!("Invalid JSON format: {}", e)))?;
+
+    // Extract tools array
+    let tools = tool_def
+        .get("tools")
+        .and_then(|t| t.as_array())
+        .ok_or_else(|| {
+            AppError::BadRequest("Missing 'tools' array in JSON definition".to_string())
+        })?;
+
+    // Convert each tool to OpenAI function calling spec
+    let specs: Vec<Value> = tools
+        .iter()
+        .map(|tool| {
+            let name = tool
+                .get("name")
+                .and_then(|n| n.as_str())
+                .unwrap_or("unnamed_tool");
+            let description = tool
+                .get("description")
+                .and_then(|d| d.as_str())
+                .unwrap_or("");
+
+            // Extract parameters
+            let parameters = tool.get("parameters").cloned().unwrap_or_else(|| json!({}));
+
+            // Convert our parameter format to OpenAI format
+            let mut properties = serde_json::Map::new();
+            let mut required = Vec::new();
+
+            if let Some(params_obj) = parameters.as_object() {
+                for (param_name, param_def) in params_obj {
+                    if let Some(param_obj) = param_def.as_object() {
+                        let mut prop = serde_json::Map::new();
+
+                        // Type
+                        if let Some(type_val) = param_obj.get("type") {
+                            prop.insert("type".to_string(), type_val.clone());
+                        }
+
+                        // Description
+                        if let Some(desc_val) = param_obj.get("description") {
+                            prop.insert("description".to_string(), desc_val.clone());
+                        }
+
+                        // Enum values
+                        if let Some(enum_val) = param_obj.get("enum") {
+                            prop.insert("enum".to_string(), enum_val.clone());
+                        }
+
+                        properties.insert(param_name.clone(), Value::Object(prop));
+
+                        // Check if required
+                        if param_obj
+                            .get("required")
+                            .and_then(|r| r.as_bool())
+                            .unwrap_or(false)
+                        {
+                            required.push(param_name.clone());
+                        }
+                    }
+                }
+            }
+
+            // Build OpenAI function spec
+            json!({
+                "name": name,
+                "description": description,
+                "parameters": {
+                    "type": "object",
+                    "properties": properties,
+                    "required": required
+                }
+            })
+        })
+        .collect();
+
+    Ok(Value::Array(specs))
+}
 
 #[derive(Debug, Deserialize, Validate)]
 struct ToolForm {
@@ -389,9 +473,8 @@ async fn create_new_tool(
         return Err(AppError::BadRequest("Tool ID already exists".to_string()));
     }
 
-    // TODO: Parse tool module and extract specs (requires Python integration)
-    // For now, create tool with empty specs
-    let specs = json!([]);
+    // Parse JSON tool definition and extract specs
+    let specs = parse_json_tool_specs(&form.content)?;
 
     let tool = tool_service
         .create_tool(
@@ -474,8 +557,8 @@ async fn update_tool_by_id(
         }
     }
 
-    // TODO: Parse tool module and extract specs
-    let specs = json!([]);
+    // Parse JSON tool definition and extract specs
+    let specs = parse_json_tool_specs(&form.content)?;
 
     let updated_tool = tool_service
         .update_tool(

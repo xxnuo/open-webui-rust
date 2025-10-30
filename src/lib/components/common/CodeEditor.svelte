@@ -13,7 +13,7 @@
 
 	import { onMount, createEventDispatcher, getContext, tick, onDestroy } from 'svelte';
 
-	import { formatPythonCode } from '$lib/apis/utils';
+	import { formatCode } from '$lib/apis/utils';
 	import { toast } from 'svelte-sonner';
 	import { user } from '$lib/stores';
 
@@ -73,7 +73,7 @@
 	export let id = '';
 	export let lang = '';
 
-	let codeEditor;
+	let codeEditor: EditorView;
 
 	export const focus = () => {
 		codeEditor.focus();
@@ -107,9 +107,9 @@
 		return await language?.load();
 	};
 
-	export const formatPythonCodeHandler = async () => {
+	export const formatCodeHandler = async () => {
 		if (codeEditor) {
-			const res = await formatPythonCode(localStorage.token, _value).catch((error) => {
+			const res = await formatCode(localStorage.token, _value).catch((error) => {
 				toast.error(`${error}`);
 				return null;
 			});
@@ -212,7 +212,7 @@
 			attributeFilter: ['class']
 		});
 
-		const keydownHandler = async (e) => {
+		const keydownHandler = async (e: { ctrlKey: any; metaKey: any; key: string; preventDefault: () => void; shiftKey: any; }) => {
 			if ((e.ctrlKey || e.metaKey) && e.key === 's') {
 				e.preventDefault();
 
@@ -222,7 +222,7 @@
 			// Format code when Ctrl + Shift + F is pressed
 			if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'f') {
 				e.preventDefault();
-				await formatPythonCodeHandler();
+				await formatCodeHandler();
 			}
 		};
 

@@ -95,17 +95,55 @@ struct CodeForm {
     code: String,
 }
 
-/// POST /code/format - Format code (admin only)
+#[derive(Debug, Serialize)]
+struct CodeResponse {
+    code: String,
+}
+
+/// POST /code/format - Format JSON/YAML/Python code (admin only)
 async fn format_code(
     _state: web::Data<AppState>,
     _auth_user: AuthUser, // AdminMiddleware already checked
-    _form_data: web::Json<CodeForm>,
+    form_data: web::Json<CodeForm>,
 ) -> AppResult<HttpResponse> {
-    // TODO: Implement code formatting
-    // Python uses Black formatter, we could use rustfmt or other formatters
-    Err(AppError::NotImplemented(
-        "Code formatting not yet implemented".to_string(),
-    ))
+    // Detect content type by trying to parse
+
+    // Try JSON first (most common for Tools)
+    if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&form_data.code) {
+        match serde_json::to_string_pretty(&json_value) {
+            Ok(formatted) => {
+                return Ok(HttpResponse::Ok().json(CodeResponse { code: formatted }));
+            }
+            Err(e) => {
+                return Err(AppError::BadRequest(format!(
+                    "JSON formatting error: {}",
+                    e
+                )));
+            }
+        }
+    }
+
+    // Try YAML
+    if let Ok(yaml_value) = serde_yaml::from_str::<serde_yaml::Value>(&form_data.code) {
+        match serde_yaml::to_string(&yaml_value) {
+            Ok(formatted) => {
+                return Ok(HttpResponse::Ok().json(CodeResponse { code: formatted }));
+            }
+            Err(e) => {
+                return Err(AppError::BadRequest(format!(
+                    "YAML formatting error: {}",
+                    e
+                )));
+            }
+        }
+    }
+
+    // If neither JSON nor YAML, assume it's Python code (for Functions)
+    // For now, just return the code unchanged since we don't have Python formatter
+    // In the future, could integrate with ruff or call python -m black
+    Ok(HttpResponse::Ok().json(CodeResponse {
+        code: form_data.code.clone(),
+    }))
 }
 
 /// POST /code/execute - Execute code (admin only)

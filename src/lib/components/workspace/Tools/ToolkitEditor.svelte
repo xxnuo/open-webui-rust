@@ -47,111 +47,128 @@
 	}
 
 	let codeEditor;
-	let boilerplate = `import os
-import requests
-from datetime import datetime
-from pydantic import BaseModel, Field
-
-class Tools:
-    def __init__(self):
-        pass
-
-    # Add your custom tools using pure Python code here, make sure to add type hints and descriptions
-	
-    def get_user_name_and_email_and_id(self, __user__: dict = {}) -> str:
-        """
-        Get the user name, Email and ID from the user object.
-        """
-
-        # Do not include a descrption for __user__ as it should not be shown in the tool's specification
-        # The session user object will be passed as a parameter when the function is called
-
-        print(__user__)
-        result = ""
-
-        if "name" in __user__:
-            result += f"User: {__user__['name']}"
-        if "id" in __user__:
-            result += f" (ID: {__user__['id']})"
-        if "email" in __user__:
-            result += f" (Email: {__user__['email']})"
-
-        if result == "":
-            result = "User: Unknown"
-
-        return result
-
-    def get_current_time(self) -> str:
-        """
-        Get the current time in a more human-readable format.
-        """
-
-        now = datetime.now()
-        current_time = now.strftime("%I:%M:%S %p")  # Using 12-hour format with AM/PM
-        current_date = now.strftime(
-            "%A, %B %d, %Y"
-        )  # Full weekday, month name, day, and year
-
-        return f"Current Date and Time = {current_date}, {current_time}"
-
-    def calculator(
-        self,
-        equation: str = Field(
-            ..., description="The mathematical equation to calculate."
-        ),
-    ) -> str:
-        """
-        Calculate the result of an equation.
-        """
-
-        # Avoid using eval in production code
-        # https://nedbatchelder.com/blog/201206/eval_really_is_dangerous.html
-        try:
-            result = eval(equation)
-            return f"{equation} = {result}"
-        except Exception as e:
-            print(e)
-            return "Invalid equation"
-
-    def get_current_weather(
-        self,
-        city: str = Field(
-            "New York, NY", description="Get the current weather for a given city."
-        ),
-    ) -> str:
-        """
-        Get the current weather for a given city.
-        """
-
-        api_key = os.getenv("OPENWEATHER_API_KEY")
-        if not api_key:
-            return (
-                "API key is not set in the environment variable 'OPENWEATHER_API_KEY'."
-            )
-
-        base_url = "http://api.openweathermap.org/data/2.5/weather"
-        params = {
-            "q": city,
-            "appid": api_key,
-            "units": "metric",  # Optional: Use 'imperial' for Fahrenheit
+	let boilerplate = `{
+  "name": "My Custom Tools",
+  "description": "A collection of custom tools for various tasks",
+  "version": "1.0.0",
+  "tools": [
+    {
+      "name": "get_current_time",
+      "description": "Get the current date and time in a human-readable format",
+      "type": "function",
+      "parameters": {},
+      "handler": {
+        "type": "built_in",
+        "function": "datetime.now"
+      }
+    },
+    {
+      "name": "get_weather",
+      "description": "Get the current weather for a given city",
+      "type": "http_api",
+      "parameters": {
+        "city": {
+          "type": "string",
+          "description": "The city name (e.g., 'New York, NY')",
+          "required": true
         }
-
-        try:
-            response = requests.get(base_url, params=params)
-            response.raise_for_status()  # Raise HTTPError for bad responses (4xx and 5xx)
-            data = response.json()
-
-            if data.get("cod") != 200:
-                return f"Error fetching weather data: {data.get('message')}"
-
-            weather_description = data["weather"][0]["description"]
-            temperature = data["main"]["temp"]
-            humidity = data["main"]["humidity"]
-            wind_speed = data["wind"]["speed"]
-
-            return f"Weather in {city}: {temperature}°C"
-        except requests.RequestException as e:
-            return f"Error fetching weather data: {str(e)}"
+      },
+      "handler": {
+        "type": "http",
+        "method": "GET",
+        "url": "https://api.openweathermap.org/data/2.5/weather",
+        "params": {
+          "q": "{{city}}",
+          "appid": "{{env.OPENWEATHER_API_KEY}}",
+          "units": "metric"
+        },
+        "response": {
+          "transform": "Weather in {{params.city}}: {{body.main.temp}}°C, {{body.weather[0].description}}"
+        }
+      }
+    },
+    {
+      "name": "calculator",
+      "description": "Calculate the result of a mathematical equation",
+      "type": "expression",
+      "parameters": {
+        "equation": {
+          "type": "string",
+          "description": "The mathematical equation to calculate (e.g., '2 + 2 * 3')",
+          "required": true
+        }
+      },
+      "handler": {
+        "type": "expression",
+        "engine": "eval",
+        "expression": "{{equation}}"
+      }
+    },
+    {
+      "name": "get_user_info",
+      "description": "Get the current user's name, email, and ID",
+      "type": "context",
+      "parameters": {},
+      "handler": {
+        "type": "context",
+        "template": "User: {{user.name}} (ID: {{user.id}}) (Email: {{user.email}})"
+      }
+    },
+    {
+      "name": "search_web",
+      "description": "Search the web using DuckDuckGo",
+      "type": "http_api",
+      "parameters": {
+        "query": {
+          "type": "string",
+          "description": "The search query",
+          "required": true
+        }
+      },
+      "handler": {
+        "type": "http",
+        "method": "GET",
+        "url": "https://api.duckduckgo.com/",
+        "params": {
+          "q": "{{query}}",
+          "format": "json"
+        }
+      }
+    },
+    {
+      "name": "mcp_tool_example",
+      "description": "Example of calling an MCP (Model Context Protocol) server",
+      "type": "mcp",
+      "parameters": {
+        "input": {
+          "type": "string",
+          "description": "Input to the MCP tool",
+          "required": true
+        }
+      },
+      "handler": {
+        "type": "mcp",
+        "server": "my_mcp_server",
+        "tool": "process_data"
+      }
+    }
+  ],
+  "mcp_servers": {
+    "my_mcp_server": {
+      "url": "http://localhost:3000/mcp",
+      "auth_type": "bearer",
+      "auth_token": "{{env.MCP_SERVER_TOKEN}}"
+    }
+  },
+  "environment": {
+    "required": [
+      "OPENWEATHER_API_KEY"
+    ],
+    "optional": [
+      "MCP_SERVER_TOKEN"
+    ]
+  }
+}
 `;
 
 	const saveHandler = async () => {
@@ -170,7 +187,7 @@ class Tools:
 			content = _content;
 			await tick();
 
-			const res = await codeEditor.formatPythonCodeHandler();
+			const res = await codeEditor.formatCodeHandler();
 			await tick();
 
 			content = _content;
@@ -289,7 +306,7 @@ class Tools:
 					<CodeEditor
 						bind:this={codeEditor}
 						value={content}
-						lang="python"
+						lang="json"
 						{boilerplate}
 						onChange={(e) => {
 							_content = e;
