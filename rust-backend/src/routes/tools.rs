@@ -7,8 +7,10 @@ use validator::Validate;
 use crate::error::{AppError, AppResult};
 use crate::middleware::{AuthMiddleware, AuthUser};
 use crate::models::tool::ToolUserResponse;
+use crate::models::tool_runtime::{ExecutionContext, ToolExecutionRequest, UserContext};
 use crate::services::group::GroupService;
 use crate::services::tool::ToolService;
+use crate::services::tool_runtime::ToolRuntimeService;
 use crate::services::user::UserService;
 use crate::utils::misc::{has_access, has_permission};
 use crate::AppState;
@@ -189,6 +191,11 @@ pub fn create_routes(cfg: &mut web::ServiceConfig) {
         web::resource("/load/url")
             .wrap(AuthMiddleware)
             .route(web::post().to(load_tool_from_url)),
+    )
+    .service(
+        web::resource("/id/{id}/execute")
+            .wrap(AuthMiddleware)
+            .route(web::post().to(execute_tool)),
     );
 }
 
@@ -722,4 +729,82 @@ async fn update_tool_user_valves(
     // TODO: Update user valves in user settings
     let valves_data = valves.into_inner();
     Ok(HttpResponse::Ok().json(valves_data))
+}
+
+#[derive(Debug, Deserialize)]
+struct ToolExecuteForm {
+    tool_name: String,
+    parameters: HashMap<String, Value>,
+    #[serde(default)]
+    environment: HashMap<String, String>,
+}
+
+// POST /id/{id}/execute - Execute a tool
+async fn execute_tool(
+    state: web::Data<AppState>,
+    auth_user: AuthUser,
+    id: web::Path<String>,
+    form: web::Json<ToolExecuteForm>,
+) -> AppResult<HttpResponse> {
+    let tool_service = ToolService::new(&state.db);
+
+    // Check if tool exists and user has access
+    let tool = tool_service
+        .get_tool_by_id(&id)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Tool not found".to_string()))?;
+
+    // Check access
+    if auth_user.user.role != "admin" && tool.user_id != auth_user.user.id {
+        let group_service = GroupService::new(&state.db);
+        let groups = group_service
+            .get_groups_by_member_id(&auth_user.user.id)
+            .await?;
+        let user_group_ids: HashSet<String> = groups.into_iter().map(|g| g.id).collect();
+
+        if !has_access(
+            &auth_user.user.id,
+            "read",
+            &tool.get_access_control(),
+            &user_group_ids,
+        ) {
+            return Err(AppError::Unauthorized("Tool not found".to_string()));
+        }
+    }
+
+    // Get environment variables from config or form
+    let mut environment = form.environment.clone();
+
+    // Add system environment variables if needed
+    if let Ok(val) = std::env::var("OPENWEATHER_API_KEY") {
+        environment
+            .entry("OPENWEATHER_API_KEY".to_string())
+            .or_insert(val);
+    }
+
+    // Build execution context
+    let context = ExecutionContext {
+        user: Some(UserContext {
+            id: auth_user.user.id.clone(),
+            name: auth_user.user.name.clone(),
+            email: auth_user.user.email.clone(),
+            role: Some(auth_user.user.role.clone()),
+        }),
+        environment,
+        session: HashMap::new(),
+    };
+
+    // Build execution request
+    let request = ToolExecutionRequest {
+        tool_id: id.to_string(),
+        tool_name: form.tool_name.clone(),
+        parameters: form.parameters.clone(),
+        context,
+    };
+
+    // Execute tool
+    let runtime_service = ToolRuntimeService::new();
+    let response = runtime_service.execute_tool(&state.db, request).await?;
+
+    Ok(HttpResponse::Ok().json(response))
 }

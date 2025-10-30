@@ -955,7 +955,11 @@ async fn process_streaming_via_socketio(
     model_item: serde_json::Value,
     endpoint_url: String,
     endpoint_key: String,
+    tool_ids: Vec<String>,
+    tool_specs: Vec<serde_json::Value>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    use serde_json::Value;
+
     // Get socket state
     let socket_state = match &state.socket_state {
         Some(state) => state.clone(),
@@ -982,6 +986,11 @@ async fn process_streaming_via_socketio(
     let delta_chunk_size = 1; // Default from Python CHAT_RESPONSE_STREAM_DELTA_CHUNK_SIZE
     let mut delta_count = 0;
     let mut last_delta_data: Option<serde_json::Value> = None;
+
+    // Tool call tracking
+    use std::collections::HashMap;
+    let mut collected_tool_calls: HashMap<usize, serde_json::Value> = HashMap::new();
+    let mut has_tool_calls = false;
 
     tracing::info!("🔴 Socket.IO STREAMING STARTED for user {}", user_id);
 
@@ -1030,6 +1039,7 @@ async fn process_streaming_via_socketio(
                                 {
                                     if let Some(first_choice) = choices.first() {
                                         if let Some(delta) = first_choice.get("delta") {
+                                            // Check for content delta
                                             if let Some(delta_content) =
                                                 delta.get("content").and_then(|c| c.as_str())
                                             {
@@ -1049,6 +1059,87 @@ async fn process_streaming_via_socketio(
                                                     delta_count = 0;
                                                     last_delta_data = None;
                                                 }
+                                            }
+
+                                            // Check for tool_calls delta
+                                            if let Some(tool_calls) = delta.get("tool_calls") {
+                                                tracing::info!(
+                                                    "🔧 Tool calls detected in stream: {:?}",
+                                                    tool_calls
+                                                );
+                                                has_tool_calls = true;
+
+                                                // Accumulate tool_calls by index
+                                                if let Some(tool_calls_array) =
+                                                    tool_calls.as_array()
+                                                {
+                                                    for tool_call in tool_calls_array {
+                                                        if let Some(index) = tool_call
+                                                            .get("index")
+                                                            .and_then(|i| i.as_u64())
+                                                        {
+                                                            let idx = index as usize;
+                                                            let entry = collected_tool_calls
+                                                                .entry(idx)
+                                                                .or_insert_with(|| {
+                                                                    json!({
+                                                                        "id": "",
+                                                                        "type": "function",
+                                                                        "function": {
+                                                                            "name": "",
+                                                                            "arguments": ""
+                                                                        }
+                                                                    })
+                                                                });
+
+                                                            // Merge fields
+                                                            if let Some(id) = tool_call.get("id") {
+                                                                entry["id"] = id.clone();
+                                                            }
+                                                            if let Some(tc_type) =
+                                                                tool_call.get("type")
+                                                            {
+                                                                entry["type"] = tc_type.clone();
+                                                            }
+                                                            if let Some(function) =
+                                                                tool_call.get("function")
+                                                            {
+                                                                if let Some(name) =
+                                                                    function.get("name")
+                                                                {
+                                                                    entry["function"]["name"] =
+                                                                        name.clone();
+                                                                }
+                                                                if let Some(args) = function
+                                                                    .get("arguments")
+                                                                    .and_then(|a| a.as_str())
+                                                                {
+                                                                    let current_args = entry
+                                                                        ["function"]["arguments"]
+                                                                        .as_str()
+                                                                        .unwrap_or("");
+                                                                    entry["function"]
+                                                                        ["arguments"] =
+                                                                        json!(format!(
+                                                                            "{}{}",
+                                                                            current_args, args
+                                                                        ));
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                // Emit tool_calls immediately (don't batch)
+                                                let completion_event = json!({
+                                                    "type": "chat:completion",
+                                                    "data": data
+                                                });
+                                                event_emitter(completion_event).await;
+
+                                                // Clear any pending deltas since we're switching to tool mode
+                                                last_delta_data = None;
+                                                delta_count = 0;
                                             }
                                         }
 
@@ -1121,6 +1212,365 @@ async fn process_streaming_via_socketio(
                 event_emitter(event_data).await;
 
                 return Err(e.into());
+            }
+        }
+    }
+
+    // Execute tools if tool_calls were detected
+    if has_tool_calls && !collected_tool_calls.is_empty() {
+        tracing::info!(
+            "🔧 Executing {} tool(s) after stream completion",
+            collected_tool_calls.len()
+        );
+
+        // Convert collected_tool_calls HashMap to Vec, sorted by index
+        let mut tool_calls_vec: Vec<_> = collected_tool_calls.into_iter().collect();
+        tool_calls_vec.sort_by_key(|(index, _)| *index);
+        let final_tool_calls: Vec<Value> = tool_calls_vec.into_iter().map(|(_, tc)| tc).collect();
+
+        tracing::debug!("Final tool_calls to execute: {:?}", final_tool_calls);
+
+        // Execute each tool and collect results
+        let mut tool_results: Vec<Value> = Vec::new();
+
+        for tool_call in &final_tool_calls {
+            let tool_call_id = tool_call.get("id").and_then(|v| v.as_str()).unwrap_or("");
+            let tool_name = tool_call
+                .get("function")
+                .and_then(|f| f.get("name"))
+                .and_then(|n| n.as_str())
+                .unwrap_or("");
+            let tool_args_str = tool_call
+                .get("function")
+                .and_then(|f| f.get("arguments"))
+                .and_then(|a| a.as_str())
+                .unwrap_or("{}");
+
+            tracing::info!(
+                "🔧 Executing tool: {} with args: {}",
+                tool_name,
+                tool_args_str
+            );
+
+            // Parse arguments
+            let tool_args: HashMap<String, Value> = match serde_json::from_str(tool_args_str) {
+                Ok(args) => args,
+                Err(e) => {
+                    tracing::error!("Failed to parse tool arguments: {}", e);
+                    tool_results.push(json!({
+                        "role": "tool",
+                        "tool_call_id": tool_call_id,
+                        "content": format!("Error: Failed to parse arguments - {}", e)
+                    }));
+                    continue;
+                }
+            };
+
+            // Find the matching tool definition from tool_specs
+            let mut tool_result_content = format!("Error: Tool '{}' not found", tool_name);
+
+            // Execute the tool by finding it in tool_ids
+            for tool_id in &tool_ids {
+                // Load tool from database to verify it contains this tool_name
+                let tool_service = crate::services::tool::ToolService::new(&state.db);
+                if let Ok(Some(tool)) = tool_service.get_tool_by_id(tool_id).await {
+                    // Parse tool content as ToolDefinition
+                    if let Ok(tool_def) = serde_json::from_str::<
+                        crate::models::tool_runtime::ToolDefinition,
+                    >(&tool.content)
+                    {
+                        // Find matching tool spec by name
+                        if tool_def.tools.iter().any(|t| t.name == tool_name) {
+                            tracing::info!(
+                                "✅ Found tool spec for: {} in tool_id: {}",
+                                tool_name,
+                                tool_id
+                            );
+
+                            // Execute the tool using ToolRuntimeService
+                            let runtime_service =
+                                crate::services::tool_runtime::ToolRuntimeService::new();
+
+                            // Build execution context with user and environment
+                            let mut environment = std::collections::HashMap::new();
+
+                            // Add system environment variables that tools might need
+                            if let Ok(val) = std::env::var("OPENWEATHER_API_KEY") {
+                                environment.insert("OPENWEATHER_API_KEY".to_string(), val);
+                            }
+                            // Add other common API keys if needed
+                            for key in &["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY"] {
+                                if let Ok(val) = std::env::var(key) {
+                                    environment.insert(key.to_string(), val);
+                                }
+                            }
+
+                            let execution_context = crate::models::tool_runtime::ExecutionContext {
+                                user: Some(crate::models::tool_runtime::UserContext {
+                                    id: user_id.to_string(),
+                                    name: "User".to_string(), // TODO: Get actual user name from auth
+                                    email: "user@example.com".to_string(), // TODO: Get actual email from auth
+                                    role: Some("user".to_string()), // TODO: Get actual role from auth
+                                }),
+                                environment,
+                                session: std::collections::HashMap::new(),
+                            };
+
+                            let exec_request = crate::models::tool_runtime::ToolExecutionRequest {
+                                tool_id: tool_id.clone(),
+                                tool_name: tool_name.to_string(),
+                                parameters: tool_args.clone(),
+                                context: execution_context,
+                            };
+
+                            match runtime_service.execute_tool(&state.db, exec_request).await {
+                                Ok(exec_response) => {
+                                    tool_result_content =
+                                        serde_json::to_string(&exec_response.result)
+                                            .unwrap_or_else(|_| {
+                                                "Error serializing result".to_string()
+                                            });
+                                    tracing::info!(
+                                        "✅ Tool executed successfully: {}",
+                                        tool_result_content
+                                    );
+                                }
+                                Err(e) => {
+                                    tool_result_content = format!("Error executing tool: {}", e);
+                                    tracing::error!("❌ Tool execution error: {}", e);
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+
+            tool_results.push(json!({
+                "role": "tool",
+                "tool_call_id": tool_call_id,
+                "content": tool_result_content
+            }));
+        }
+
+        // Emit tool results to frontend (informational)
+        tracing::info!(
+            "📤 Emitting {} tool result(s) to frontend",
+            tool_results.len()
+        );
+        for result in &tool_results {
+            let tool_result_event = json!({
+                "type": "chat:completion",
+                "data": {
+                    "content": format!("\n\n**Tool Result:**\n{}", result.get("content").and_then(|c| c.as_str()).unwrap_or(""))
+                }
+            });
+            event_emitter(tool_result_event).await;
+        }
+
+        // Multi-turn: Make a new chat completion request with tool results
+        tracing::info!("🔄 Starting multi-turn: sending tool results back to LLM for natural language response");
+
+        // Build new messages array: original messages + assistant message with tool_calls + tool results
+        let mut new_messages = messages.clone();
+
+        // Add assistant message with tool_calls
+        new_messages.push(json!({
+            "role": "assistant",
+            "content": "", // Empty content when using tool_calls
+            "tool_calls": final_tool_calls
+        }));
+
+        // Add tool result messages
+        for result in &tool_results {
+            new_messages.push(result.clone());
+        }
+
+        tracing::debug!("🔄 New messages for multi-turn: {:?}", new_messages);
+
+        // Make a new chat completion request
+        let client = reqwest::Client::new();
+        let mut request_builder = client
+            .post(format!("{}/chat/completions", endpoint_url))
+            .header("Content-Type", "application/json");
+
+        if !endpoint_key.is_empty() {
+            request_builder =
+                request_builder.header("Authorization", format!("Bearer {}", endpoint_key));
+        }
+
+        // Build payload for the second request
+        let second_request_payload = json!({
+            "model": model_id,
+            "messages": new_messages,
+            "stream": true,
+            "tools": tool_specs.iter().map(|spec| json!({
+                "type": "function",
+                "function": spec
+            })).collect::<Vec<_>>(),
+            "tool_choice": "auto"
+        });
+
+        tracing::info!("🔄 Sending second request to LLM with tool results");
+
+        match request_builder.json(&second_request_payload).send().await {
+            Ok(second_response) => {
+                if !second_response.status().is_success() {
+                    tracing::error!(
+                        "❌ Second request failed with status: {}",
+                        second_response.status()
+                    );
+                    let error_event = json!({
+                        "type": "chat:completion",
+                        "data": {
+                            "content": format!("\n\n**Error:** Failed to get LLM response: {}", second_response.status())
+                        }
+                    });
+                    event_emitter(error_event).await;
+                } else {
+                    tracing::info!("✅ Second request successful, streaming response...");
+
+                    // Stream the second response
+                    let mut second_stream = second_response.bytes_stream();
+                    let mut second_content = String::new();
+                    let mut second_delta_count = 0;
+                    let mut second_last_delta: Option<Value> = None;
+
+                    while let Some(chunk_result) = second_stream.next().await {
+                        match chunk_result {
+                            Ok(chunk) => {
+                                if let Ok(text) = std::str::from_utf8(&chunk) {
+                                    for line in text.lines() {
+                                        let line = line.trim();
+                                        if line.is_empty() {
+                                            continue;
+                                        }
+
+                                        if line.starts_with("data: ") {
+                                            let data_str = &line[6..];
+                                            if data_str == "[DONE]" {
+                                                // Flush pending delta
+                                                if let Some(pending) = second_last_delta.take() {
+                                                    let event = json!({
+                                                        "type": "chat:completion",
+                                                        "data": pending
+                                                    });
+                                                    event_emitter(event).await;
+                                                }
+                                                break;
+                                            }
+
+                                            if let Ok(mut data) =
+                                                serde_json::from_str::<Value>(data_str)
+                                            {
+                                                if let Some(choices) =
+                                                    data.get("choices").and_then(|c| c.as_array())
+                                                {
+                                                    if let Some(first_choice) = choices.first() {
+                                                        if let Some(delta) =
+                                                            first_choice.get("delta")
+                                                        {
+                                                            if let Some(delta_content) = delta
+                                                                .get("content")
+                                                                .and_then(|c| c.as_str())
+                                                            {
+                                                                second_content
+                                                                    .push_str(delta_content);
+                                                                second_delta_count += 1;
+                                                                second_last_delta =
+                                                                    Some(data.clone());
+
+                                                                if second_delta_count
+                                                                    >= delta_chunk_size
+                                                                {
+                                                                    let event = json!({
+                                                                        "type": "chat:completion",
+                                                                        "data": data
+                                                                    });
+                                                                    event_emitter(event).await;
+                                                                    second_delta_count = 0;
+                                                                    second_last_delta = None;
+                                                                }
+                                                            }
+                                                        }
+
+                                                        // Check for finish_reason
+                                                        if let Some(finish_reason) =
+                                                            first_choice.get("finish_reason")
+                                                        {
+                                                            if !finish_reason.is_null() {
+                                                                tracing::info!("✅ Second stream finished with reason: {:?}", finish_reason);
+
+                                                                // Flush pending delta
+                                                                if let Some(pending) =
+                                                                    second_last_delta.take()
+                                                                {
+                                                                    let event = json!({
+                                                                        "type": "chat:completion",
+                                                                        "data": pending
+                                                                    });
+                                                                    event_emitter(event).await;
+                                                                }
+
+                                                                // Send final message with done flag
+                                                                data["done"] = json!(true);
+                                                                let event = json!({
+                                                                    "type": "chat:completion",
+                                                                    "data": data
+                                                                });
+                                                                event_emitter(event).await;
+
+                                                                // Update database with final content
+                                                                if let (Some(cid), Some(mid)) = (
+                                                                    chat_id.as_ref(),
+                                                                    message_id.as_ref(),
+                                                                ) {
+                                                                    // Append the second response to the existing content
+                                                                    let final_content = format!(
+                                                                        "\n\n{}",
+                                                                        second_content
+                                                                    );
+                                                                    let _ = upsert_chat_message(
+                                                                        &state.db,
+                                                                        cid,
+                                                                        mid,
+                                                                        json!({
+                                                                            "role": "assistant",
+                                                                            "content": final_content,
+                                                                            "done": true,
+                                                                            "model": model_id.clone(),
+                                                                        }),
+                                                                    ).await;
+                                                                }
+                                                                break;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                tracing::error!("❌ Error in second stream: {}", e);
+                                break;
+                            }
+                        }
+                    }
+
+                    tracing::info!("✅ Multi-turn conversation completed successfully");
+                }
+            }
+            Err(e) => {
+                tracing::error!("❌ Failed to make second request: {}", e);
+                let error_event = json!({
+                    "type": "chat:completion",
+                    "data": {
+                        "content": format!("\n\n**Error:** Failed to send request to LLM: {}", e)
+                    }
+                });
+                event_emitter(error_event).await;
             }
         }
     }
@@ -1524,6 +1974,25 @@ pub async fn handle_chat_completions(
         .cloned()
         .unwrap_or_default();
 
+    // Extract tool_ids BEFORE removing from payload
+    let tool_ids = payload_obj
+        .get("tool_ids")
+        .and_then(|t| t.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect::<Vec<String>>()
+        })
+        .unwrap_or_default();
+
+    tracing::info!(
+        "📋 Chat completion request received - tool_ids: {:?}",
+        tool_ids
+    );
+    if !tool_ids.is_empty() {
+        tracing::info!("🔧 Tools requested in chat: {}", tool_ids.join(", "));
+    }
+
     // Remove these from payload before forwarding to LLM API
     if let Some(obj) = payload_obj.as_object_mut() {
         obj.remove("session_id");
@@ -1536,6 +2005,122 @@ pub async fn handle_chat_completions(
         obj.remove("features");
         obj.remove("variables");
         obj.remove("model_item");
+    }
+
+    // Prepare tool specs storage (moved outside if block for later use)
+    let mut all_tool_specs = Vec::new();
+
+    // Load and inject tools if tool_ids are provided
+    if !tool_ids.is_empty() {
+        use crate::models::tool_runtime::ToolDefinition;
+        use crate::services::tool::ToolService;
+
+        tracing::info!(
+            "🔄 Loading {} tool(s) for chat completion: {:?}",
+            tool_ids.len(),
+            tool_ids
+        );
+
+        let tool_service = ToolService::new(&state.db);
+
+        for tool_id in &tool_ids {
+            match tool_service.get_tool_by_id(tool_id).await {
+                Ok(Some(tool)) => {
+                    // Check access permissions
+                    if tool.user_id != auth_user.user.id && auth_user.user.role != "admin" {
+                        use crate::services::group::GroupService;
+                        use crate::utils::misc::has_access;
+                        use std::collections::HashSet;
+
+                        let group_service = GroupService::new(&state.db);
+                        let groups = group_service
+                            .get_groups_by_member_id(&auth_user.user.id)
+                            .await
+                            .unwrap_or_default();
+                        let user_group_ids: HashSet<String> =
+                            groups.into_iter().map(|g| g.id).collect();
+
+                        if !has_access(
+                            &auth_user.user.id,
+                            "read",
+                            &tool.get_access_control(),
+                            &user_group_ids,
+                        ) {
+                            tracing::warn!(
+                                "User {} does not have access to tool {}",
+                                auth_user.user.id,
+                                tool_id
+                            );
+                            continue;
+                        }
+                    }
+
+                    // Parse tool definition and extract OpenAI specs
+                    match ToolDefinition::from_json(&tool.content) {
+                        Ok(tool_def) => {
+                            let specs = tool_def.to_openai_specs();
+                            tracing::info!(
+                                "Loaded {} tool spec(s) from tool {}",
+                                specs.len(),
+                                tool_id
+                            );
+                            all_tool_specs.extend(specs);
+                        }
+                        Err(e) => {
+                            tracing::error!(
+                                "Failed to parse tool definition for {}: {}",
+                                tool_id,
+                                e
+                            );
+                        }
+                    }
+                }
+                Ok(None) => {
+                    tracing::warn!("Tool {} not found", tool_id);
+                }
+                Err(e) => {
+                    tracing::error!("Failed to load tool {}: {}", tool_id, e);
+                }
+            }
+        }
+
+        // Inject tools into payload in OpenAI format
+        if !all_tool_specs.is_empty() {
+            tracing::info!(
+                "✅ Injecting {} tool spec(s) into chat completion request",
+                all_tool_specs.len()
+            );
+
+            let tools_array: Vec<serde_json::Value> = all_tool_specs
+                .iter()
+                .map(|spec| {
+                    tracing::debug!(
+                        "Tool spec: {}",
+                        serde_json::to_string_pretty(spec).unwrap_or_default()
+                    );
+                    serde_json::json!({
+                        "type": "function",
+                        "function": spec
+                    })
+                })
+                .collect();
+
+            if let Some(obj) = payload_obj.as_object_mut() {
+                obj.insert("tools".to_string(), serde_json::json!(tools_array));
+                // Set tool_choice to "auto" to let the LLM decide when to use tools
+                if !obj.contains_key("tool_choice") {
+                    obj.insert("tool_choice".to_string(), serde_json::json!("auto"));
+                }
+                tracing::info!("🎯 Tool choice set to: auto");
+            }
+        } else {
+            tracing::warn!(
+                "⚠️  No tool specs were loaded even though tool_ids were provided: {:?}",
+                tool_ids
+            );
+        }
+    } else {
+        tracing::debug!("ℹ️  No tools requested for this chat completion");
     }
 
     // Extract metadata for direct connections (this is different from Socket.IO metadata)
@@ -1790,6 +2375,8 @@ pub async fn handle_chat_completions(
                     let model_item_owned = model_item.clone();
                     let url_owned = url.clone();
                     let key_owned = key.clone();
+                    let tool_ids_owned = tool_ids.clone();
+                    let all_tool_specs_owned = all_tool_specs.clone();
 
                     tokio::spawn(async move {
                         if let Err(e) = process_streaming_via_socketio(
@@ -1805,6 +2392,8 @@ pub async fn handle_chat_completions(
                             model_item_owned,
                             url_owned,
                             key_owned,
+                            tool_ids_owned,
+                            all_tool_specs_owned,
                         )
                         .await
                         {

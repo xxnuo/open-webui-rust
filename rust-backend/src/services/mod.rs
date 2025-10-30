@@ -23,6 +23,7 @@ pub mod prompt;
 pub mod rag;
 pub mod static_files;
 pub mod tool;
+pub mod tool_runtime;
 pub mod user;
 
 pub use auth::*;

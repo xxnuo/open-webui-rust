@@ -8,6 +8,7 @@ pub mod misc;
 pub mod password;
 pub mod pipeline;
 pub mod tasks;
+pub mod template;
 pub mod time;
 pub mod version;
 pub mod webhook;

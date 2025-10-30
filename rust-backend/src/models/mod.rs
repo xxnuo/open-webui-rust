@@ -16,6 +16,7 @@ pub mod oauth_session;
 pub mod prompt;
 pub mod tag;
 pub mod tool;
+pub mod tool_runtime;
 pub mod user;
 
 pub use auth::*;
