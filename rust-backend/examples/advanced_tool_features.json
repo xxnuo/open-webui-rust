@@ -21,8 +21,9 @@
         "expression": "{{equation}}"
       },
       "error_handling": {
-        "type": "default",
-        "value": 0
+        "default": {
+          "value": 0
+        }
       }
     },
     
@@ -52,10 +53,11 @@
       },
       "cache_enabled": true,
       "error_handling": {
-        "type": "retry",
-        "max_attempts": 3,
-        "initial_delay_ms": 1000,
-        "max_delay_ms": 5000
+        "retry": {
+          "max_attempts": 3,
+          "initial_delay_ms": 1000,
+          "max_delay_ms": 5000
+        }
       }
     },
     
@@ -108,8 +110,9 @@
         }
       },
       "error_handling": {
-        "type": "fallback",
-        "fallback_tool": "backup_weather_service"
+        "fallback": {
+          "fallback_tool": "backup_weather_service"
+        }
       }
     },
     
@@ -176,8 +179,9 @@
           "tool_name": "get_weather",
           "parameter_mapping": {},
           "error_handling": {
-            "type": "fallback",
-            "fallback_tool": "backup_weather_service"
+            "fallback": {
+              "fallback_tool": "backup_weather_service"
+            }
           }
         },
         {
