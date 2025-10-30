@@ -23,7 +23,7 @@ async-trait = "0.1"
 sqlx = { version = "0.8", features = [
     "runtime-tokio",
     "tls-rustls",
-    "postgres",
+    "sqlite",
     "json",
     "chrono",
     "uuid",
@@ -105,6 +105,9 @@ urlencoding = "2.1"
 regex = "1.11"
 url = "2.5"
 
+# Static file embedding (for bundling frontend into binary)
+rust-embed = { version = "8.5", features = ["compression", "include-exclude"] }
+
 # Socket.IO - Native Rust implementation
 # WebSocket support (actix-ws already included above)
 # For Socket.IO protocol parsing and encoding
@@ -116,7 +119,8 @@ yrs = "0.24.0"
 
 # Optional features
 [features]
-default = []
+default = ["embed-frontend"]
+embed-frontend = []
 embeddings = ["candle-core", "candle-nn", "candle-transformers", "hf-hub", "tokenizers"]
 
 [profile.release]

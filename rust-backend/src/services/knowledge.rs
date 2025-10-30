@@ -53,8 +53,8 @@ impl<'a> KnowledgeService<'a> {
                 user_id, 
                 name, 
                 description, 
-                COALESCE(data, '{}'::jsonb) as data, 
-                COALESCE(meta, '{}'::jsonb) as meta, 
+                COALESCE(data, '{}') as data, 
+                COALESCE(meta, '{}') as meta, 
                 access_control, 
                 created_at, 
                 updated_at
@@ -77,8 +77,8 @@ impl<'a> KnowledgeService<'a> {
                 user_id, 
                 name, 
                 description, 
-                COALESCE(data, '{}'::jsonb) as data, 
-                COALESCE(meta, '{}'::jsonb) as meta, 
+                COALESCE(data, '{}') as data, 
+                COALESCE(meta, '{}') as meta, 
                 access_control, 
                 created_at, 
                 updated_at
@@ -102,8 +102,8 @@ impl<'a> KnowledgeService<'a> {
                 user_id, 
                 name, 
                 description, 
-                COALESCE(data, '{}'::jsonb) as data, 
-                COALESCE(meta, '{}'::jsonb) as meta, 
+                COALESCE(data, '{}') as data, 
+                COALESCE(meta, '{}') as meta, 
                 access_control, 
                 created_at, 
                 updated_at

@@ -102,7 +102,7 @@ impl<'a> FunctionService<'a> {
             r#"
             SELECT id, user_id, name, type, content, meta, is_active, is_global, created_at, updated_at
             FROM function
-            WHERE is_global = true
+            WHERE is_global = 1
             ORDER BY updated_at DESC
             "#,
         )
@@ -232,7 +232,7 @@ impl<'a> FunctionService<'a> {
         sqlx::query(
             r#"
             UPDATE function
-            SET is_active = CASE WHEN is_active = true THEN false ELSE true END
+            SET is_active = CASE WHEN is_active = 1 THEN 0 ELSE 1 END
             WHERE id = $4
             "#,
         )
