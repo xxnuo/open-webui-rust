@@ -1,298 +1,299 @@
-# Open WebUI with Rust Backend
+# Open WebUI with Rust Backend ｜ [简体中文](./README.zh-CN.md)
 
-Open WebUI Rust后端,比原 Python 后端性能更优、可靠性和可扩展性。
+High‑Performance Rust Implementation of Open WebUI
 
-## Docker快速开始：
+## Docker Quick Start
 
 ```
 git clone https://github.com/knoxchat/open-webui-rust.git && cd open-webui-rust
 docker compose up -d
 ```
-> 确保Docker和Docker Compose就绪
+> Ensure Docker and Docker Compose are ready
 
 https://github.com/user-attachments/assets/d1bf00a3-1838-4658-84da-d8bfc84a9ec3
 
-## 概述
+## Overview
 
-Rust 后端是 Python 后端的直接替代品, 有这些好处:
+The Rust backend is a drop-in replacement for the Python backend, offering:
 
-- **更快的响应时间**10-50倍
-- **更低的内存使用率**70%
-- **原生并发**使用 Tokio 异步运行时
-- **类型安全**防止整类运行时错误
-- **零拷贝流式传输**用于聊天生成
-- **生产就绪**具有全面的错误处理
+- **10-50x faster response times** for API endpoints
+- **70% lower memory usage** under load
+- **Native concurrency** with Tokio's async runtime
+- **Type safety** preventing entire classes of runtime errors
+- **Zero-copy streaming** for chat completions
+- **Production-ready** with comprehensive error handling
 
-## **重要‼️** Rust后端当前完整代码状态：84% (可运行项目、部分功能缺失)
+## **IMPORTANT‼️** Rust Backend Current Complete Code Status: 84% (Runnable Project, Some Features Missing)
 
-- **初始版本基于Open WebUI 0.6.32开发**
-本项目初始版本开发根据赞助数量更新文件数，根据打赏/赞助添加后端文件直至添加完整的后端文件：
+- **Initial Version Based on Open WebUI 0.6.32** The development of this project's initial version updates files according to sponsorship amounts. Backend files are added based on donations/sponsorships until the complete backend files are added:
 
-   - **目标1万元或足够的Star数量添加完整后端代码**
+   - **Target: $10,000 or Sufficient Star Count to Add Complete Backend Code**
 
-   1. 赞助¥20-¥99更新2个文件，添加赞助者至项目共建列表，例如：张无忌-¥66
-   2. 每颗星添加5个文件
-   3. 赞助¥100-¥500更新6个文件，添加赞助者至项目共建列表带指定链接，例如：[韦小宝-¥180](https://韦小宝指定链接)
-   4. 赞助¥501-¥2000更新10个文件，添加赞助者至项目共建列表带指定链接和指定图片，例如：<br/>
+   1. Sponsorship of $20-$99: Update 2 files, add sponsor to project contributors list, e.g.: John Doe-$66
+   2. Each Star: Add 5 files
+   3. Sponsorship of $100-$500: Update 6 files, add sponsor to project contributors list with designated link, e.g.: [Jane Doe-$180](https://Jane-Doe.domain)
+   4. Sponsorship of $501-$2000: Update 10 files, add sponsor to project contributors list with designated link and image, e.g.: <br/>
    <a href="https://knox.chat" target="_blank" rel="noopener noreferrer">
-    <img width="80" src="./img/logo99.png" alt="名称">
+    <img width="80" src="./img/logo99.png" alt="Name">
    </a><br/>
-   5. 赞助¥10,000直接更新所有文件并列入项目合伙人，添加赞助者至项目共建列表带指定链接和指定图片并提供使用和部署支持。
+   5. Sponsorship of $10,000: Directly update all files and list as project partner, add sponsor to project contributors list with designated link and image, and provide usage and deployment support.
 
-- **赞助者请直接通过以下二维码进行支付宝扫码赞助并微信联系：knoxsale**
-<p align="center">
-   <img width="200" src="./img/ali.png" alt="名称">
+- **For Sponsorships: Please Scan the QR Code Below via Alipay or Paypal to Sponsor and Contact: support@knox.chat**
+
+<p align="center" style="display: flex; align-items: center; justify-content: center; gap: 20px;">
+   <img width="246" src="./img/ali.png" alt="Name">
+   <img width="229" src="./img/paypal.png" alt="Name">
 </p>
 
-## 赞助者列表
+## Sponsor List
 
-| 名称 | 赞助金额 | 贡献文件 | 享有特权 |
+| Name | Sponsorship Amount | Contributed Files | Privileges |
 |------|----------|---------|---------|
-| [![栢田医疗](./img/baitian.png)](https://baitianjituan.com) | 5000 | 300 | [![栢田医疗](./img/btyl.png)](https://baitianjituan.com) |
-| Knox用户匿名赞助 | 300 | 18 | 微信服务 |
-| [Bestming](https://www.mingagent.com) | 100 | 6 | 微信服务 |
-| HJPING | 100 | 6 | 微信服务 |
-| KingZ | 50 | 2 | 电邮服务 |
-| JimLi | 66 | 2 | 电邮服务 |
-| shanwu | 50 | 2 | 电邮服务 |
-| xixi | 50 | 2 | 电邮服务 |
+| [![Baitian Medical](./img/baitian.png)](https://baitianjituan.com) | ¥5000 | 300 | Dedicated Technical Support |
+| Knox User Anonymous Sponsorship | ¥300 | 18 | Email/IM Service |
+| [Bestming](https://www.mingagent.com) | ¥100 | 6 | Email/IM Service |
+| HJPING | ¥100 | 6 | Email/IM Service |
+| KingZ | ¥50 | 2 | Email Service |
+| JimLi | ¥66 | 2 | Email Service |
+| shanwu | ¥50 | 2 | Email Service |
+| xixi | ¥50 | 2 | Email Service |
 
-## 目录
+## Table of Contents
 
-- [架构](#架构)
-- [功能](#功能)
-- [先决条件](#先决条件)
-- [安装](#安装)
-- [配置](#配置)
-- [运行服务器](#运行服务器)
-- [API 兼容性](#api-兼容性)
-- [性能](#性能)
-- [开发](#开发)
-- [测试](#测试)
-- [部署](#部署)
+- [Architecture](#architecture)
+- [Features](#features)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Running the Server](#running-the-server)
+- [API Compatibility](#api-compatibility)
+- [Performance](#performance)
+- [Development](#development)
+- [Testing](#testing)
+- [Deployment](#deployment)
 
-## 架构
+## Architecture
 
-### 技术栈
+### Technology Stack
 
-- **框架**: Actix-Web 4.x (最快的 Web 框架之一)
-- **运行时**: Tokio (原生 async/await 运行时)
-- **数据库**: PostgreSQL with SQLx (编译时检查的查询)
-- **缓存**: Redis with deadpool 连接池
-- **认证**: JWT with jsonwebtoken + Argon2/Bcrypt
-- **序列化**: Serde (零拷贝反序列化)
-- **HTTP 客户端**: Reqwest (异步 HTTP/2 客户端)
+- **Framework**: Actix-Web 4.x (one of the fastest web frameworks)
+- **Runtime**: Tokio (async/await native runtime)
+- **Database**: PostgreSQL with SQLx (compile-time checked queries)
+- **Caching**: Redis with deadpool connection pooling
+- **Authentication**: JWT with jsonwebtoken + Argon2/Bcrypt
+- **Serialization**: Serde (zero-copy deserialization)
+- **HTTP Client**: Reqwest (async HTTP/2 client)
 
-### 项目结构
+### Project Structure
 
 ```
 rust-backend/
 ├── src/
-│   ├── main.rs              # 应用程序入口点
-│   ├── config.rs            # 配置管理
-│   ├── db.rs                # 数据库连接池
-│   ├── error.rs             # 集中式错误处理
-│   ├── models/              # 数据模型 (25+ 实体)
-│   │   ├── auth.rs          # 用户、会话、API密钥模型
-│   │   ├── chat.rs          # 聊天、消息模型
-│   │   ├── model.rs         # AI 模型配置
-│   │   └── ...              # 频道、文件、知识库等
-│   ├── routes/              # HTTP 路由处理器 (25+ 模块)
-│   │   ├── auth.rs          # 认证端点
-│   │   ├── chats.rs         # 聊天管理
-│   │   ├── openai.rs        # OpenAI 兼容 API
-│   │   └── ...              # 音频、图片、工具等
-│   ├── services/            # 业务逻辑层 (27+ 服务)
-│   │   ├── chat.rs          # 聊天处理服务
-│   │   ├── auth.rs          # 认证服务
-│   │   ├── rag.rs           # RAG (检索) 服务
-│   │   └── ...              # 模型、用户、文件服务
-│   ├── middleware/          # 请求/响应中间件
-│   │   ├── auth.rs          # JWT 认证
-│   │   ├── audit.rs         # 请求审计
-│   │   └── rate_limit.rs    # 速率限制
-│   ├── utils/               # 实用工具函数
-│   │   ├── auth.rs          # JWT 助手
-│   │   ├── embeddings.rs    # 向量嵌入
-│   │   └── chat_completion.rs # 聊天工具
-│   ├── socket.rs            # WebSocket/Socket.IO 支持
-│   └── websocket_chat.rs    # 实时聊天流式传输
-├── migrations/              # 数据库迁移
-│   └── postgres/            # PostgreSQL 架构迁移
-├── Cargo.toml               # Rust 依赖项
-└── .env.example             # 环境配置模板
+│   ├── main.rs              # Application entry point
+│   ├── config.rs            # Configuration management
+│   ├── db.rs                # Database connection pooling
+│   ├── error.rs             # Centralized error handling
+│   ├── models/              # Data models (25+ entities)
+│   │   ├── auth.rs          # User, session, API key models
+│   │   ├── chat.rs          # Chat, message models
+│   │   ├── model.rs         # AI model configurations
+│   │   └── ...              # Channel, file, knowledge, etc.
+│   ├── routes/              # HTTP route handlers (25+ modules)
+│   │   ├── auth.rs          # Authentication endpoints
+│   │   ├── chats.rs         # Chat management
+│   │   ├── openai.rs        # OpenAI-compatible API
+│   │   └── ...              # Audio, images, tools, etc.
+│   ├── services/            # Business logic layer (27+ services)
+│   │   ├── chat.rs          # Chat processing service
+│   │   ├── auth.rs          # Authentication service
+│   │   ├── rag.rs           # RAG (Retrieval) service
+│   │   └── ...              # Model, user, file services
+│   ├── middleware/          # Request/response middleware
+│   │   ├── auth.rs          # JWT authentication
+│   │   ├── audit.rs         # Request auditing
+│   │   └── rate_limit.rs    # Rate limiting
+│   ├── utils/               # Utility functions
+│   │   ├── auth.rs          # JWT helpers
+│   │   ├── embeddings.rs    # Vector embeddings
+│   │   └── chat_completion.rs # Chat utilities
+│   ├── socket.rs            # WebSocket/Socket.IO support
+│   └── websocket_chat.rs    # Real-time chat streaming
+├── migrations/              # Database migrations
+│   └── postgres/            # PostgreSQL schema migrations
+├── Cargo.toml               # Rust dependencies
+└── .env.example             # Environment configuration template
 ```
 
-## 功能
+## Features
 
-### 已实现的功能
+### Implemented Features
 
-#### 核心认证与授权
-- ✅ 基于 JWT 的认证与刷新令牌
-- ✅ API 密钥认证与端点限制
-- ✅ 基于角色的访问控制 (管理员、用户、待审核)
-- ✅ LDAP 认证支持
-- ✅ OAuth 2.0/2.1 集成
-- ✅ SCIM 2.0 用户配置
-- ✅ 使用 Redis 的会话管理
+#### Core Authentication & Authorization
+- ✅ JWT-based authentication with refresh tokens
+- ✅ API key authentication with endpoint restrictions
+- ✅ Role-based access control (Admin, User, Pending)
+- ✅ LDAP authentication support
+- ✅ OAuth 2.0/2.1 integration
+- ✅ SCIM 2.0 user provisioning
+- ✅ Session management with Redis
 
-#### 聊天与消息
-- ✅ OpenAI 兼容的聊天生成 API
-- ✅ 使用服务器发送事件 (SSE) 的实时流式传输
-- ✅ 基于 WebSocket 的聊天流式传输 (零缓冲)
-- ✅ 聊天历史管理 (CRUD 操作)
-- ✅ 消息编辑和删除
-- ✅ 聊天标记和组织
-- ✅ 多用户聊天会话
-- ✅ 聊天共享和归档
+#### Chat & Messaging
+- ✅ OpenAI-compatible chat completions API
+- ✅ Real-time streaming with Server-Sent Events (SSE)
+- ✅ WebSocket-based chat streaming (zero-buffering)
+- ✅ Chat history management (CRUD operations)
+- ✅ Message editing and deletion
+- ✅ Chat tagging and organization
+- ✅ Multi-user chat sessions
+- ✅ Chat sharing and archiving
 
-#### AI 模型管理
-- ✅ 多提供商模型支持 (任何OpenAI兼容模型)
-- ✅ 模型访问控制和权限
-- ✅ 模型缓存以提高性能
-- ✅ 动态模型加载和配置
-- ✅ 模型元数据和文档
-- ✅ Arena 模型评估支持
+#### AI Model Management
+- ✅ Multi-provider model support (OpenAI, Ollama, etc.)
+- ✅ Model access control and permissions
+- ✅ Model caching for improved performance
+- ✅ Dynamic model loading and configuration
+- ✅ Model metadata and documentation
+- ✅ Arena model evaluation support
 
-#### 知识库与 RAG (检索增强生成)
-- ✅ 文档上传和处理
-- ✅ 向量嵌入生成
-- ✅ 语义搜索和检索
-- ✅ 混合搜索 (向量 + BM25)
-- ✅ 知识库管理
-- ✅ 文件附件支持 (10+ 格式)
-- ✅ 带图片支持的 PDF 提取
-- ✅ 网页抓取和文档加载器
+#### Knowledge & RAG (Retrieval-Augmented Generation)
+- ✅ Document upload and processing
+- ✅ Vector embeddings generation
+- ✅ Semantic search and retrieval
+- ✅ Hybrid search (vector + BM25)
+- ✅ Knowledge base management
+- ✅ File attachment support (10+ formats)
+- ✅ PDF extraction with image support
+- ✅ Web scraping and document loaders
 
-#### 音频处理
-- ✅ 使用 Whisper、OpenAI、Azure 的语音转文本 (STT)
-- ✅ 使用 OpenAI、Azure、本地模型的文本转语音 (TTS)
-- ✅ 音频文件上传和流式传输
-- ✅ 多语言支持
-- ✅ 实时音频转录
+#### Audio Processing
+- ✅ Speech-to-Text (STT) with Whisper, OpenAI, Azure
+- ✅ Text-to-Speech (TTS) with OpenAI, Azure, local models
+- ✅ Audio file upload and streaming
+- ✅ Multi-language support
+- ✅ Real-time audio transcription
 
-#### 图片生成
-- ✅ OpenAI DALL-E 集成
-- ✅ Stable Diffusion (Automatic1111) 支持
-- ✅ ComfyUI 工作流集成
-- ✅ Google Gemini 图片生成
-- ✅ 图片提示增强
-- ✅ 图片存储和检索
+#### Image Generation
+- ✅ OpenAI DALL-E integration
+- ✅ Stable Diffusion (Automatic1111) support
+- ✅ ComfyUI workflow integration
+- ✅ Google Gemini image generation
+- ✅ Image prompt enhancement
+- ✅ Image storage and retrieval
 
-#### 高级功能
-- ✅ 函数/工具调用支持
-- ✅ 提示管理和模板
-- ✅ 上下文对话的记忆系统
-- ✅ 使用 Redis 的任务队列管理
-- ✅ 后台作业处理
-- ✅ Webhook 通知
-- ✅ 速率限制和节流
-- ✅ 请求审计和日志记录
-- ✅ 健康检查和监控
-- ✅ 优雅关闭处理
+#### Advanced Features
+- ✅ Function/Tool calling support
+- ✅ Prompt management and templates
+- ✅ Memory system for contextual conversations
+- ✅ Task queue management with Redis
+- ✅ Background job processing
+- ✅ Webhook notifications
+- ✅ Rate limiting and throttling
+- ✅ Request auditing and logging
+- ✅ Health checks and monitoring
+- ✅ Graceful shutdown handling
 
-#### 存储与集成
-- ✅ 本地文件存储
-- ✅ S3 兼容存储 (MinIO、AWS S3)
-- ✅ Google Drive 集成
-- ✅ OneDrive 集成
-- ✅ 多租户文件隔离
+#### Storage & Integration
+- ✅ Local file storage
+- ✅ S3-compatible storage (MinIO, AWS S3)
+- ✅ Google Drive integration
+- ✅ OneDrive integration
+- ✅ Multi-tenant file isolation
 
-#### 开发者功能
-- ✅ OpenAPI/Swagger 文档
-- ✅ 数据库迁移 (自动)
-- ✅ 基于环境的配置
-- ✅ Docker 支持与多阶段构建
-- ✅ 全面的错误消息
-- ✅ 请求/响应日志记录
+#### Developer Features
+- ✅ OpenAPI/Swagger documentation
+- ✅ Database migrations (automatic)
+- ✅ Environment-based configuration
+- ✅ Docker support with multi-stage builds
+- ✅ Comprehensive error messages
+- ✅ Request/response logging
 
-### 进行中 / 部分实现
+### In Progress / Partial Implementation
 
-- 🔄 MCP (模型上下文协议) 客户端
-- 🔄 高级网络搜索集成
-- 🔄 代码执行沙箱
-- 🔄 Jupyter notebook 集成
-- 🔄 高级 RAG 管道
-- 🔄 LDAP 组管理
+- 🔄 MCP (Model Context Protocol) client
+- 🔄 Advanced web search integrations
+- 🔄 Code execution sandboxing
+- 🔄 Jupyter notebook integration
+- 🔄 Advanced RAG pipelines
+- 🔄 LDAP group management
 
-### 尚未实现
+### Not Yet Implemented
 
-- ❌ 一些小众 ML 嵌入 (基于 Candle 的本地推理)
-- ❌ 某些专门的文档加载器
-- ❌ 一些高级管道过滤器
+- ❌ Some niche ML embeddings (Candle-based local inference)
+- ❌ Certain specialized document loaders
+- ❌ Some advanced Pipeline filters
 
-> **注意**: Rust 后端实现了大约 **85-90% 的 Python 后端功能**,重点关注最常用的功能。
+> **Note**: The Rust backend implements approximately **85-90% of Python backend features**, with focus on the most commonly used functionality.
 
-## 先决条件
+## Prerequisites
 
-- **Rust**: 1.75+ (通过 [rustup](https://rustup.rs/) 安装)
-- **PostgreSQL**: 13+ (必需)
-- **Redis**: 6.0+ (可选,推荐用于会话和缓存)
-- **操作系统**: Linux、macOS 或 Windows
+- **Rust**: 1.75+ (install via [rustup](https://rustup.rs/))
+- **PostgreSQL**: 13+ (required)
+- **Redis**: 6.0+ (optional, recommended for sessions and caching)
+- **Operating System**: Linux, macOS, or Windows
 
-## 安装
+## Installation
 
-### 1. 克隆仓库
+### 1. Clone Repository
 
 ```bash
 cd rust-backend
 ```
 
-### 2. 安装 Rust
+### 2. Install Rust
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
 ```
 
-### 3. 设置数据库
+### 3. Set Up Database
 
 ```bash
-# 创建 PostgreSQL 数据库
+# Create PostgreSQL database
 createdb openwebui
 
-# 设置数据库 URL
+# Set database URL
 export DATABASE_URL="postgresql://postgres:password@localhost:5432/openwebui"
 ```
 
-### 4. 安装依赖
+### 4. Install Dependencies
 
 ```bash
-# 依赖项由 Cargo 自动管理
+# Dependencies are automatically managed by Cargo
 cargo fetch
 ```
 
-## 配置
+## Configuration
 
-### 环境变量
+### Environment Variables
 
-在 `rust-backend/` 目录中创建 `.env` 文件:
+Create `.env` file in `rust-backend/` directory:
 
 ```bash
-# 服务器配置
+# Server Configuration
 HOST=0.0.0.0
 PORT=8080
 ENV=production
 RUST_LOG=info
 
-# 安全
+# Security
 WEBUI_SECRET_KEY=your-secret-key-min-32-chars
 JWT_EXPIRES_IN=168h
 
-# 数据库 (必需)
+# Database (Required)
 DATABASE_URL=postgresql://user:pass@localhost:5432/openwebui
 
-# Redis (推荐)
+# Redis (Recommended)
 ENABLE_REDIS=true
 REDIS_URL=redis://localhost:6379
 
-# 认证
+# Authentication
 ENABLE_SIGNUP=true
 ENABLE_LOGIN_FORM=true
 ENABLE_API_KEY=true
 DEFAULT_USER_ROLE=pending
 
-# OpenAI 配置 (如果使用 OpenAI 模型)
+# OpenAI Configuration (if using OpenAI models)
 ENABLE_OPENAI_API=true
 OPENAI_API_KEY=sk-your-key
 OPENAI_API_BASE_URL=https://api.openai.com/v1
@@ -300,53 +301,53 @@ OPENAI_API_BASE_URL=https://api.openai.com/v1
 # CORS
 CORS_ALLOW_ORIGIN=*
 
-# 功能
+# Features
 ENABLE_WEBSOCKET_SUPPORT=true
 ENABLE_IMAGE_GENERATION=false
 ENABLE_CODE_EXECUTION=false
 ENABLE_WEB_SEARCH=false
 
-# 音频 (可选)
+# Audio (Optional)
 TTS_ENGINE=openai
 STT_ENGINE=openai
 
-# RAG/检索 (可选)
+# RAG/Retrieval (Optional)
 CHUNK_SIZE=1500
 CHUNK_OVERLAP=100
 RAG_TOP_K=5
 ```
 
-查看 `.env.example` 获取完整的配置选项。
+See `.env.example` for complete configuration options.
 
-### 配置优先级
+### Configuration Precedence
 
-1. 环境变量 (最高优先级)
-2. `.env` 文件
-3. 数据库存储的配置
-4. 默认值 (最低优先级)
+1. Environment variables (highest priority)
+2. `.env` file
+3. Database-stored configuration
+4. Default values (lowest priority)
 
-## 运行服务器
+## Running the Server
 
-### 开发模式
+### Development Mode
 
 ```bash
 cargo run
 ```
 
-服务器将在 `http://0.0.0.0:8080` 启动
+The server will start at `http://0.0.0.0:8080`
 
-### 生产模式 (优化)
+### Production Mode (Optimized)
 
 ```bash
 cargo run --release
 ```
 
-### 使用构建脚本
+### Using the Build Script
 
 ```bash
-./build.sh          # 构建发布版二进制文件
-./build.sh --dev    # 构建调试版二进制文件
-./build.sh --run    # 构建并运行
+./build.sh          # Builds release binary
+./build.sh --dev    # Builds debug binary
+./build.sh --run    # Builds and runs
 ```
 
 ### Docker
@@ -356,188 +357,219 @@ docker build -t open-webui-rust .
 docker run -p 8080:8080 --env-file .env open-webui-rust
 ```
 
-## 🔌 API 兼容性
+### Systemd Service (Linux)
 
-Rust 后端对核心端点保持与 Python 后端 **100% API 兼容性**:
+```ini
+[Unit]
+Description=Open WebUI Rust Backend
+After=network.target postgresql.service redis.service
 
-### 认证
-- `POST /api/v1/auths/signup` - 用户注册
-- `POST /api/v1/auths/signin` - 用户登录
-- `POST /api/v1/auths/signout` - 用户登出
-- `POST /api/v1/auths/api_key` - 生成 API 密钥
+[Service]
+Type=simple
+User=webui
+WorkingDirectory=/opt/open-webui-rust
+EnvironmentFile=/opt/open-webui-rust/.env
+ExecStart=/opt/open-webui-rust/target/release/open-webui-rust
+Restart=on-failure
+RestartSec=5s
 
-### 聊天生成
-- `POST /api/chat/completions` - OpenAI 兼容的聊天
-- `POST /api/v1/chat/completions` - 替代端点
-- `POST /openai/v1/chat/completions` - 完全 OpenAI 兼容
-- `WS /api/ws/chat` - WebSocket 流式传输
+[Install]
+WantedBy=multi-user.target
+```
 
-### 模型
-- `GET /api/models` - 列出可用模型
-- `GET /api/models/base` - 列出基础模型
-- `POST /api/v1/models` - 创建模型
-- `GET /api/v1/models/:id` - 获取模型详情
+## API Compatibility
 
-### 用户
-- `GET /api/v1/users` - 列出用户 (管理员)
-- `GET /api/v1/users/:id` - 获取用户资料
-- `PUT /api/v1/users/:id` - 更新用户
-- `DELETE /api/v1/users/:id` - 删除用户
+The Rust backend maintains **100% API compatibility** with the Python backend for core endpoints:
 
-### 文件与知识库
-- `POST /api/v1/files` - 上传文件
-- `GET /api/v1/files/:id` - 下载文件
-- `POST /api/v1/knowledge` - 创建知识库
-- `GET /api/v1/retrieval/query` - 查询知识
+### Authentication
+- `POST /api/v1/auths/signup` - User registration
+- `POST /api/v1/auths/signin` - User login
+- `POST /api/v1/auths/signout` - User logout
+- `POST /api/v1/auths/api_key` - Generate API key
 
-### 健康与状态
-- `GET /health` - 基本健康检查
-- `GET /health/db` - 数据库连接检查
-- `GET /api/config` - 前端配置
-- `GET /api/version` - 后端版本
+### Chat Completions
+- `POST /api/chat/completions` - OpenAI-compatible chat
+- `POST /api/v1/chat/completions` - Alternative endpoint
+- `POST /openai/v1/chat/completions` - Full OpenAI compatibility
+- `WS /api/ws/chat` - WebSocket streaming
 
-### 快速摘要
+### Models
+- `GET /api/models` - List available models
+- `GET /api/models/base` - List base models
+- `POST /api/v1/models` - Create model
+- `GET /api/v1/models/:id` - Get model details
 
-| 指标 | Python (FastAPI) | Rust (Actix-Web) | 改进 |
+### Users
+- `GET /api/v1/users` - List users (admin)
+- `GET /api/v1/users/:id` - Get user profile
+- `PUT /api/v1/users/:id` - Update user
+- `DELETE /api/v1/users/:id` - Delete user
+
+### Files & Knowledge
+- `POST /api/v1/files` - Upload file
+- `GET /api/v1/files/:id` - Download file
+- `POST /api/v1/knowledge` - Create knowledge base
+- `GET /api/v1/retrieval/query` - Query knowledge
+
+### Health & Status
+- `GET /health` - Basic health check
+- `GET /health/db` - Database connectivity check
+- `GET /api/config` - Frontend configuration
+- `GET /api/version` - Backend version
+
+## Performance
+
+### Quick Summary
+
+| Metric | Python (FastAPI) | Rust (Actix-Web) | Improvement |
 |--------|------------------|------------------|-------------|
-| 登录 (p50) | 45ms | 3ms | **快 15 倍** |
-| 聊天生成 (p50) | 890ms | 35ms* | **快 25 倍** |
-| 模型列表 (p50) | 23ms | 1.2ms | **快 19 倍** |
-| 内存 (1000 请求) | 450 MB | 85 MB | **降低 5.3 倍** |
-| 吞吐量 | 850 请求/秒 | 12,400 请求/秒 | **提高 14.6 倍** |
+| Login (p50) | 45ms | 3ms | **15x faster** |
+| Chat Completion (p50) | 890ms | 35ms* | **25x faster** |
+| Model List (p50) | 23ms | 1.2ms | **19x faster** |
+| Memory (1000 req) | 450 MB | 85 MB | **5.3x lower** |
+| Throughput | 850 req/s | 12,400 req/s | **14.6x higher** |
 
-*注意: 聊天生成速度主要取决于 LLM 提供商。Rust 在流式传输和处理开销方面表现出色。
+*Note: Chat completion speed primarily depends on LLM provider. Rust excels at streaming and handling overhead.
 
-## 开发
+## Development
 
-### 先决条件
+### Prerequisites
 
 ```bash
-# 安装开发工具
+# Install development tools
 rustup component add rustfmt clippy
 
-# 安装 cargo-watch 用于自动重新加载
+# Install cargo-watch for auto-reload
 cargo install cargo-watch
 ```
 
-### 开发工作流
+### Development Workflow
 
 ```bash
-# 文件更改时自动重新加载
+# Auto-reload on file changes
 cargo watch -x run
 
-# 运行测试
+# Run tests
 cargo test
 
-# 运行带输出的测试
+# Run tests with output
 cargo test -- --nocapture
 
-# 格式化代码
+# Format code
 cargo fmt
 
-# 检查代码
+# Lint code
 cargo clippy -- -D warnings
 
-# 不构建的情况下检查
+# Check without building
 cargo check
 ```
 
-### 代码结构指南
+### Code Structure Guidelines
 
-1. **模型** (`src/models/`): 带有 Serde 序列化的数据库实体
-2. **服务** (`src/services/`): 业务逻辑,可跨路由重用
-3. **路由** (`src/routes/`): HTTP 处理器,调用服务的薄层
-4. **中间件** (`src/middleware/`): 横切关注点 (认证、日志记录)
-5. **工具** (`src/utils/`): 助手函数,无业务逻辑
+1. **Models** (`src/models/`): Database entities with Serde serialization
+2. **Services** (`src/services/`): Business logic, reusable across routes
+3. **Routes** (`src/routes/`): HTTP handlers, thin layer calling services
+4. **Middleware** (`src/middleware/`): Cross-cutting concerns (auth, logging)
+5. **Utils** (`src/utils/`): Helper functions, no business logic
 
-### 添加新功能
+### Adding New Features
 
-1. 在 `src/models/[feature].rs` 中添加模型
-2. 在 `migrations/postgres/` 中添加数据库迁移
-3. 在 `src/services/[feature].rs` 中实现服务
-4. 在 `src/routes/[feature].rs` 中添加路由
-5. 在 `src/routes/mod.rs` 中注册路由
-6. 添加测试
+1. Add model in `src/models/[feature].rs`
+2. Add database migration in `migrations/postgres/`
+3. Implement service in `src/services/[feature].rs`
+4. Add routes in `src/routes/[feature].rs`
+5. Register routes in `src/routes/mod.rs`
+6. Add tests
 
-## 测试
+## Testing
 
-### 单元测试
+### Unit Tests
 
 ```bash
 cargo test --lib
 ```
 
-### 集成测试
+### Integration Tests
 
 ```bash
-# 设置测试数据库
+# Set test database
 export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/openwebui_test
 
-# 运行集成测试
+# Run integration tests
 cargo test --test '*'
 ```
 
-### 使用演示账户测试
+### Test with Demo Account
 
 ```bash
-# 后端包含一个演示账户
-# 邮箱: test@test.com
-# 密码: test1234
+# The backend includes a demo account
+# Email: test@test.com
+# Password: test1234
 ```
 
-### 负载测试
+### Load Testing
 
 ```bash
-# 安装 wrk
+# Install wrk
 brew install wrk  # macOS
 sudo apt install wrk  # Ubuntu
 
-# 运行负载测试
+# Run load test
 wrk -t4 -c100 -d30s --latency http://localhost:8080/health
 ```
 
-## 部署
+## Deployment
 
-### 生产构建
+### Building for Production
 
 ```bash
-# 构建优化的二进制文件
+# Build optimized binary
 cargo build --release
 
-# 二进制文件位置
+# Binary location
 ./target/release/open-webui-rust
 
-# 去除符号 (减小大小)
+# Strip symbols (reduces size)
 strip ./target/release/open-webui-rust
 ```
 
-### 性能调优
-
-```toml
-# Cargo.toml - 已优化
-[profile.release]
-opt-level = 3           # 最大优化
-lto = true              # 链接时优化
-codegen-units = 1       # 单个代码生成单元
-strip = true            # 去除符号
-```
-
-### 生产环境变量
+### Docker Deployment
 
 ```bash
-# 使用生产设置
+# Multi-stage Docker build
+docker build -t open-webui-rust:latest .
+
+# Run with docker-compose
+docker-compose up -d
+```
+
+### Performance Tuning
+
+```toml
+# Cargo.toml - Already optimized
+[profile.release]
+opt-level = 3           # Maximum optimization
+lto = true              # Link-time optimization
+codegen-units = 1       # Single codegen unit
+strip = true            # Strip symbols
+```
+
+### Environment Variables for Production
+
+```bash
+# Use production settings
 ENV=production
 RUST_LOG=warn
 ENABLE_REDIS=true
 
-# 增加连接池
+# Increase connection pools
 DATABASE_POOL_SIZE=20
 REDIS_MAX_CONNECTIONS=30
 
-# 启用压缩
+# Enable compression
 ENABLE_COMPRESSION_MIDDLEWARE=true
 
-# 设置适当的 CORS
+# Set appropriate CORS
 CORS_ALLOW_ORIGIN=https://yourdomain.com
 ```
-
