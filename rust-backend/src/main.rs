@@ -37,6 +37,8 @@ pub struct AppState {
     pub socket_state: Option<socket::SocketState>,
     // Socket.IO event handler (native Rust implementation)
     pub socketio_handler: Option<Arc<socketio::EventHandler>>,
+    // Shared HTTP client for better performance (connection pooling, TLS reuse)
+    pub http_client: reqwest::Client,
 }
 
 #[actix_web::main]
@@ -238,6 +240,17 @@ async fn main() -> anyhow::Result<()> {
     };
 
     // Create app state
+    // Create shared HTTP client with connection pooling and optimized settings
+    let http_client = reqwest::Client::builder()
+        .pool_max_idle_per_host(10) // Reuse connections
+        .tcp_nodelay(true) // Disable Nagle's algorithm for real-time streaming
+        .timeout(std::time::Duration::from_secs(300)) // 5 min default timeout
+        .http2_keep_alive_interval(Some(std::time::Duration::from_secs(5)))
+        .http2_keep_alive_while_idle(true)
+        .build()?;
+
+    tracing::info!("🌐 HTTP client initialized with connection pooling");
+
     let state = web::Data::new(AppState {
         db: db.clone(),
         config: Arc::new(RwLock::new(config.clone())),
@@ -245,6 +258,7 @@ async fn main() -> anyhow::Result<()> {
         models_cache: Arc::new(RwLock::new(std::collections::HashMap::new())),
         socket_state,
         socketio_handler: socketio_handler.clone(),
+        http_client,
     });
 
     // Start server
