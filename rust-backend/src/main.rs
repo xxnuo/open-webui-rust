@@ -564,7 +564,16 @@ async fn get_app_config(state: web::Data<AppState>, req: HttpRequest) -> HttpRes
         response["ui"] = json!({});
     }
 
-    HttpResponse::Ok().json(response)
+    // Add cache-control headers to prevent browser caching of config
+    // This ensures users always get fresh config data
+    HttpResponse::Ok()
+        .insert_header((
+            "Cache-Control",
+            "no-store, no-cache, must-revalidate, max-age=0",
+        ))
+        .insert_header(("Pragma", "no-cache"))
+        .insert_header(("Expires", "0"))
+        .json(response)
 }
 
 async fn get_app_version() -> HttpResponse {
