@@ -21,6 +21,7 @@ RUN mkdir src && \
 # Copy source code
 COPY src ./src
 COPY migrations ./migrations
+COPY examples ./examples
 
 # Build application
 RUN cargo build --release
