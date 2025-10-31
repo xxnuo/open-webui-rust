@@ -23,7 +23,7 @@ The Rust backend is a drop-in replacement for the Python backend, offering:
 - **Zero-copy streaming** for chat completions
 - **Production-ready** with comprehensive error handling
 
-## **IMPORTANT‼️** Rust Backend Current Complete Code Status: 84% (Runnable Project, Some Features Missing)
+## **IMPORTANT‼️** Rust Backend Current Complete Code Status: 85% (Runnable Project, Some Features Missing)
 
 - **Initial Version Based on Open WebUI 0.6.32** The development of this project's initial version updates files according to sponsorship amounts. Backend files are added based on donations/sponsorships until the complete backend files are added:
 
