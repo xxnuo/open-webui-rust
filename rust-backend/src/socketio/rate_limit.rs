@@ -238,12 +238,12 @@ mod tests {
 
         let limiter = RateLimiter::new(config);
 
-        // Should allow initial events
-        for _ in 0..10 {
+        // Should allow initial events (max_events + burst_allowance = 10 + 5 = 15)
+        for _ in 0..15 {
             assert!(limiter.check_rate_limit("user-1", 1).await.is_ok());
         }
 
-        // Should block after limit
+        // Should block after limit (15 tokens consumed)
         assert!(limiter.check_rate_limit("user-1", 1).await.is_err());
 
         // Wait for refill

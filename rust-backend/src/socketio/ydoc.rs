@@ -335,6 +335,7 @@ impl YDocManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use yrs::{GetString, Text, WriteTxn};
 
     #[tokio::test]
     async fn test_ydoc_manager_memory() {

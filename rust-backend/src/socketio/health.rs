@@ -428,7 +428,8 @@ mod tests {
         let health = monitor.get_connection_health("session-1").await.unwrap();
         assert_eq!(health.status, HealthStatus::Healthy);
 
-        monitor.record_heartbeat("session-1", Some(50.0)).await;
+        // Test with 40ms latency (< 50ms = Excellent)
+        monitor.record_heartbeat("session-1", Some(40.0)).await;
 
         let health = monitor.get_connection_health("session-1").await.unwrap();
         assert_eq!(health.connection_quality, ConnectionQuality::Excellent);
