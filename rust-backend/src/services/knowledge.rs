@@ -298,4 +298,32 @@ impl<'a> KnowledgeService<'a> {
 
         Ok(())
     }
+
+    pub async fn check_access_by_user_id(
+        &self,
+        id: &str,
+        user_id: &str,
+        permission: &str,
+        user_group_ids: &std::collections::HashSet<String>,
+    ) -> AppResult<bool> {
+        let knowledge = self.get_knowledge_by_id(id).await?;
+
+        if let Some(knowledge) = knowledge {
+            // Owner always has access
+            if knowledge.user_id == user_id {
+                return Ok(true);
+            }
+
+            // Check access control
+            use crate::utils::misc::has_access;
+            Ok(has_access(
+                user_id,
+                permission,
+                &knowledge.access_control,
+                user_group_ids,
+            ))
+        } else {
+            Ok(false)
+        }
+    }
 }

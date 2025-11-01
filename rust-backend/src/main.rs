@@ -3,6 +3,7 @@ mod db;
 mod error;
 mod middleware;
 mod models;
+mod retrieval;
 mod routes;
 mod services;
 mod socket;
@@ -18,7 +19,7 @@ use actix_web::{
     web, App, HttpRequest, HttpResponse, HttpServer,
 };
 use std::net::SocketAddr;
-use tracing::{info, Level};
+use tracing::{info, warn, Level};
 use tracing_subscriber::FmtSubscriber;
 
 use crate::config::{Config, MutableConfig};
@@ -39,6 +40,10 @@ pub struct AppState {
     pub socketio_handler: Option<Arc<socketio::EventHandler>>,
     // Shared HTTP client for better performance (connection pooling, TLS reuse)
     pub http_client: reqwest::Client,
+    // Vector database client for RAG/knowledge base operations
+    pub vector_db: Option<Arc<dyn retrieval::VectorDB>>,
+    // Embedding provider for generating embeddings
+    pub embedding_provider: Option<Arc<dyn retrieval::EmbeddingProvider>>,
 }
 
 #[actix_web::main]
@@ -251,6 +256,49 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("🌐 HTTP client initialized with connection pooling");
 
+    // Initialize vector database if enabled
+    let vector_db_enabled = std::env::var("ENABLE_RAG")
+        .unwrap_or_else(|_| "true".to_string())
+        .to_lowercase()
+        == "true";
+
+    let vector_db = if vector_db_enabled {
+        match retrieval::VectorDBFactory::from_env().await {
+            Ok(db) => {
+                info!("✅ Vector database initialized successfully");
+                Some(db)
+            }
+            Err(e) => {
+                warn!("⚠️  Failed to initialize vector database: {}", e);
+                warn!("   RAG features will be disabled. To enable:");
+                warn!("   - Set VECTOR_DB=chroma (or other supported DB)");
+                warn!("   - Set CHROMA_HTTP_HOST and CHROMA_HTTP_PORT");
+                warn!("   - Ensure vector database is running");
+                None
+            }
+        }
+    } else {
+        info!("⚠️  Vector database disabled (ENABLE_RAG=false)");
+        None
+    };
+
+    // Initialize embedding provider if enabled
+    let embedding_provider = if vector_db_enabled {
+        match retrieval::embeddings::OpenAIEmbeddings::new(None, None) {
+            Ok(provider) => {
+                info!("✅ Embedding provider initialized (OpenAI)");
+                Some(Arc::new(provider) as Arc<dyn retrieval::EmbeddingProvider>)
+            }
+            Err(e) => {
+                warn!("⚠️  Failed to initialize embedding provider: {}", e);
+                warn!("   Set OPENAI_API_KEY to enable embeddings");
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     let state = web::Data::new(AppState {
         db: db.clone(),
         config: Arc::new(RwLock::new(config.clone())),
@@ -259,6 +307,8 @@ async fn main() -> anyhow::Result<()> {
         socket_state,
         socketio_handler: socketio_handler.clone(),
         http_client,
+        vector_db,
+        embedding_provider,
     });
 
     // Start server

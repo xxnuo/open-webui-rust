@@ -2,6 +2,7 @@ use actix_web::{web, HttpResponse};
 use serde::Deserialize;
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
+use tracing as log;
 use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
@@ -156,7 +157,7 @@ async fn get_knowledge_bases(
 
     // Get files for each knowledge base
     let mut responses = Vec::new();
-    for knowledge in knowledge_bases {
+    for mut knowledge in knowledge_bases {
         let mut files = Vec::new();
         if let Some(data) = &knowledge.data {
             if let Some(file_ids) = data.get("file_ids").and_then(|v| v.as_array()) {
@@ -165,16 +166,47 @@ async fn get_knowledge_bases(
                     .filter_map(|v| v.as_str().map(String::from))
                     .collect();
 
-                // Get file metadata for each file
-                for file_id in file_id_strings {
-                    if let Ok(Some(file)) = file_service.get_file_by_id(&file_id).await {
-                        files.push(json!({
-                            "id": file.id,
-                            "filename": file.filename,
-                            "meta": file.meta,
-                            "created_at": file.created_at,
-                            "updated_at": file.updated_at,
-                        }));
+                // Get file metadatas
+                if let Ok(file_metadatas) = file_service
+                    .get_file_metadatas_by_ids(&file_id_strings)
+                    .await
+                {
+                    files = file_metadatas;
+
+                    // Check if all files exist - clean up missing files
+                    if files.len() != file_id_strings.len() {
+                        let existing_ids: Vec<String> = files
+                            .iter()
+                            .filter_map(|f| {
+                                f.get("id").and_then(|id| id.as_str().map(String::from))
+                            })
+                            .collect();
+
+                        let missing_files: Vec<_> = file_id_strings
+                            .iter()
+                            .filter(|id| !existing_ids.contains(id))
+                            .collect();
+
+                        if !missing_files.is_empty() {
+                            // Update knowledge data to remove missing files
+                            let mut data = knowledge.data.clone().unwrap_or_else(|| json!({}));
+                            data["file_ids"] = json!(existing_ids);
+
+                            // Update in database
+                            if let Ok(updated) = knowledge_service
+                                .update_knowledge_data(&knowledge.id, data)
+                                .await
+                            {
+                                knowledge = updated;
+                            }
+
+                            // Update files list with only existing files
+                            if let Ok(updated_metadatas) =
+                                file_service.get_file_metadatas_by_ids(&existing_ids).await
+                            {
+                                files = updated_metadatas;
+                            }
+                        }
                     }
                 }
             }
@@ -250,7 +282,7 @@ async fn get_knowledge_list(
 
     // Get files for each knowledge base
     let mut responses = Vec::new();
-    for knowledge in knowledge_bases {
+    for mut knowledge in knowledge_bases {
         let mut files = Vec::new();
         if let Some(data) = &knowledge.data {
             if let Some(file_ids) = data.get("file_ids").and_then(|v| v.as_array()) {
@@ -259,15 +291,47 @@ async fn get_knowledge_list(
                     .filter_map(|v| v.as_str().map(String::from))
                     .collect();
 
-                for file_id in file_id_strings {
-                    if let Ok(Some(file)) = file_service.get_file_by_id(&file_id).await {
-                        files.push(json!({
-                            "id": file.id,
-                            "filename": file.filename,
-                            "meta": file.meta,
-                            "created_at": file.created_at,
-                            "updated_at": file.updated_at,
-                        }));
+                // Get file metadatas
+                if let Ok(file_metadatas) = file_service
+                    .get_file_metadatas_by_ids(&file_id_strings)
+                    .await
+                {
+                    files = file_metadatas;
+
+                    // Check if all files exist - clean up missing files
+                    if files.len() != file_id_strings.len() {
+                        let existing_ids: Vec<String> = files
+                            .iter()
+                            .filter_map(|f| {
+                                f.get("id").and_then(|id| id.as_str().map(String::from))
+                            })
+                            .collect();
+
+                        let missing_files: Vec<_> = file_id_strings
+                            .iter()
+                            .filter(|id| !existing_ids.contains(id))
+                            .collect();
+
+                        if !missing_files.is_empty() {
+                            // Update knowledge data to remove missing files
+                            let mut data = knowledge.data.clone().unwrap_or_else(|| json!({}));
+                            data["file_ids"] = json!(existing_ids);
+
+                            // Update in database
+                            if let Ok(updated) = knowledge_service
+                                .update_knowledge_data(&knowledge.id, data)
+                                .await
+                            {
+                                knowledge = updated;
+                            }
+
+                            // Update files list with only existing files
+                            if let Ok(updated_metadatas) =
+                                file_service.get_file_metadatas_by_ids(&existing_ids).await
+                            {
+                                files = updated_metadatas;
+                            }
+                        }
                     }
                 }
             }
@@ -491,6 +555,7 @@ async fn delete_knowledge_by_id(
     knowledge_id: web::Path<String>,
 ) -> AppResult<HttpResponse> {
     let knowledge_service = KnowledgeService::new(&state.db);
+    let model_service = crate::services::model::ModelService::new(&state.db);
 
     let knowledge = knowledge_service
         .get_knowledge_by_id(&knowledge_id)
@@ -515,7 +580,76 @@ async fn delete_knowledge_by_id(
         }
     }
 
+    log::info!(
+        "Deleting knowledge base: {} (name: {})",
+        knowledge_id.as_str(),
+        knowledge.name
+    );
+
+    // Get all models and update those that reference this knowledge base
+    if let Ok(models) = model_service.get_all_models().await {
+        log::info!(
+            "Found {} models to check for knowledge base {}",
+            models.len(),
+            knowledge_id.as_str()
+        );
+
+        for model in models {
+            if let Some(meta) = &model.meta {
+                if let Some(knowledge_list) = meta.get("knowledge").and_then(|k| k.as_array()) {
+                    // Filter out the deleted knowledge base
+                    let updated_knowledge: Vec<serde_json::Value> = knowledge_list
+                        .iter()
+                        .filter(|k| {
+                            k.get("id")
+                                .and_then(|id| id.as_str())
+                                .map(|id| id != knowledge_id.as_str())
+                                .unwrap_or(true)
+                        })
+                        .cloned()
+                        .collect();
+
+                    // If the knowledge list changed, update the model
+                    if updated_knowledge.len() != knowledge_list.len() {
+                        log::info!(
+                            "Updating model {} to remove knowledge base {}",
+                            model.id,
+                            knowledge_id.as_str()
+                        );
+
+                        let mut updated_meta = meta.clone();
+                        updated_meta["knowledge"] = json!(updated_knowledge);
+
+                        let model_form = crate::models::model::ModelForm {
+                            id: model.id.clone(),
+                            base_model_id: model.base_model_id.clone(),
+                            name: model.name.clone(),
+                            params: model.params.clone(),
+                            meta: updated_meta,
+                            access_control: model.access_control.clone(),
+                        };
+
+                        if let Err(e) = model_service
+                            .update_model_by_id(&model.id, model_form)
+                            .await
+                        {
+                            log::error!("Failed to update model {}: {}", model.id, e);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // TODO: Delete vector collection (requires vector DB integration)
+    // Python equivalent:
+    //   try:
+    //       VECTOR_DB_CLIENT.delete_collection(collection_name=id)
+    //   except Exception as e:
+    //       log.debug(e)
+    //       pass
+    // This deletes the entire vector database collection for this knowledge base,
+    // removing all embeddings for all files in the knowledge base
 
     knowledge_service.delete_knowledge(&knowledge_id).await?;
 
@@ -556,12 +690,32 @@ async fn add_file_to_knowledge(
     }
 
     // Check if file exists
-    let _file = file_service
+    let file = file_service
         .get_file_by_id(&form.file_id)
         .await?
         .ok_or_else(|| AppError::NotFound("File not found".to_string()))?;
 
+    // Check if file has been processed (has data)
+    if file.data.is_none() {
+        return Err(AppError::BadRequest("File not processed".to_string()));
+    }
+
     // TODO: Process file and add to vector DB (requires vector DB integration)
+    // This should call the retrieval service's process_file function with:
+    // - file_id: form.file_id
+    // - collection_name: knowledge_id (the knowledge base ID)
+    // - user: auth_user
+    // Python equivalent:
+    //   process_file(
+    //       request,
+    //       ProcessFileForm(file_id=form.file_id, collection_name=id),
+    //       user=user
+    //   )
+    // The process_file function will:
+    // 1. Load the file content from storage
+    // 2. Extract and chunk the text
+    // 3. Generate embeddings for each chunk
+    // 4. Store embeddings in the vector database collection named after the knowledge base ID
 
     // Add file ID to knowledge data
     let mut data = knowledge.data.clone().unwrap_or_else(|| json!({}));
@@ -655,6 +809,20 @@ async fn update_file_in_knowledge(
         .ok_or_else(|| AppError::NotFound("File not found".to_string()))?;
 
     // TODO: Remove old content from vector DB and re-index (requires vector DB integration)
+    // Python equivalent:
+    //   VECTOR_DB_CLIENT.delete(
+    //       collection_name=knowledge.id,
+    //       filter={"file_id": form.file_id}
+    //   )
+    //   process_file(
+    //       request,
+    //       ProcessFileForm(file_id=form.file_id, collection_name=id),
+    //       user=user
+    //   )
+    // This should:
+    // 1. Delete all vector embeddings for this file from the knowledge base collection
+    // 2. Re-process the file to generate fresh embeddings
+    // 3. Store the new embeddings in the collection
 
     // Get files for response
     let mut files = Vec::new();
@@ -723,11 +891,29 @@ async fn remove_file_from_knowledge(
     }
 
     // TODO: Remove content from vector DB (requires vector DB integration)
+    // Python equivalent:
+    //   try:
+    //       VECTOR_DB_CLIENT.delete(
+    //           collection_name=knowledge.id,
+    //           filter={"file_id": form.file_id}
+    //       )
+    //   except Exception as e:
+    //       log.debug("This was most likely caused by bypassing embedding processing")
+    //       pass
+    // This removes all vector embeddings for this file from the knowledge base collection
 
     // Delete file from database if requested
     let delete_file = query.delete_file.unwrap_or(true);
     if delete_file {
         // TODO: Delete file's collection from vector database
+        // Python equivalent:
+        //   try:
+        //       file_collection = f"file-{form.file_id}"
+        //       if VECTOR_DB_CLIENT.has_collection(collection_name=file_collection):
+        //           VECTOR_DB_CLIENT.delete_collection(collection_name=file_collection)
+        //   except Exception as e:
+        //       pass
+        // This deletes the entire collection for this individual file
         file_service.delete_file(&form.file_id).await?;
     }
 
@@ -815,6 +1001,13 @@ async fn reset_knowledge(
     }
 
     // TODO: Delete vector collection (requires vector DB integration)
+    // Python equivalent:
+    //   try:
+    //       VECTOR_DB_CLIENT.delete_collection(collection_name=id)
+    //   except Exception as e:
+    //       log.debug(e)
+    //       pass
+    // This deletes all vector embeddings for the knowledge base
 
     // Reset file_ids to empty array
     let data = json!({"file_ids": []});
@@ -827,14 +1020,110 @@ async fn reset_knowledge(
 
 // POST /reindex - Reindex all knowledge files (admin only)
 async fn reindex_all_knowledge(
-    _state: web::Data<AppState>,
+    state: web::Data<AppState>,
     auth_user: AuthUser,
 ) -> AppResult<HttpResponse> {
     if auth_user.user.role != "admin" {
         return Err(AppError::Unauthorized("Unauthorized".to_string()));
     }
 
-    // TODO: Reindex all knowledge bases (requires vector DB integration)
+    let knowledge_service = KnowledgeService::new(&state.db);
+    let file_service = FileService::new(&state.db);
+
+    let knowledge_bases = knowledge_service.get_all_knowledge().await?;
+
+    log::info!(
+        "Starting reindexing for {} knowledge bases",
+        knowledge_bases.len()
+    );
+
+    let mut deleted_knowledge_bases = Vec::new();
+
+    for knowledge_base in knowledge_bases {
+        // Robust error handling for missing or invalid data
+        if knowledge_base.data.is_none() {
+            log::warn!(
+                "Knowledge base {} has no data. Deleting.",
+                knowledge_base.id
+            );
+            if let Err(e) = knowledge_service.delete_knowledge(&knowledge_base.id).await {
+                log::error!(
+                    "Failed to delete invalid knowledge base {}: {}",
+                    knowledge_base.id,
+                    e
+                );
+            } else {
+                deleted_knowledge_bases.push(knowledge_base.id.clone());
+            }
+            continue;
+        }
+
+        let data = knowledge_base.data.as_ref().unwrap();
+        if !data.is_object() {
+            log::warn!(
+                "Knowledge base {} has invalid data: {:?}. Deleting.",
+                knowledge_base.id,
+                data
+            );
+            if let Err(e) = knowledge_service.delete_knowledge(&knowledge_base.id).await {
+                log::error!(
+                    "Failed to delete invalid knowledge base {}: {}",
+                    knowledge_base.id,
+                    e
+                );
+            } else {
+                deleted_knowledge_bases.push(knowledge_base.id.clone());
+            }
+            continue;
+        }
+
+        // Get file IDs from knowledge base
+        let file_ids = data
+            .get("file_ids")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect::<Vec<String>>()
+            })
+            .unwrap_or_default();
+
+        // Get files by IDs
+        if let Ok(files) = file_service.get_files_by_ids(&file_ids).await {
+            // TODO: Delete existing vector collection and reindex
+            // try:
+            //     if VECTOR_DB_CLIENT.has_collection(collection_name=knowledge_base.id):
+            //         VECTOR_DB_CLIENT.delete_collection(collection_name=knowledge_base.id)
+            // except Exception as e:
+            //     log.error(f"Error deleting collection {knowledge_base.id}: {str(e)}")
+            //     continue
+
+            // Process each file
+            for file in files {
+                // TODO: Process file with vector DB
+                // try:
+                //     process_file(
+                //         request,
+                //         ProcessFileForm(file_id=file.id, collection_name=knowledge_base.id),
+                //         user=user,
+                //     )
+                // except Exception as e:
+                //     log.error(f"Error processing file {file.filename} (ID: {file.id}): {str(e)}")
+                //     continue
+                log::debug!(
+                    "Would process file {} for knowledge base {}",
+                    file.id,
+                    knowledge_base.id
+                );
+            }
+        }
+    }
+
+    log::info!(
+        "Reindexing completed. Deleted {} invalid knowledge bases: {:?}",
+        deleted_knowledge_bases.len(),
+        deleted_knowledge_bases
+    );
 
     Ok(HttpResponse::Ok().json(true))
 }
@@ -873,6 +1162,28 @@ async fn add_files_batch(
     }
 
     // TODO: Process files in batch and add to vector DB (requires vector DB integration)
+    // Python equivalent:
+    //   files: List[FileModel] = []
+    //   for form in form_data:
+    //       file = Files.get_file_by_id(form.file_id)
+    //       if not file:
+    //           raise HTTPException(status_code=400, detail=f"File {form.file_id} not found")
+    //       files.append(file)
+    //
+    //   result = process_files_batch(
+    //       request=request,
+    //       form_data=BatchProcessFilesForm(files=files, collection_name=id),
+    //       user=user
+    //   )
+    //
+    //   successful_file_ids = [r.file_id for r in result.results if r.status == "completed"]
+    //
+    // This should:
+    // 1. Validate all files exist and can be accessed
+    // 2. Process all files in parallel/batch
+    // 3. Generate embeddings for each file
+    // 4. Store all embeddings in the knowledge base collection
+    // 5. Return a list of successfully processed file IDs and any errors
 
     // Add file IDs to knowledge data
     let mut data = knowledge.data.clone().unwrap_or_else(|| json!({}));

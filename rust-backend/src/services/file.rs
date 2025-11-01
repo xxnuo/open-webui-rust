@@ -239,4 +239,82 @@ impl<'a> FileService<'a> {
 
         Ok(files)
     }
+
+    pub async fn get_files_by_ids(&self, ids: &[String]) -> AppResult<Vec<File>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Build placeholders for IN clause
+        let placeholders: Vec<String> = (1..=ids.len()).map(|i| format!("${}", i)).collect();
+        let query_str = format!(
+            r#"
+            SELECT id, user_id, filename, path,
+                   data as data_str, meta as meta_str, access_control as access_control_str,
+                   hash, created_at, updated_at
+            FROM file
+            WHERE id IN ({})
+            ORDER BY updated_at DESC
+            "#,
+            placeholders.join(", ")
+        );
+
+        let mut query = sqlx::query_as::<_, File>(&query_str);
+        for id in ids {
+            query = query.bind(id);
+        }
+
+        let files = query.fetch_all(&self.db.pool).await?;
+        Ok(files)
+    }
+
+    pub async fn get_file_metadatas_by_ids(
+        &self,
+        ids: &[String],
+    ) -> AppResult<Vec<serde_json::Value>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Build placeholders for IN clause
+        let placeholders: Vec<String> = (1..=ids.len()).map(|i| format!("${}", i)).collect();
+        let query_str = format!(
+            r#"
+            SELECT id, meta as meta_str, created_at, updated_at
+            FROM file
+            WHERE id IN ({})
+            ORDER BY updated_at DESC
+            "#,
+            placeholders.join(", ")
+        );
+
+        let mut query = sqlx::query(&query_str);
+        for id in ids {
+            query = query.bind(id);
+        }
+
+        let rows = query.fetch_all(&self.db.pool).await?;
+
+        let mut metadatas = Vec::new();
+        for row in rows {
+            use sqlx::Row;
+            let id: String = row.get("id");
+            let meta_str: Option<String> = row.get("meta_str");
+            let created_at: i64 = row.get("created_at");
+            let updated_at: i64 = row.get("updated_at");
+
+            let meta: serde_json::Value = meta_str
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or_else(|| serde_json::json!({}));
+
+            metadatas.push(serde_json::json!({
+                "id": id,
+                "meta": meta,
+                "created_at": created_at,
+                "updated_at": updated_at,
+            }));
+        }
+
+        Ok(metadatas)
+    }
 }
