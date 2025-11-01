@@ -10,6 +10,7 @@ pub mod functions;
 pub mod groups;
 pub mod images;
 pub mod knowledge;
+pub mod knowledge_vector; // Vector DB operations for knowledge
 pub mod memories;
 pub mod models;
 pub mod notes;

@@ -8,6 +8,7 @@ use uuid::Uuid;
 use crate::error::{AppError, AppResult};
 use crate::middleware::{AuthMiddleware, AuthUser};
 use crate::models::knowledge::{KnowledgeFilesResponse, KnowledgeResponse, KnowledgeUserResponse};
+use crate::routes::knowledge_vector;
 use crate::services::file::FileService;
 use crate::services::group::GroupService;
 use crate::services::knowledge::KnowledgeService;
@@ -641,15 +642,23 @@ async fn delete_knowledge_by_id(
         }
     }
 
-    // TODO: Delete vector collection (requires vector DB integration)
-    // Python equivalent:
-    //   try:
-    //       VECTOR_DB_CLIENT.delete_collection(collection_name=id)
-    //   except Exception as e:
-    //       log.debug(e)
-    //       pass
-    // This deletes the entire vector database collection for this knowledge base,
-    // removing all embeddings for all files in the knowledge base
+    // Delete vector collection if RAG is enabled
+    if let Some((vector_db, _)) =
+        knowledge_vector::get_rag_components(&state.vector_db, &state.embedding_provider)
+    {
+        if let Err(e) =
+            knowledge_vector::delete_knowledge_collection(&vector_db, &knowledge_id).await
+        {
+            log::warn!(
+                "Failed to delete vector collection for knowledge {}: {}",
+                knowledge_id,
+                e
+            );
+            // Continue with deletion even if vector DB fails
+        }
+    } else {
+        knowledge_vector::log_rag_disabled("delete collection");
+    }
 
     knowledge_service.delete_knowledge(&knowledge_id).await?;
 
@@ -700,22 +709,35 @@ async fn add_file_to_knowledge(
         return Err(AppError::BadRequest("File not processed".to_string()));
     }
 
-    // TODO: Process file and add to vector DB (requires vector DB integration)
-    // This should call the retrieval service's process_file function with:
-    // - file_id: form.file_id
-    // - collection_name: knowledge_id (the knowledge base ID)
-    // - user: auth_user
-    // Python equivalent:
-    //   process_file(
-    //       request,
-    //       ProcessFileForm(file_id=form.file_id, collection_name=id),
-    //       user=user
-    //   )
-    // The process_file function will:
-    // 1. Load the file content from storage
-    // 2. Extract and chunk the text
-    // 3. Generate embeddings for each chunk
-    // 4. Store embeddings in the vector database collection named after the knowledge base ID
+    // Process file and add to vector DB if RAG is enabled
+    if let Some((vector_db, embedding_provider)) =
+        knowledge_vector::get_rag_components(&state.vector_db, &state.embedding_provider)
+    {
+        match knowledge_vector::process_and_index_file(
+            &vector_db,
+            &embedding_provider,
+            &file_service,
+            &form.file_id,
+            &knowledge_id,
+        )
+        .await
+        {
+            Ok(chunk_count) => {
+                log::info!(
+                    "Successfully indexed {} chunks from file {} to knowledge {}",
+                    chunk_count,
+                    form.file_id,
+                    knowledge_id
+                );
+            }
+            Err(e) => {
+                log::error!("Failed to index file {}: {}", form.file_id, e);
+                return Err(e);
+            }
+        }
+    } else {
+        knowledge_vector::log_rag_disabled("index file");
+    }
 
     // Add file ID to knowledge data
     let mut data = knowledge.data.clone().unwrap_or_else(|| json!({}));
@@ -808,21 +830,48 @@ async fn update_file_in_knowledge(
         .await?
         .ok_or_else(|| AppError::NotFound("File not found".to_string()))?;
 
-    // TODO: Remove old content from vector DB and re-index (requires vector DB integration)
-    // Python equivalent:
-    //   VECTOR_DB_CLIENT.delete(
-    //       collection_name=knowledge.id,
-    //       filter={"file_id": form.file_id}
-    //   )
-    //   process_file(
-    //       request,
-    //       ProcessFileForm(file_id=form.file_id, collection_name=id),
-    //       user=user
-    //   )
-    // This should:
-    // 1. Delete all vector embeddings for this file from the knowledge base collection
-    // 2. Re-process the file to generate fresh embeddings
-    // 3. Store the new embeddings in the collection
+    // Remove old vectors and re-index file if RAG is enabled
+    if let Some((vector_db, embedding_provider)) =
+        knowledge_vector::get_rag_components(&state.vector_db, &state.embedding_provider)
+    {
+        // Delete old vectors for this file
+        if let Err(e) =
+            knowledge_vector::delete_file_vectors(&vector_db, &knowledge_id, &form.file_id).await
+        {
+            log::warn!(
+                "Failed to delete old vectors for file {} in knowledge {}: {}",
+                form.file_id,
+                knowledge_id,
+                e
+            );
+        }
+
+        // Re-index the file with updated content
+        match knowledge_vector::process_and_index_file(
+            &vector_db,
+            &embedding_provider,
+            &file_service,
+            &form.file_id,
+            &knowledge_id,
+        )
+        .await
+        {
+            Ok(chunk_count) => {
+                log::info!(
+                    "Successfully re-indexed {} chunks from file {} in knowledge {}",
+                    chunk_count,
+                    form.file_id,
+                    knowledge_id
+                );
+            }
+            Err(e) => {
+                log::error!("Failed to re-index file {}: {}", form.file_id, e);
+                return Err(e);
+            }
+        }
+    } else {
+        knowledge_vector::log_rag_disabled("update file");
+    }
 
     // Get files for response
     let mut files = Vec::new();
@@ -890,30 +939,45 @@ async fn remove_file_from_knowledge(
         }
     }
 
-    // TODO: Remove content from vector DB (requires vector DB integration)
-    // Python equivalent:
-    //   try:
-    //       VECTOR_DB_CLIENT.delete(
-    //           collection_name=knowledge.id,
-    //           filter={"file_id": form.file_id}
-    //       )
-    //   except Exception as e:
-    //       log.debug("This was most likely caused by bypassing embedding processing")
-    //       pass
-    // This removes all vector embeddings for this file from the knowledge base collection
+    // Remove file vectors from knowledge collection if RAG is enabled
+    if let Some((vector_db, _)) =
+        knowledge_vector::get_rag_components(&state.vector_db, &state.embedding_provider)
+    {
+        if let Err(e) =
+            knowledge_vector::delete_file_vectors(&vector_db, &knowledge_id, &form.file_id).await
+        {
+            log::debug!(
+                "Failed to delete vectors for file {} from knowledge {}: {} (likely bypassed embedding processing)",
+                form.file_id,
+                knowledge_id,
+                e
+            );
+            // Continue with removal even if vector deletion fails
+        }
+    } else {
+        knowledge_vector::log_rag_disabled("remove file vectors");
+    }
 
     // Delete file from database if requested
     let delete_file = query.delete_file.unwrap_or(true);
     if delete_file {
-        // TODO: Delete file's collection from vector database
-        // Python equivalent:
-        //   try:
-        //       file_collection = f"file-{form.file_id}"
-        //       if VECTOR_DB_CLIENT.has_collection(collection_name=file_collection):
-        //           VECTOR_DB_CLIENT.delete_collection(collection_name=file_collection)
-        //   except Exception as e:
-        //       pass
-        // This deletes the entire collection for this individual file
+        // Delete file's standalone collection if it exists
+        if let Some((vector_db, _)) =
+            knowledge_vector::get_rag_components(&state.vector_db, &state.embedding_provider)
+        {
+            let file_collection = format!("file-{}", form.file_id);
+            if let Err(e) =
+                knowledge_vector::delete_knowledge_collection(&vector_db, &file_collection).await
+            {
+                log::debug!(
+                    "Failed to delete file collection {}: {}",
+                    file_collection,
+                    e
+                );
+                // Continue even if file collection deletion fails
+            }
+        }
+
         file_service.delete_file(&form.file_id).await?;
     }
 
@@ -1000,14 +1064,21 @@ async fn reset_knowledge(
         }
     }
 
-    // TODO: Delete vector collection (requires vector DB integration)
-    // Python equivalent:
-    //   try:
-    //       VECTOR_DB_CLIENT.delete_collection(collection_name=id)
-    //   except Exception as e:
-    //       log.debug(e)
-    //       pass
-    // This deletes all vector embeddings for the knowledge base
+    // Reset vector collection if RAG is enabled
+    if let Some((vector_db, _)) =
+        knowledge_vector::get_rag_components(&state.vector_db, &state.embedding_provider)
+    {
+        if let Err(e) = knowledge_vector::reset_knowledge_vectors(&vector_db, &knowledge_id).await {
+            log::debug!(
+                "Failed to reset vector collection for knowledge {}: {}",
+                knowledge_id,
+                e
+            );
+            // Continue with reset even if vector deletion fails
+        }
+    } else {
+        knowledge_vector::log_rag_disabled("reset knowledge");
+    }
 
     // Reset file_ids to empty array
     let data = json!({"file_ids": []});
@@ -1090,31 +1161,63 @@ async fn reindex_all_knowledge(
 
         // Get files by IDs
         if let Ok(files) = file_service.get_files_by_ids(&file_ids).await {
-            // TODO: Delete existing vector collection and reindex
-            // try:
-            //     if VECTOR_DB_CLIENT.has_collection(collection_name=knowledge_base.id):
-            //         VECTOR_DB_CLIENT.delete_collection(collection_name=knowledge_base.id)
-            // except Exception as e:
-            //     log.error(f"Error deleting collection {knowledge_base.id}: {str(e)}")
-            //     continue
+            // Delete existing vector collection and reindex if RAG is enabled
+            if let Some((vector_db, embedding_provider)) =
+                knowledge_vector::get_rag_components(&state.vector_db, &state.embedding_provider)
+            {
+                // Delete existing collection
+                if let Err(e) =
+                    knowledge_vector::reset_knowledge_vectors(&vector_db, &knowledge_base.id).await
+                {
+                    log::error!(
+                        "Error deleting collection {}: {}. Skipping this knowledge base.",
+                        knowledge_base.id,
+                        e
+                    );
+                    continue;
+                }
 
-            // Process each file
-            for file in files {
-                // TODO: Process file with vector DB
-                // try:
-                //     process_file(
-                //         request,
-                //         ProcessFileForm(file_id=file.id, collection_name=knowledge_base.id),
-                //         user=user,
-                //     )
-                // except Exception as e:
-                //     log.error(f"Error processing file {file.filename} (ID: {file.id}): {str(e)}")
-                //     continue
-                log::debug!(
-                    "Would process file {} for knowledge base {}",
-                    file.id,
-                    knowledge_base.id
+                // Process each file
+                let mut indexed_files = 0;
+                let mut failed_files = 0;
+                for file in files {
+                    match knowledge_vector::process_and_index_file(
+                        &vector_db,
+                        &embedding_provider,
+                        &file_service,
+                        &file.id,
+                        &knowledge_base.id,
+                    )
+                    .await
+                    {
+                        Ok(chunk_count) => {
+                            log::info!(
+                                "Successfully re-indexed file {} ({} chunks) for knowledge {}",
+                                file.id,
+                                chunk_count,
+                                knowledge_base.id
+                            );
+                            indexed_files += 1;
+                        }
+                        Err(e) => {
+                            log::error!(
+                                "Error processing file {} (ID: {}): {}",
+                                file.filename,
+                                file.id,
+                                e
+                            );
+                            failed_files += 1;
+                        }
+                    }
+                }
+                log::info!(
+                    "Reindexed knowledge {}: {} files successful, {} failed",
+                    knowledge_base.id,
+                    indexed_files,
+                    failed_files
                 );
+            } else {
+                knowledge_vector::log_rag_disabled("reindex");
             }
         }
     }
@@ -1161,29 +1264,67 @@ async fn add_files_batch(
         }
     }
 
-    // TODO: Process files in batch and add to vector DB (requires vector DB integration)
-    // Python equivalent:
-    //   files: List[FileModel] = []
-    //   for form in form_data:
-    //       file = Files.get_file_by_id(form.file_id)
-    //       if not file:
-    //           raise HTTPException(status_code=400, detail=f"File {form.file_id} not found")
-    //       files.append(file)
-    //
-    //   result = process_files_batch(
-    //       request=request,
-    //       form_data=BatchProcessFilesForm(files=files, collection_name=id),
-    //       user=user
-    //   )
-    //
-    //   successful_file_ids = [r.file_id for r in result.results if r.status == "completed"]
-    //
-    // This should:
-    // 1. Validate all files exist and can be accessed
-    // 2. Process all files in parallel/batch
-    // 3. Generate embeddings for each file
-    // 4. Store all embeddings in the knowledge base collection
-    // 5. Return a list of successfully processed file IDs and any errors
+    // Validate all files exist first
+    let mut validated_file_ids = Vec::new();
+    for file_form in form.iter() {
+        let file = file_service
+            .get_file_by_id(&file_form.file_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound(format!("File {} not found", file_form.file_id)))?;
+
+        // Check if file has been processed
+        if file.data.is_none() {
+            return Err(AppError::BadRequest(format!(
+                "File {} not processed",
+                file_form.file_id
+            )));
+        }
+
+        validated_file_ids.push(file_form.file_id.clone());
+    }
+
+    // Process files in batch if RAG is enabled
+    if let Some((vector_db, embedding_provider)) =
+        knowledge_vector::get_rag_components(&state.vector_db, &state.embedding_provider)
+    {
+        let mut successful_files = Vec::new();
+        let mut failed_files = Vec::new();
+
+        for file_id in &validated_file_ids {
+            match knowledge_vector::process_and_index_file(
+                &vector_db,
+                &embedding_provider,
+                &file_service,
+                file_id,
+                &knowledge_id,
+            )
+            .await
+            {
+                Ok(chunk_count) => {
+                    log::info!(
+                        "Successfully indexed {} chunks from file {} in batch",
+                        chunk_count,
+                        file_id
+                    );
+                    successful_files.push(file_id.clone());
+                }
+                Err(e) => {
+                    log::error!("Failed to index file {} in batch: {}", file_id, e);
+                    failed_files.push((file_id.clone(), e.to_string()));
+                }
+            }
+        }
+
+        if !failed_files.is_empty() {
+            log::warn!(
+                "Batch processing completed with {} failures: {:?}",
+                failed_files.len(),
+                failed_files
+            );
+        }
+    } else {
+        knowledge_vector::log_rag_disabled("batch index files");
+    }
 
     // Add file IDs to knowledge data
     let mut data = knowledge.data.clone().unwrap_or_else(|| json!({}));
