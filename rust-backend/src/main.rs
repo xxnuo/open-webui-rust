@@ -284,14 +284,112 @@ async fn main() -> anyhow::Result<()> {
 
     // Initialize embedding provider if enabled
     let embedding_provider = if vector_db_enabled {
-        match retrieval::embeddings::OpenAIEmbeddings::new(None, None) {
-            Ok(provider) => {
-                info!("✅ Embedding provider initialized (OpenAI)");
-                Some(Arc::new(provider) as Arc<dyn retrieval::EmbeddingProvider>)
+        let engine = config.rag_embedding_engine.to_lowercase();
+
+        match engine.as_str() {
+            "openai" => {
+                let api_key = if !config.rag_openai_api_key.is_empty() {
+                    Some(config.rag_openai_api_key.clone())
+                } else {
+                    None
+                };
+                let model = if !config.rag_embedding_model.is_empty() {
+                    Some(config.rag_embedding_model.clone())
+                } else {
+                    None
+                };
+
+                match retrieval::embeddings::OpenAIEmbeddings::new(api_key, model) {
+                    Ok(provider) => {
+                        info!("✅ Embedding provider initialized (OpenAI)");
+                        Some(Arc::new(provider) as Arc<dyn retrieval::EmbeddingProvider>)
+                    }
+                    Err(e) => {
+                        warn!("⚠️  Failed to initialize embedding provider: {}", e);
+                        warn!("   Set RAG_OPENAI_API_KEY or OPENAI_API_KEY to enable embeddings");
+                        None
+                    }
+                }
             }
-            Err(e) => {
-                warn!("⚠️  Failed to initialize embedding provider: {}", e);
-                warn!("   Set OPENAI_API_KEY to enable embeddings");
+            "" | "local" | "sentence-transformers" => {
+                // Local sentence transformers using Candle
+                #[cfg(feature = "embeddings")]
+                {
+                    info!("🤖 Initializing local sentence transformers");
+                    match retrieval::EmbeddingFactory::create_sentence_transformer(
+                        config.rag_embedding_model.clone(),
+                        false, // auto_update = false by default
+                    ) {
+                        Ok(provider) => {
+                            info!(
+                                "✅ Sentence transformer initialized: {}",
+                                provider.model_name()
+                            );
+                            info!("   Dimension: {}", provider.dimension());
+                            info!("   Engine: Local (Candle)");
+                            Some(provider)
+                        }
+                        Err(e) => {
+                            warn!("⚠️  Failed to initialize sentence transformers: {}", e);
+                            warn!("   Model: {}", config.rag_embedding_model);
+                            warn!("   Tip: Model will be downloaded from HuggingFace on first use");
+
+                            // Try OpenAI fallback if API key is available
+                            if !config.rag_openai_api_key.is_empty() {
+                                info!("ℹ️  Attempting OpenAI fallback...");
+                                match retrieval::embeddings::OpenAIEmbeddings::new(
+                                    Some(config.rag_openai_api_key.clone()),
+                                    Some("text-embedding-3-small".to_string()),
+                                ) {
+                                    Ok(provider) => {
+                                        info!("✅ OpenAI fallback initialized");
+                                        Some(Arc::new(provider)
+                                            as Arc<dyn retrieval::EmbeddingProvider>)
+                                    }
+                                    Err(e) => {
+                                        warn!("⚠️  OpenAI fallback also failed: {}", e);
+                                        None
+                                    }
+                                }
+                            } else {
+                                None
+                            }
+                        }
+                    }
+                }
+                #[cfg(not(feature = "embeddings"))]
+                {
+                    warn!("⚠️  Sentence transformers not compiled (embeddings feature disabled)");
+                    warn!("   To enable local embeddings:");
+                    warn!("   - Rebuild with: cargo build --release --features embeddings");
+                    warn!("   Or use OpenAI instead:");
+                    warn!("   - Set RAG_EMBEDDING_ENGINE=openai");
+                    warn!("   - Set RAG_OPENAI_API_KEY and RAG_EMBEDDING_MODEL");
+
+                    // Try OpenAI fallback if API key is available
+                    if !config.rag_openai_api_key.is_empty() {
+                        info!("ℹ️  Attempting OpenAI fallback...");
+                        match retrieval::embeddings::OpenAIEmbeddings::new(
+                            Some(config.rag_openai_api_key.clone()),
+                            Some("text-embedding-3-small".to_string()),
+                        ) {
+                            Ok(provider) => {
+                                info!("✅ OpenAI fallback initialized");
+                                Some(Arc::new(provider) as Arc<dyn retrieval::EmbeddingProvider>)
+                            }
+                            Err(e) => {
+                                warn!("⚠️  OpenAI fallback also failed: {}", e);
+                                None
+                            }
+                        }
+                    } else {
+                        None
+                    }
+                }
+            }
+            _ => {
+                warn!("⚠️  Unknown embedding engine: {}", engine);
+                warn!("   Supported engines: openai, local, sentence-transformers, or '' (empty for local)");
                 None
             }
         }

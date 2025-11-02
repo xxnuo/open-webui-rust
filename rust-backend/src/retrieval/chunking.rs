@@ -60,7 +60,7 @@ pub fn chunk_text(text: &str, chunk_size: usize, chunk_overlap: usize) -> Vec<St
     let mut start = 0;
 
     // Split into sentences first
-    let sentences = split_into_sentences(text);
+    let _sentences = split_into_sentences(text);
 
     while start < text.len() {
         let mut end = (start + chunk_size).min(text.len());

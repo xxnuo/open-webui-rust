@@ -16,7 +16,7 @@ tokio = { version = "1", features = ["full"] }
 
 # Async runtime
 tokio-util = { version = "0.7", features = ["io"] }
-futures = "0.3"
+futures = { version = "0.3", features = ["executor"] }
 async-trait = "0.1"
 
 # Database

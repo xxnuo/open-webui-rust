@@ -32,9 +32,28 @@ impl Default for ChromaConfig {
 impl ChromaConfig {
     /// Create configuration from environment variables
     pub fn from_env() -> Result<Self, VectorError> {
-        let url = std::env::var("CHROMA_HTTP_HOST")
-            .or_else(|_| std::env::var("CHROMA_URL"))
-            .ok();
+        // First check if CHROMA_URL is provided (full URL)
+        let url = if let Ok(chroma_url) = std::env::var("CHROMA_URL") {
+            Some(chroma_url)
+        } else if let Ok(host) = std::env::var("CHROMA_HTTP_HOST") {
+            // Construct URL from CHROMA_HTTP_HOST and CHROMA_HTTP_PORT
+            let port = std::env::var("CHROMA_HTTP_PORT")
+                .ok()
+                .and_then(|p| p.parse::<u16>().ok())
+                .unwrap_or(8000);
+
+            // Check if SSL is enabled
+            let ssl = std::env::var("CHROMA_HTTP_SSL")
+                .unwrap_or_else(|_| "false".to_string())
+                .to_lowercase()
+                == "true";
+
+            let protocol = if ssl { "https" } else { "http" };
+
+            Some(format!("{}://{}:{}", protocol, host, port))
+        } else {
+            None
+        };
 
         let database =
             std::env::var("CHROMA_DATABASE").unwrap_or_else(|_| "default_database".to_string());

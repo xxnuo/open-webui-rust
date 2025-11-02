@@ -117,7 +117,7 @@ pub trait VectorDB: Send + Sync {
     /// Get collection metadata
     async fn get_collection_metadata(
         &self,
-        collection_name: &str,
+        _collection_name: &str,
     ) -> Result<HashMap<String, serde_json::Value>, VectorError> {
         // Default implementation - can be overridden
         Ok(HashMap::new())

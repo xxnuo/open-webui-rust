@@ -148,6 +148,8 @@ pub struct Config {
     pub rag_top_k: usize,
     pub rag_embedding_model: String,
     pub rag_embedding_engine: String,
+    pub rag_openai_api_key: String,
+    pub rag_openai_api_base_url: String,
     pub rag_template: String,
     pub rag_full_context: bool,
     pub bypass_embedding_and_retrieval: bool,
@@ -157,6 +159,20 @@ pub struct Config {
     pub hybrid_bm25_weight: f64,
     pub content_extraction_engine: String,
     pub pdf_extract_images: bool,
+    pub rag_embedding_model_trust_remote_code: bool,
+    pub rag_reranking_model_trust_remote_code: bool,
+
+    // Sentence Transformers
+    pub sentence_transformers_home: Option<String>,
+    pub sentence_transformers_backend: String,
+    pub sentence_transformers_model_kwargs: Option<String>,
+    pub sentence_transformers_cross_encoder_backend: String,
+    pub sentence_transformers_cross_encoder_model_kwargs: Option<String>,
+
+    // RAG Embedding Prefixes
+    pub rag_embedding_query_prefix: String,
+    pub rag_embedding_content_prefix: String,
+    pub rag_embedding_prefix_field_name: Option<String>,
 
     // Code Execution
     pub code_execution_engine: String,
@@ -526,7 +542,13 @@ impl Config {
             rag_embedding_model: env::var("RAG_EMBEDDING_MODEL")
                 .unwrap_or_else(|_| "sentence-transformers/all-MiniLM-L6-v2".to_string()),
             rag_embedding_engine: env::var("RAG_EMBEDDING_ENGINE")
-                .unwrap_or_else(|_| "sentence-transformers".to_string()),
+                .unwrap_or_else(|_| "".to_string()),
+            rag_openai_api_key: env::var("RAG_OPENAI_API_KEY")
+                .or_else(|_| env::var("OPENAI_API_KEY"))
+                .unwrap_or_default(),
+            rag_openai_api_base_url: env::var("RAG_OPENAI_API_BASE_URL")
+                .or_else(|_| env::var("OPENAI_API_BASE_URL"))
+                .unwrap_or_else(|_| "https://api.openai.com/v1".to_string()),
             rag_template: env::var("RAG_TEMPLATE").unwrap_or_else(|_| 
                 "Use the following context as your learned knowledge:\n[context]\n\nWhen responding, remember to use the knowledge provided above.".to_string()),
             rag_full_context: env::var("RAG_FULL_CONTEXT")
@@ -559,6 +581,30 @@ impl Config {
                 .unwrap_or_else(|_| "false".to_string())
                 .parse()
                 .unwrap_or(false),
+            rag_embedding_model_trust_remote_code: env::var("RAG_EMBEDDING_MODEL_TRUST_REMOTE_CODE")
+                .unwrap_or_else(|_| "true".to_string())
+                .parse()
+                .unwrap_or(true),
+            rag_reranking_model_trust_remote_code: env::var("RAG_RERANKING_MODEL_TRUST_REMOTE_CODE")
+                .unwrap_or_else(|_| "true".to_string())
+                .parse()
+                .unwrap_or(true),
+
+            // Sentence Transformers
+            sentence_transformers_home: env::var("SENTENCE_TRANSFORMERS_HOME").ok(),
+            sentence_transformers_backend: env::var("SENTENCE_TRANSFORMERS_BACKEND")
+                .unwrap_or_else(|_| "torch".to_string()),
+            sentence_transformers_model_kwargs: env::var("SENTENCE_TRANSFORMERS_MODEL_KWARGS").ok(),
+            sentence_transformers_cross_encoder_backend: env::var("SENTENCE_TRANSFORMERS_CROSS_ENCODER_BACKEND")
+                .unwrap_or_else(|_| "torch".to_string()),
+            sentence_transformers_cross_encoder_model_kwargs: env::var("SENTENCE_TRANSFORMERS_CROSS_ENCODER_MODEL_KWARGS").ok(),
+
+            // RAG Embedding Prefixes
+            rag_embedding_query_prefix: env::var("RAG_EMBEDDING_QUERY_PREFIX")
+                .unwrap_or_default(),
+            rag_embedding_content_prefix: env::var("RAG_EMBEDDING_CONTENT_PREFIX")
+                .unwrap_or_default(),
+            rag_embedding_prefix_field_name: env::var("RAG_EMBEDDING_PREFIX_FIELD_NAME").ok(),
 
             // Code Execution
             code_execution_engine: env::var("CODE_EXECUTION_ENGINE")

@@ -333,10 +333,12 @@ pub async fn generate_local_embeddings(
                     AppError::InternalServerError(format!("Failed to unsqueeze: {}", e))
                 })?;
 
-            // Run model
-            let embeddings = model.forward(&token_ids, &token_type_ids).map_err(|e| {
-                AppError::InternalServerError(format!("Model forward failed: {}", e))
-            })?;
+            // Run model (attention_mask is optional third parameter)
+            let embeddings = model
+                .forward(&token_ids, &token_type_ids, None)
+                .map_err(|e| {
+                    AppError::InternalServerError(format!("Model forward failed: {}", e))
+                })?;
 
             // Mean pooling
             let embedding = embeddings
