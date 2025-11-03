@@ -4,9 +4,9 @@ services:
     image: postgres:16-alpine
     container_name: open-webui-postgres-dev
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-open_webui}
-      POSTGRES_USER: ${POSTGRES_USER:-open_webui}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-open_webui_password}
+      POSTGRES_DB: ${POSTGRES_DB:-openwebui}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_INITDB_ARGS: "-E UTF8"
     volumes:
       - postgres_data_dev:/var/lib/postgresql/data
@@ -15,7 +15,7 @@ services:
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-open_webui}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -36,6 +36,26 @@ services:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - open-webui-network
+
+  # ChromaDB
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: open-webui-chromadb-dev
+    environment:
+      IS_PERSISTENT: "TRUE"
+      ANONYMIZED_TELEMETRY: "${CHROMA_TELEMETRY:-TRUE}"
+    volumes:
+      - chromadb_data_dev:/chroma/chroma
+    ports:
+      - "${CHROMA_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 10s
+      timeout: 5s
       retries: 5
     restart: unless-stopped
     networks:
@@ -86,6 +106,8 @@ volumes:
   postgres_data_dev:
     driver: local
   redis_data_dev:
+    driver: local
+  chromadb_data_dev:
     driver: local
   pgadmin_data:
     driver: local

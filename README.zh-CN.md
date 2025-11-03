@@ -23,7 +23,7 @@ Rust 后端是 Python 后端的直接替代品, 有这些好处:
 - **零拷贝流式传输**用于聊天生成
 - **生产就绪**具有全面的错误处理
 
-## **重要‼️** Rust后端当前完整代码状态：84% (可运行项目、部分功能缺失)
+## **重要‼️** Rust后端当前完整代码状态：85% (可运行项目、部分功能缺失)
 
 - **初始版本基于Open WebUI 0.6.32开发**
 本项目初始版本开发根据赞助数量更新文件数，根据打赏/赞助添加后端文件直至添加完整的后端文件：
@@ -264,26 +264,88 @@ cargo fetch
 
 ## 配置
 
-### 环境变量
+### 使用 Docker Compose 进行开发
 
-在 `rust-backend/` 目录中创建 `.env` 文件:
+使用所有服务（PostgreSQL、Redis、ChromaDB）进行本地开发：
+
+```bash
+# 启动所有开发服务
+docker compose -f docker-compose.dev.yaml up -d
+
+# 查看日志
+docker compose -f docker-compose.dev.yaml logs -f
+
+# 停止服务
+docker compose -f docker-compose.dev.yaml down
+
+# 停止服务并删除卷（全新开始）
+docker compose -f docker-compose.dev.yaml down -v
+```
+
+**包含的服务：**
+- **PostgreSQL**（端口 5432）：主数据库
+- **Redis**（端口 6379）：缓存和会话管理
+- **ChromaDB**（端口 8000）：用于 RAG/嵌入的向量数据库
+- **pgAdmin**（端口 5050）：PostgreSQL 管理界面（可选，使用 `--profile tools`）
+- **Redis Commander**（端口 8082）：Redis 管理界面（可选，使用 `--profile tools`）
+
+**docker-compose.dev.yaml 的环境变量：**
+
+在项目根目录创建 `.env` 文件以自定义：
+
+```bash
+# PostgreSQL
+POSTGRES_DB=openwebui
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+POSTGRES_PORT=5432
+
+# Redis
+REDIS_PORT=6379
+
+# ChromaDB
+CHROMA_PORT=8000
+CHROMA_TELEMETRY=FALSE
+
+# 管理工具（可选）
+PGADMIN_EMAIL=admin@admin.com
+PGADMIN_PASSWORD=admin
+PGADMIN_PORT=5050
+REDIS_COMMANDER_USER=admin
+REDIS_COMMANDER_PASSWORD=admin
+REDIS_COMMANDER_PORT=8082
+```
+
+**启动管理工具：**
+
+```bash
+docker compose -f docker-compose.dev.yaml --profile tools up -d
+```
+
+### Rust 后端环境变量
+
+在 `rust-backend/` 目录中创建 `.env` 文件：
 
 ```bash
 # 服务器配置
 HOST=0.0.0.0
 PORT=8080
-ENV=production
+ENV=development
 RUST_LOG=info
 
-# 安全
+# 安全（重要：设置固定密钥以在重启时保持认证令牌）
 WEBUI_SECRET_KEY=your-secret-key-min-32-chars
 JWT_EXPIRES_IN=168h
 
-# 数据库 (必需)
-DATABASE_URL=postgresql://user:pass@localhost:5432/openwebui
+# 数据库（必需）- 匹配 docker-compose.dev.yaml 设置
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/openwebui
+DATABASE_POOL_SIZE=10
+DATABASE_POOL_MAX_OVERFLOW=10
+DATABASE_POOL_TIMEOUT=30
+DATABASE_POOL_RECYCLE=3600
 
-# Redis (推荐)
-ENABLE_REDIS=true
+# Redis（推荐）- 匹配 docker-compose.dev.yaml 设置
+ENABLE_REDIS=false
 REDIS_URL=redis://localhost:6379
 
 # 认证
@@ -292,7 +354,7 @@ ENABLE_LOGIN_FORM=true
 ENABLE_API_KEY=true
 DEFAULT_USER_ROLE=pending
 
-# OpenAI 配置 (如果使用 OpenAI 模型)
+# OpenAI 配置（如果使用 OpenAI 模型）
 ENABLE_OPENAI_API=true
 OPENAI_API_KEY=sk-your-key
 OPENAI_API_BASE_URL=https://api.openai.com/v1
@@ -300,23 +362,37 @@ OPENAI_API_BASE_URL=https://api.openai.com/v1
 # CORS
 CORS_ALLOW_ORIGIN=*
 
-# 功能
+# WebSocket
 ENABLE_WEBSOCKET_SUPPORT=true
+WEBSOCKET_MANAGER=local
+
+# 功能
 ENABLE_IMAGE_GENERATION=false
 ENABLE_CODE_EXECUTION=false
 ENABLE_WEB_SEARCH=false
 
-# 音频 (可选)
+# 音频（可选）
 TTS_ENGINE=openai
 STT_ENGINE=openai
 
-# RAG/检索 (可选)
+# RAG/检索（可选）- ChromaDB 集成
 CHUNK_SIZE=1500
 CHUNK_OVERLAP=100
 RAG_TOP_K=5
+
+# 存储
+UPLOAD_DIR=/app/data/uploads
+
+# 日志
+GLOBAL_LOG_LEVEL=INFO
 ```
 
-查看 `.env.example` 获取完整的配置选项。
+**重要提示：**
+- **WEBUI_SECRET_KEY**：必须设置为固定值（至少 32 个字符）以防止服务器重启时 JWT 令牌失效。使用 `uuidgen` 或生成安全的随机字符串。
+- **DATABASE_URL**：应与 `docker-compose.dev.yaml` 中的 PostgreSQL 凭据匹配
+- **REDIS_URL**：应与 `docker-compose.dev.yaml` 中的 Redis 端口匹配
+
+查看 `rust-backend/env.example` 获取完整的配置选项。
 
 ### 配置优先级
 
@@ -327,13 +403,44 @@ RAG_TOP_K=5
 
 ## 运行服务器
 
-### 开发模式
+### 使用 Docker 服务的开发模式
+
+**步骤 1：启动开发服务**
+
+```bash
+# 启动 PostgreSQL、Redis 和 ChromaDB
+docker compose -f docker-compose.dev.yaml up -d
+
+# 验证服务正在运行
+docker compose -f docker-compose.dev.yaml ps
+```
+
+**步骤 2：配置 Rust 后端**
+
+```bash
+cd rust-backend
+
+# 复制示例环境文件
+cp env.example .env
+
+# 编辑 .env 并将 WEBUI_SECRET_KEY 设置为固定值
+# 示例：WEBUI_SECRET_KEY=$(uuidgen | tr '[:upper:]' '[:lower:]')
+nano .env
+```
+
+**步骤 3：运行 Rust 后端**
 
 ```bash
 cargo run
 ```
 
 服务器将在 `http://0.0.0.0:8080` 启动
+
+**此设置的优势：**
+- ✅ 所有依赖项（PostgreSQL、Redis、ChromaDB）在 Docker 中运行
+- ✅ Rust 后端本地运行，编译和调试更快
+- ✅ JWT 令牌在后端重启时保持有效（使用固定的 WEBUI_SECRET_KEY）
+- ✅ 使用 `docker compose down -v` 轻松重置数据库
 
 ### 生产模式 (优化)
 
@@ -423,7 +530,11 @@ cargo install cargo-watch
 ### 开发工作流
 
 ```bash
+# 确保 Docker 服务正在运行
+docker compose -f docker-compose.dev.yaml up -d
+
 # 文件更改时自动重新加载
+cd rust-backend
 cargo watch -x run
 
 # 运行测试
@@ -440,6 +551,11 @@ cargo clippy -- -D warnings
 
 # 不构建的情况下检查
 cargo check
+
+# 查看 Docker 服务日志
+docker compose -f docker-compose.dev.yaml logs -f postgres
+docker compose -f docker-compose.dev.yaml logs -f redis
+docker compose -f docker-compose.dev.yaml logs -f chromadb
 ```
 
 ### 代码结构指南

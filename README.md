@@ -265,7 +265,65 @@ cargo fetch
 
 ## Configuration
 
-### Environment Variables
+### Development with Docker Compose
+
+For local development with all services (PostgreSQL, Redis, ChromaDB):
+
+```bash
+# Start all development services
+docker compose -f docker-compose.dev.yaml up -d
+
+# View logs
+docker compose -f docker-compose.dev.yaml logs -f
+
+# Stop services
+docker compose -f docker-compose.dev.yaml down
+
+# Stop services and remove volumes (clean slate)
+docker compose -f docker-compose.dev.yaml down -v
+```
+
+**Services included:**
+- **PostgreSQL** (port 5432): Main database
+- **Redis** (port 6379): Caching and session management
+- **ChromaDB** (port 8000): Vector database for RAG/embeddings
+- **pgAdmin** (port 5050): PostgreSQL admin UI (optional, use `--profile tools`)
+- **Redis Commander** (port 8082): Redis admin UI (optional, use `--profile tools`)
+
+**Environment variables for docker-compose.dev.yaml:**
+
+Create `.env` file in project root to customize:
+
+```bash
+# PostgreSQL
+POSTGRES_DB=openwebui
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+POSTGRES_PORT=5432
+
+# Redis
+REDIS_PORT=6379
+
+# ChromaDB
+CHROMA_PORT=8000
+CHROMA_TELEMETRY=FALSE
+
+# Admin Tools (optional)
+PGADMIN_EMAIL=admin@admin.com
+PGADMIN_PASSWORD=admin
+PGADMIN_PORT=5050
+REDIS_COMMANDER_USER=admin
+REDIS_COMMANDER_PASSWORD=admin
+REDIS_COMMANDER_PORT=8082
+```
+
+**Start admin tools:**
+
+```bash
+docker compose -f docker-compose.dev.yaml --profile tools up -d
+```
+
+### Rust Backend Environment Variables
 
 Create `.env` file in `rust-backend/` directory:
 
@@ -273,18 +331,22 @@ Create `.env` file in `rust-backend/` directory:
 # Server Configuration
 HOST=0.0.0.0
 PORT=8080
-ENV=production
+ENV=development
 RUST_LOG=info
 
-# Security
+# Security (IMPORTANT: Set a fixed key to persist auth tokens across restarts)
 WEBUI_SECRET_KEY=your-secret-key-min-32-chars
 JWT_EXPIRES_IN=168h
 
-# Database (Required)
-DATABASE_URL=postgresql://user:pass@localhost:5432/openwebui
+# Database (Required) - Match docker-compose.dev.yaml settings
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/openwebui
+DATABASE_POOL_SIZE=10
+DATABASE_POOL_MAX_OVERFLOW=10
+DATABASE_POOL_TIMEOUT=30
+DATABASE_POOL_RECYCLE=3600
 
-# Redis (Recommended)
-ENABLE_REDIS=true
+# Redis (Recommended) - Match docker-compose.dev.yaml settings
+ENABLE_REDIS=false
 REDIS_URL=redis://localhost:6379
 
 # Authentication
@@ -301,8 +363,11 @@ OPENAI_API_BASE_URL=https://api.openai.com/v1
 # CORS
 CORS_ALLOW_ORIGIN=*
 
-# Features
+# WebSocket
 ENABLE_WEBSOCKET_SUPPORT=true
+WEBSOCKET_MANAGER=local
+
+# Features
 ENABLE_IMAGE_GENERATION=false
 ENABLE_CODE_EXECUTION=false
 ENABLE_WEB_SEARCH=false
@@ -311,13 +376,24 @@ ENABLE_WEB_SEARCH=false
 TTS_ENGINE=openai
 STT_ENGINE=openai
 
-# RAG/Retrieval (Optional)
+# RAG/Retrieval (Optional) - ChromaDB integration
 CHUNK_SIZE=1500
 CHUNK_OVERLAP=100
 RAG_TOP_K=5
+
+# Storage
+UPLOAD_DIR=/app/data/uploads
+
+# Logging
+GLOBAL_LOG_LEVEL=INFO
 ```
 
-See `.env.example` for complete configuration options.
+**Important Notes:**
+- **WEBUI_SECRET_KEY**: Must be set to a fixed value (min 32 characters) to prevent JWT token invalidation on server restart. Use `uuidgen` or generate a secure random string.
+- **DATABASE_URL**: Should match the PostgreSQL credentials in `docker-compose.dev.yaml`
+- **REDIS_URL**: Should match the Redis port in `docker-compose.dev.yaml`
+
+See `rust-backend/env.example` for complete configuration options.
 
 ### Configuration Precedence
 
@@ -328,13 +404,44 @@ See `.env.example` for complete configuration options.
 
 ## Running the Server
 
-### Development Mode
+### Development Mode with Docker Services
+
+**Step 1: Start development services**
+
+```bash
+# Start PostgreSQL, Redis, and ChromaDB
+docker compose -f docker-compose.dev.yaml up -d
+
+# Verify services are running
+docker compose -f docker-compose.dev.yaml ps
+```
+
+**Step 2: Configure Rust backend**
+
+```bash
+cd rust-backend
+
+# Copy example environment file
+cp env.example .env
+
+# Edit .env and set WEBUI_SECRET_KEY to a fixed value
+# Example: WEBUI_SECRET_KEY=$(uuidgen | tr '[:upper:]' '[:lower:]')
+nano .env
+```
+
+**Step 3: Run Rust backend**
 
 ```bash
 cargo run
 ```
 
 The server will start at `http://0.0.0.0:8080`
+
+**Benefits of this setup:**
+- All dependencies (PostgreSQL, Redis, ChromaDB) run in Docker
+- Rust backend runs natively for faster compilation and debugging
+- JWT tokens persist across backend restarts (with fixed WEBUI_SECRET_KEY)
+- Easy to reset database with `docker compose down -v`
 
 ### Production Mode (Optimized)
 
@@ -446,7 +553,11 @@ cargo install cargo-watch
 ### Development Workflow
 
 ```bash
+# Ensure Docker services are running
+docker compose -f docker-compose.dev.yaml up -d
+
 # Auto-reload on file changes
+cd rust-backend
 cargo watch -x run
 
 # Run tests
@@ -463,6 +574,11 @@ cargo clippy -- -D warnings
 
 # Check without building
 cargo check
+
+# View Docker service logs
+docker compose -f docker-compose.dev.yaml logs -f postgres
+docker compose -f docker-compose.dev.yaml logs -f redis
+docker compose -f docker-compose.dev.yaml logs -f chromadb
 ```
 
 ### Code Structure Guidelines
