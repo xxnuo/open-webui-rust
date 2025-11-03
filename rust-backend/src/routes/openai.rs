@@ -1375,7 +1375,102 @@ pub async fn handle_chat_completions(
         ));
     } else {
         // Regular (non-direct) routing
-        get_endpoint_from_cache_or_config(&state, &config, &model_id, &model_item, &payload_obj)?
+        // SMART FALLBACK: If user has direct connections configured, use their first one
+        // This allows chat/notes to work even when frontend doesn't pass model_item
+        if config.enable_direct_connections {
+            if let Some(user_settings) = auth_user.user.settings.as_ref() {
+                let direct_connections = user_settings.get("directConnections").or_else(|| {
+                    user_settings
+                        .get("ui")
+                        .and_then(|ui| ui.get("directConnections"))
+                });
+
+                if let Some(dc) = direct_connections {
+                    if let (Some(urls), Some(keys)) = (
+                        dc.get("OPENAI_API_BASE_URLS").and_then(|v| v.as_array()),
+                        dc.get("OPENAI_API_KEYS").and_then(|v| v.as_array()),
+                    ) {
+                        if !urls.is_empty() {
+                            let first_url = urls[0].as_str().unwrap_or("");
+                            let first_key = keys.get(0).and_then(|k| k.as_str()).unwrap_or("");
+
+                            if !first_url.is_empty() {
+                                let configs =
+                                    dc.get("OPENAI_API_CONFIGS").and_then(|v| v.as_object());
+
+                                let first_config = configs
+                                    .and_then(|c| c.get("0").or_else(|| c.get(first_url)))
+                                    .cloned()
+                                    .unwrap_or(serde_json::json!({}));
+
+                                tracing::info!(
+                                    "Chat using user's first direct connection (smart fallback): {} for model {} by user {}",
+                                    first_url,
+                                    model_id,
+                                    auth_user.user.email
+                                );
+
+                                (first_url.to_string(), first_key.to_string(), first_config)
+                            } else {
+                                // Empty URL, fall back to global config
+                                get_endpoint_from_cache_or_config(
+                                    &state,
+                                    &config,
+                                    &model_id,
+                                    &model_item,
+                                    &payload_obj,
+                                )?
+                            }
+                        } else {
+                            // No URLs configured, fall back to global config
+                            get_endpoint_from_cache_or_config(
+                                &state,
+                                &config,
+                                &model_id,
+                                &model_item,
+                                &payload_obj,
+                            )?
+                        }
+                    } else {
+                        // Invalid structure, fall back to global config
+                        get_endpoint_from_cache_or_config(
+                            &state,
+                            &config,
+                            &model_id,
+                            &model_item,
+                            &payload_obj,
+                        )?
+                    }
+                } else {
+                    // No direct connections in settings, fall back to global config
+                    get_endpoint_from_cache_or_config(
+                        &state,
+                        &config,
+                        &model_id,
+                        &model_item,
+                        &payload_obj,
+                    )?
+                }
+            } else {
+                // No user settings, fall back to global config
+                get_endpoint_from_cache_or_config(
+                    &state,
+                    &config,
+                    &model_id,
+                    &model_item,
+                    &payload_obj,
+                )?
+            }
+        } else {
+            // Direct connections not enabled, use global config
+            get_endpoint_from_cache_or_config(
+                &state,
+                &config,
+                &model_id,
+                &model_item,
+                &payload_obj,
+            )?
+        }
     };
 
     // Prepare the request to the OpenAI-compatible endpoint

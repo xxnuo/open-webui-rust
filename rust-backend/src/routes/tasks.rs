@@ -225,12 +225,16 @@ struct CompletionRequest {
     chat_id: Option<String>,
     #[serde(default)]
     prompt: Option<String>,
+    #[serde(default)]
+    metadata: Option<serde_json::Value>,
+    #[serde(default)]
+    model_item: Option<serde_json::Value>,
 }
 
 /// Generate a title for a chat based on its messages
 async fn generate_title(
     state: web::Data<AppState>,
-    _auth_user: AuthUser,
+    auth_user: AuthUser,
     payload: web::Json<CompletionRequest>,
 ) -> Result<HttpResponse, AppError> {
     let config = state.config.read().unwrap();
@@ -272,13 +276,24 @@ async fn generate_title(
 
     let prompt = template.replace("{{MESSAGES:END:2}}", &messages_text);
 
-    // Call OpenAI API for completion
-    call_openai_completion(&config, &payload.model, &prompt, 50, 0.1).await
+    drop(config); // Release lock before calling completion
+
+    // Call OpenAI API for completion with direct connection support
+    call_openai_completion(
+        &state,
+        &auth_user,
+        &payload.model,
+        payload.model_item.as_ref(),
+        &prompt,
+        50,
+        0.1,
+    )
+    .await
 }
 
 async fn generate_follow_up(
     state: web::Data<AppState>,
-    _auth_user: AuthUser,
+    auth_user: AuthUser,
     payload: web::Json<CompletionRequest>,
 ) -> Result<HttpResponse, AppError> {
     let config = state.config.read().unwrap();
@@ -298,12 +313,23 @@ async fn generate_follow_up(
     let messages_text = format_messages(&payload.messages);
     let prompt = template.replace("{{MESSAGES}}", &messages_text);
 
-    call_openai_completion(&config, &payload.model, &prompt, 200, 0.7).await
+    drop(config);
+
+    call_openai_completion(
+        &state,
+        &auth_user,
+        &payload.model,
+        payload.model_item.as_ref(),
+        &prompt,
+        200,
+        0.7,
+    )
+    .await
 }
 
 async fn generate_tags(
     state: web::Data<AppState>,
-    _auth_user: AuthUser,
+    auth_user: AuthUser,
     payload: web::Json<CompletionRequest>,
 ) -> Result<HttpResponse, AppError> {
     let config = state.config.read().unwrap();
@@ -323,12 +349,23 @@ async fn generate_tags(
     let messages_text = format_messages(&payload.messages);
     let prompt = template.replace("{{MESSAGES}}", &messages_text);
 
-    call_openai_completion(&config, &payload.model, &prompt, 50, 0.5).await
+    drop(config);
+
+    call_openai_completion(
+        &state,
+        &auth_user,
+        &payload.model,
+        payload.model_item.as_ref(),
+        &prompt,
+        50,
+        0.5,
+    )
+    .await
 }
 
 async fn generate_image_prompt(
     state: web::Data<AppState>,
-    _auth_user: AuthUser,
+    auth_user: AuthUser,
     payload: web::Json<CompletionRequest>,
 ) -> Result<HttpResponse, AppError> {
     let config = state.config.read().unwrap();
@@ -342,12 +379,23 @@ async fn generate_image_prompt(
     let user_prompt = payload.prompt.as_deref().unwrap_or("");
     let prompt = template.replace("{{PROMPT}}", user_prompt);
 
-    call_openai_completion(&config, &payload.model, &prompt, 200, 0.7).await
+    drop(config);
+
+    call_openai_completion(
+        &state,
+        &auth_user,
+        &payload.model,
+        payload.model_item.as_ref(),
+        &prompt,
+        200,
+        0.7,
+    )
+    .await
 }
 
 async fn generate_queries(
     state: web::Data<AppState>,
-    _auth_user: AuthUser,
+    auth_user: AuthUser,
     payload: web::Json<CompletionRequest>,
 ) -> Result<HttpResponse, AppError> {
     let config = state.config.read().unwrap();
@@ -367,12 +415,23 @@ async fn generate_queries(
     let messages_text = format_messages(&payload.messages);
     let prompt = template.replace("{{MESSAGES}}", &messages_text);
 
-    call_openai_completion(&config, &payload.model, &prompt, 100, 0.3).await
+    drop(config);
+
+    call_openai_completion(
+        &state,
+        &auth_user,
+        &payload.model,
+        payload.model_item.as_ref(),
+        &prompt,
+        100,
+        0.3,
+    )
+    .await
 }
 
 async fn generate_autocomplete(
     state: web::Data<AppState>,
-    _auth_user: AuthUser,
+    auth_user: AuthUser,
     payload: web::Json<CompletionRequest>,
 ) -> Result<HttpResponse, AppError> {
     let config = state.config.read().unwrap();
@@ -395,29 +454,45 @@ async fn generate_autocomplete(
     let template = DEFAULT_AUTOCOMPLETE_GENERATION_PROMPT_TEMPLATE;
     let prompt = template.replace("{{PROMPT}}", user_prompt);
 
-    call_openai_completion(&config, &payload.model, &prompt, 100, 0.7).await
+    drop(config);
+
+    call_openai_completion(
+        &state,
+        &auth_user,
+        &payload.model,
+        payload.model_item.as_ref(),
+        &prompt,
+        100,
+        0.7,
+    )
+    .await
 }
 
 async fn generate_emoji(
     state: web::Data<AppState>,
-    _auth_user: AuthUser,
+    auth_user: AuthUser,
     payload: web::Json<CompletionRequest>,
 ) -> Result<HttpResponse, AppError> {
-    let config = state.config.read().unwrap();
-
     let messages_text = format_messages(&payload.messages);
     let prompt = DEFAULT_EMOJI_GENERATION_PROMPT_TEMPLATE.replace("{{MESSAGES}}", &messages_text);
 
-    call_openai_completion(&config, &payload.model, &prompt, 10, 0.5).await
+    call_openai_completion(
+        &state,
+        &auth_user,
+        &payload.model,
+        payload.model_item.as_ref(),
+        &prompt,
+        10,
+        0.5,
+    )
+    .await
 }
 
 async fn generate_moa(
     state: web::Data<AppState>,
-    _auth_user: AuthUser,
+    auth_user: AuthUser,
     payload: web::Json<serde_json::Value>,
 ) -> Result<HttpResponse, AppError> {
-    let config = state.config.read().unwrap();
-
     // MOA (Mixture of Agents) response aggregation
     let empty_vec = vec![];
     let responses = payload
@@ -429,6 +504,8 @@ async fn generate_moa(
         .get("model")
         .and_then(|m| m.as_str())
         .unwrap_or("gpt-3.5-turbo");
+
+    let model_item = payload.get("model_item").cloned();
 
     let responses_text = responses
         .iter()
@@ -447,31 +524,30 @@ async fn generate_moa(
         .replace("{{QUERY}}", query)
         .replace("{{RESPONSES}}", &responses_text);
 
-    call_openai_completion(&config, model, &prompt, 500, 0.7).await
+    call_openai_completion(
+        &state,
+        &auth_user,
+        model,
+        model_item.as_ref(),
+        &prompt,
+        500,
+        0.7,
+    )
+    .await
 }
 
-// Helper function to call OpenAI completion API
+// Helper function to call OpenAI completion API with proper direct connection support
 async fn call_openai_completion(
-    config: &crate::config::Config,
+    state: &web::Data<AppState>,
+    auth_user: &AuthUser,
     model: &str,
+    model_item: Option<&serde_json::Value>,
     prompt: &str,
     max_tokens: i32,
     temperature: f32,
 ) -> Result<HttpResponse, AppError> {
-    // Determine which OpenAI endpoint to use
-    let (endpoint_url, endpoint_key) = if config.openai_api_base_urls.is_empty() {
-        return Err(AppError::InternalServerError(
-            "No OpenAI endpoint configured".to_string(),
-        ));
-    } else {
-        (
-            config.openai_api_base_urls[0].clone(),
-            config.openai_api_keys.get(0).cloned().unwrap_or_default(),
-        )
-    };
-
-    // Build the chat completion request
-    let completion_payload = json!({
+    // Build the chat completion request payload
+    let mut completion_payload = json!({
         "model": model,
         "messages": [
             {
@@ -484,18 +560,57 @@ async fn call_openai_completion(
         "stream": false
     });
 
-    // Call the OpenAI API
+    // If model_item is provided, add it to the payload
+    // This enables direct connection routing
+    if let Some(item) = model_item {
+        if let Some(obj) = completion_payload.as_object_mut() {
+            obj.insert("model_item".to_string(), item.clone());
+        }
+    }
+
+    // Use the existing get_endpoint_and_route_request helper to properly handle direct connections
+    let (url, key, api_config) = get_endpoint_and_route_request(
+        state,
+        auth_user,
+        model,
+        model_item.cloned().unwrap_or(serde_json::json!({})),
+        &completion_payload,
+    )?;
+
+    tracing::info!(
+        "Task completion - using endpoint: {} for model: {} (user: {})",
+        url,
+        model,
+        auth_user.user.email
+    );
+
+    // Make the API request
     let client = reqwest::Client::new();
     let mut request_builder = client
-        .post(format!(
-            "{}/chat/completions",
-            endpoint_url.trim_end_matches('/')
-        ))
+        .post(format!("{}/chat/completions", url.trim_end_matches('/')))
         .header("Content-Type", "application/json");
 
-    if !endpoint_key.is_empty() {
-        request_builder =
-            request_builder.header("Authorization", format!("Bearer {}", endpoint_key));
+    // Add authorization header based on auth_type
+    let auth_type = api_config
+        .get("auth_type")
+        .and_then(|v| v.as_str())
+        .unwrap_or("bearer");
+
+    match auth_type {
+        "none" => {
+            // No authentication
+            tracing::debug!("Task completion - no authentication required");
+        }
+        _ => {
+            // Default to bearer token for all other cases
+            if !key.is_empty() {
+                request_builder =
+                    request_builder.header("Authorization", format!("Bearer {}", key));
+                tracing::debug!("Task completion - using bearer token authentication");
+            } else {
+                tracing::warn!("Task completion - no API key available for model {}", model);
+            }
+        }
     }
 
     match request_builder.json(&completion_payload).send().await {
@@ -512,15 +627,250 @@ async fn call_openai_completion(
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
+            tracing::error!("Task completion API error: {} - {}", status, error_text);
             Err(AppError::InternalServerError(format!(
                 "API call failed with status {}: {}",
                 status, error_text
             )))
         }
-        Err(e) => Err(AppError::InternalServerError(format!(
-            "API request failed: {}",
-            e
-        ))),
+        Err(e) => {
+            tracing::error!("Task completion API request error: {}", e);
+            Err(AppError::InternalServerError(format!(
+                "API request failed: {}",
+                e
+            )))
+        }
+    }
+}
+
+// Helper to get endpoint and route request (extracted from chat_completions logic)
+fn get_endpoint_and_route_request(
+    state: &web::Data<AppState>,
+    auth_user: &AuthUser,
+    model_id: &str,
+    model_item: serde_json::Value,
+    _payload_obj: &serde_json::Value,
+) -> Result<(String, String, serde_json::Value), AppError> {
+    // Check if this is a direct connection request
+    let is_direct = model_item
+        .get("direct")
+        .and_then(|d| d.as_bool())
+        .unwrap_or(false);
+
+    let config = state.config.read().unwrap();
+
+    if is_direct && config.enable_direct_connections {
+        // Direct connection - look up URL and key from user settings using urlIdx
+        // First, try explicit url/key in model_item (rare case)
+        let direct_url = model_item
+            .get("url")
+            .and_then(|u| u.as_str())
+            .filter(|s| !s.is_empty());
+
+        let direct_key = model_item.get("key").and_then(|k| k.as_str()).unwrap_or("");
+
+        if let Some(url_str) = direct_url {
+            tracing::info!(
+                "Task using direct connection with explicit URL: {} for model {} by user {}",
+                url_str,
+                model_id,
+                auth_user.user.email
+            );
+
+            let item_config = model_item
+                .get("config")
+                .cloned()
+                .unwrap_or(serde_json::json!({}));
+
+            return Ok((url_str.to_string(), direct_key.to_string(), item_config));
+        }
+
+        // No explicit URL - look up from user settings using urlIdx
+        let url_idx = if let Some(idx_str) = model_item.get("urlIdx").and_then(|v| v.as_str()) {
+            idx_str.to_string()
+        } else if let Some(idx_num) = model_item.get("urlIdx").and_then(|v| v.as_u64()) {
+            idx_num.to_string()
+        } else {
+            return Err(AppError::BadRequest(
+                "Direct connection requires urlIdx in model_item to look up user connection settings".to_string()
+            ));
+        };
+
+        tracing::debug!(
+            "Looking up direct connection from user settings with urlIdx: {}",
+            url_idx
+        );
+
+        // Get user settings to find their direct connections
+        let user_settings = auth_user.user.settings.as_ref()
+            .ok_or_else(|| AppError::BadRequest(
+                "User settings not found. Please configure your direct connections in Settings > Connections.".to_string()
+            ))?;
+
+        // Direct connections can be at settings.directConnections OR settings.ui.directConnections
+        let direct_connections = user_settings.get("directConnections").or_else(|| {
+            user_settings
+                .get("ui")
+                .and_then(|ui| ui.get("directConnections"))
+        });
+
+        if direct_connections.is_none() {
+            tracing::warn!(
+                "Direct connections not configured for user {}. User settings structure: {:?}",
+                auth_user.user.email,
+                user_settings
+            );
+            return Err(AppError::BadRequest(
+                "Direct connections not configured. Please add your OpenAI API connections in Settings > Connections.".to_string()
+            ));
+        }
+
+        let direct_connections = direct_connections.unwrap();
+
+        // Extract URL and key arrays from settings
+        let urls = direct_connections.get("OPENAI_API_BASE_URLS")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| {
+                tracing::error!("OPENAI_API_BASE_URLS missing or not an array in direct connections");
+                AppError::BadRequest("Direct connections configuration is invalid. Please check your Settings > Connections.".to_string())
+            })?;
+
+        let keys = direct_connections.get("OPENAI_API_KEYS")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| {
+                tracing::error!("OPENAI_API_KEYS missing or not an array in direct connections");
+                AppError::BadRequest("Direct connections configuration is invalid. Please check your Settings > Connections.".to_string())
+            })?;
+
+        let configs = direct_connections.get("OPENAI_API_CONFIGS")
+            .and_then(|v| v.as_object())
+            .ok_or_else(|| {
+                tracing::error!("OPENAI_API_CONFIGS missing or not an object in direct connections");
+                AppError::BadRequest("Direct connections configuration is invalid. Please check your Settings > Connections.".to_string())
+            })?;
+
+        // Parse urlIdx as number
+        let idx: usize = url_idx
+            .parse()
+            .map_err(|_| AppError::BadRequest(format!("Invalid urlIdx: {}", url_idx)))?;
+
+        tracing::debug!(
+            "Looking up connection at index {} from {} total URLs",
+            idx,
+            urls.len()
+        );
+
+        // Get URL and key at that index
+        let connection_url = urls.get(idx)
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                tracing::error!("No URL found at index {}. Available URLs: {} total", idx, urls.len());
+                AppError::BadRequest(format!(
+                    "Connection not found at index {}. You have {} connection(s) configured. Please check your Settings > Connections.", 
+                    idx, urls.len()
+                ))
+            })?;
+
+        let connection_key = keys.get(idx).and_then(|v| v.as_str()).unwrap_or("");
+
+        // Get config for this connection (might be at string index)
+        let connection_config = configs
+            .get(&url_idx)
+            .or_else(|| configs.get(connection_url))
+            .cloned()
+            .unwrap_or(serde_json::json!({}));
+
+        tracing::info!(
+            "Task using direct connection from user settings: {} (idx: {}) for model {} by user {}",
+            connection_url,
+            idx,
+            model_id,
+            auth_user.user.email
+        );
+
+        Ok((
+            connection_url.to_string(),
+            connection_key.to_string(),
+            connection_config,
+        ))
+    } else if is_direct && !config.enable_direct_connections {
+        // Direct requested but not enabled - return error message
+        Err(AppError::BadRequest(
+            "Direct connections are not enabled. Please enable them in Admin Settings > Connections".to_string()
+        ))
+    } else {
+        // Regular (non-direct) routing
+        // SMART FALLBACK: If user has direct connections configured, use their first one
+        // This allows tasks to work even when frontend doesn't pass model_item
+        if config.enable_direct_connections {
+            if let Some(user_settings) = auth_user.user.settings.as_ref() {
+                let direct_connections = user_settings.get("directConnections").or_else(|| {
+                    user_settings
+                        .get("ui")
+                        .and_then(|ui| ui.get("directConnections"))
+                });
+
+                if let Some(dc) = direct_connections {
+                    if let (Some(urls), Some(keys)) = (
+                        dc.get("OPENAI_API_BASE_URLS").and_then(|v| v.as_array()),
+                        dc.get("OPENAI_API_KEYS").and_then(|v| v.as_array()),
+                    ) {
+                        if !urls.is_empty() {
+                            let first_url = urls[0].as_str().unwrap_or("");
+                            let first_key = keys.get(0).and_then(|k| k.as_str()).unwrap_or("");
+
+                            if !first_url.is_empty() {
+                                let configs =
+                                    dc.get("OPENAI_API_CONFIGS").and_then(|v| v.as_object());
+
+                                let first_config = configs
+                                    .and_then(|c| c.get("0").or_else(|| c.get(first_url)))
+                                    .cloned()
+                                    .unwrap_or(serde_json::json!({}));
+
+                                tracing::info!(
+                                    "Task using user's first direct connection (smart fallback): {} for model {} by user {}",
+                                    first_url,
+                                    model_id,
+                                    auth_user.user.email
+                                );
+
+                                return Ok((
+                                    first_url.to_string(),
+                                    first_key.to_string(),
+                                    first_config,
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Final fallback: use global config endpoints
+        if config.openai_api_base_urls.is_empty() {
+            return Err(AppError::InternalServerError(
+                "No OpenAI endpoint configured. Please configure direct connections in Settings > Connections or configure global OpenAI endpoints in Admin Settings.".to_string(),
+            ));
+        }
+
+        let endpoint_url = config.openai_api_base_urls[0].clone();
+        let endpoint_key = config.openai_api_keys.get(0).cloned().unwrap_or_default();
+        let api_config = config
+            .openai_api_configs
+            .get("0")
+            .or_else(|| config.openai_api_configs.get(&endpoint_url))
+            .cloned()
+            .unwrap_or(serde_json::json!({}));
+
+        tracing::info!(
+            "Task using global endpoint: {} for model {} by user {}",
+            endpoint_url,
+            model_id,
+            auth_user.user.email
+        );
+
+        Ok((endpoint_url, endpoint_key, api_config))
     }
 }
 
