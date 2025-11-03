@@ -34,13 +34,14 @@
 
 	import { goto } from '$app/navigation';
 	import { onMount, tick, getContext } from 'svelte';
+	import { v4 as uuidv4 } from 'uuid';
 
 	import {
 		OPENAI_API_BASE_URL,
 		WEBUI_API_BASE_URL,
 		WEBUI_BASE_URL
 	} from '$lib/constants';
-	import { WEBUI_NAME, config, user, models, settings } from '$lib/stores';
+	import { WEBUI_NAME, config, user, models, settings, socket } from '$lib/stores';
 
 	import { chatCompletion } from '$lib/apis/openai';
 
@@ -106,6 +107,9 @@ Based on the user's instruction, update and enhance the existing notes or select
 `;
 
 	let scrolledToBottom = true;
+	let activeMessageId = null;
+	let activeResponseMessage = null;
+	let activeEnhancedContent = null;
 
 	const scrollToBottom = () => {
 		if (messagesContainerElement) {
@@ -123,6 +127,178 @@ Based on the user's instruction, update and enhance the existing notes or select
 		}
 	};
 
+	// Socket.IO event handler for real-time streaming (matching main Chat.svelte structure)
+	const handleChatEvent = (event, cb) => {
+		console.log('Note chat event:', event);
+
+		// Only process events for our active message
+		if (event.message_id !== activeMessageId) {
+			return;
+		}
+
+		const type = event?.data?.type ?? null;
+		const data = event?.data?.data ?? null;
+
+		if (type === 'status') {
+			// Status updates (connecting, processing, etc.)
+			console.log('Status:', data);
+		} else if (type === 'chat:message:delta' || type === 'message') {
+			// Message chunk received (delta streaming)
+			if (activeResponseMessage && data?.content) {
+				const chunk = data.content;
+
+				if (editEnabled) {
+					// Make sure activeEnhancedContent is initialized
+					if (!activeEnhancedContent) {
+						activeEnhancedContent = {
+							json: null,
+							html: '',
+							md: ''
+						};
+					}
+
+					editing = true;
+					streaming = true;
+
+					activeEnhancedContent.md = (activeEnhancedContent.md || '') + chunk;
+					activeEnhancedContent.html = marked.parse(activeEnhancedContent.md || '');
+
+					if (!selectedContent || !selectedContent?.text) {
+						note.data.content.md = activeEnhancedContent.md;
+						note.data.content.html = activeEnhancedContent.html;
+						note.data.content.json = null;
+					}
+
+					scrollToBottomHandler();
+
+					activeResponseMessage.content = `<status title="${$i18n.t('Editing')}" done="false" />`;
+					messages = messages;
+				} else {
+					activeResponseMessage.content += chunk;
+					messages = messages;
+				}
+
+				tick().then(() => scrollToBottom());
+			}
+		} else if (type === 'chat:message' || type === 'replace') {
+			// Full content replacement
+			if (activeResponseMessage && data?.content) {
+				activeResponseMessage.content = data.content;
+				messages = messages;
+				tick().then(() => scrollToBottom());
+			}
+		} else if (type === 'chat:completion') {
+			// Completion event with choices (OpenAI format)
+			if (activeResponseMessage && data?.choices) {
+				const deltaContent = data.choices[0]?.delta?.content ?? '';
+				
+				if (deltaContent) {
+					if (editEnabled) {
+						if (!activeEnhancedContent) {
+							activeEnhancedContent = {
+								json: null,
+								html: '',
+								md: ''
+							};
+						}
+
+						editing = true;
+						streaming = true;
+
+						activeEnhancedContent.md = (activeEnhancedContent.md || '') + deltaContent;
+						activeEnhancedContent.html = marked.parse(activeEnhancedContent.md || '');
+
+						if (!selectedContent || !selectedContent?.text) {
+							note.data.content.md = activeEnhancedContent.md;
+							note.data.content.html = activeEnhancedContent.html;
+							note.data.content.json = null;
+						}
+
+						scrollToBottomHandler();
+
+						activeResponseMessage.content = `<status title="${$i18n.t('Editing')}" done="false" />`;
+						messages = messages;
+					} else {
+						activeResponseMessage.content += deltaContent;
+						messages = messages;
+					}
+
+					tick().then(() => scrollToBottom());
+				}
+
+				// Check if done
+				if (data.done) {
+					if (editEnabled && activeEnhancedContent) {
+						activeResponseMessage.content = `<status title="${$i18n.t('Edited')}" done="true" />`;
+
+						if (selectedContent && selectedContent?.text && editor) {
+							editor.commands.insertContentAt(
+								{
+									from: selectedContent.from,
+									to: selectedContent.to
+								},
+								activeEnhancedContent.html || activeEnhancedContent.md || ''
+							);
+
+							selectedContent = null;
+						}
+
+						editing = false;
+						streaming = false;
+						onEdited();
+					}
+
+					activeResponseMessage.done = true;
+					messages = messages;
+
+					// Clear active state
+					activeMessageId = null;
+					activeResponseMessage = null;
+					activeEnhancedContent = null;
+					loading = false;
+					stopResponseFlag = false;
+				}
+			}
+		} else if (type === 'end' || type === 'error') {
+			// Stream ended or error
+			if (activeResponseMessage) {
+				if (editEnabled && activeEnhancedContent) {
+					activeResponseMessage.content = `<status title="${$i18n.t('Edited')}" done="true" />`;
+
+					if (selectedContent && selectedContent?.text && editor) {
+						editor.commands.insertContentAt(
+							{
+								from: selectedContent.from,
+								to: selectedContent.to
+							},
+							activeEnhancedContent.html || activeEnhancedContent.md || ''
+						);
+
+						selectedContent = null;
+					}
+
+					editing = false;
+					streaming = false;
+					onEdited();
+				}
+
+				activeResponseMessage.done = true;
+				messages = messages;
+			}
+
+			// Clear active state
+			activeMessageId = null;
+			activeResponseMessage = null;
+			activeEnhancedContent = null;
+			loading = false;
+			stopResponseFlag = false;
+
+			if (type === 'error') {
+				toast.error(data?.detail || data?.error || 'An error occurred during streaming');
+			}
+		}
+	};
+
 	const chatCompletionHandler = async () => {
 		if (selectedModelId === '') {
 			toast.error($i18n.t('Please select a model.'));
@@ -136,10 +312,17 @@ Based on the user's instruction, update and enhance the existing notes or select
 		}
 
 		let responseMessage;
+		// Generate or reuse message ID for Socket.IO tracking
+		let messageId;
 		if (messages.at(-1)?.role === 'assistant') {
 			responseMessage = messages.at(-1);
+			// Reuse existing message ID if available
+			messageId = responseMessage.id || uuidv4();
+			responseMessage.id = messageId;
 		} else {
+			messageId = uuidv4();
 			responseMessage = {
+				id: messageId,
 				role: 'assistant',
 				content: '',
 				done: false
@@ -152,11 +335,17 @@ Based on the user's instruction, update and enhance the existing notes or select
 		scrollToBottom();
 
 		stopResponseFlag = false;
+		// Initialize enhanced content BEFORE setting active state
 		let enhancedContent = {
 			json: null,
 			html: '',
 			md: ''
 		};
+
+		// Set active message state for Socket.IO handler AFTER initializing enhancedContent
+		activeMessageId = messageId;
+		activeResponseMessage = responseMessage;
+		activeEnhancedContent = enhancedContent;
 
 		system = '';
 
@@ -183,12 +372,21 @@ Based on the user's instruction, update and enhance the existing notes or select
 			])
 		);
 
+		// Generate a temporary chat_id for this note chat session
+		// Use note.id as base to keep consistency within the same note
+		const noteChatId = `note-${note?.id || 'temp'}-chat`;
+
 		const [res, controller] = await chatCompletion(
 			localStorage.token,
 			{
 				model: model.id,
 				stream: true,
-				messages: chatMessages
+				messages: chatMessages,
+				// Add Socket.IO metadata for real-time streaming
+				session_id: $socket?.id,
+				chat_id: noteChatId,
+				id: messageId,
+				model_item: $models.find((m) => m.id === model.id)
 				// ...(files && files.length > 0 ? { files } : {}) // TODO: Decide whether to use native file handling or not
 			},
 			`${WEBUI_BASE_URL}/api`
@@ -197,9 +395,26 @@ Based on the user's instruction, update and enhance the existing notes or select
 		await tick();
 		scrollToBottom();
 
-		let messageContent = '';
-
+		// Check if response indicates Socket.IO streaming
 		if (res && res.ok) {
+			const contentType = res.headers.get('content-type');
+			const isJson = contentType && contentType.includes('application/json');
+
+			// If it's JSON, check if it's a Socket.IO streaming response
+			if (isJson) {
+				const jsonResponse = await res.json();
+				if (jsonResponse.status === 'streaming' && jsonResponse.message?.includes('Socket.IO')) {
+					console.log('Using Socket.IO streaming for note chat');
+					// Socket.IO is handling the streaming, just wait for events
+					// The handleChatEvent function will process the chunks
+					return;
+				}
+			}
+
+			// Fall back to traditional HTTP SSE streaming
+			console.log('Using HTTP SSE streaming for note chat');
+			let messageContent = '';
+
 			const reader = res.body
 				.pipeThrough(new TextDecoderStream())
 				.pipeThrough(splitStream('\n'))
@@ -217,6 +432,11 @@ Based on the user's instruction, update and enhance the existing notes or select
 						streaming = false;
 						onEdited();
 					}
+
+					// Clear active state
+					activeMessageId = null;
+					activeResponseMessage = null;
+					activeEnhancedContent = null;
 
 					break;
 				}
@@ -258,8 +478,8 @@ Based on the user's instruction, update and enhance the existing notes or select
 										editing = true;
 										streaming = true;
 
-										enhancedContent.md += deltaContent;
-										enhancedContent.html = marked.parse(enhancedContent.md);
+										enhancedContent.md = (enhancedContent.md || '') + deltaContent;
+										enhancedContent.html = marked.parse(enhancedContent.md || '');
 
 										if (!selectedContent || !selectedContent?.text) {
 											note.data.content.md = enhancedContent.md;
@@ -319,10 +539,18 @@ Based on the user's instruction, update and enhance the existing notes or select
 	onMount(async () => {
 		editEnabled = localStorage.getItem('noteEditEnabled') === 'true';
 
+		// Listen for Socket.IO chat events
+		$socket?.on('chat-events', handleChatEvent);
+
 		loaded = true;
 
 		await tick();
 		scrollToBottom();
+
+		return () => {
+			// Cleanup Socket.IO listener
+			$socket?.off('chat-events', handleChatEvent);
+		};
 	});
 </script>
 

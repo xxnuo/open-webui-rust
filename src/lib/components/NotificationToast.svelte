@@ -94,7 +94,7 @@
 		{/if}
 
 		<div class=" line-clamp-2 text-xs self-center dark:text-gray-300 font-normal">
-			{@html DOMPurify.sanitize(marked(content))}
+			{@html DOMPurify.sanitize(marked(content || ''))}
 		</div>
 	</div>
 </div>
