@@ -211,7 +211,7 @@ rust-backend/
 
 - 🔄 MCP (Model Context Protocol) client
 - 🔄 Advanced web search integrations
-- 🔄 Code execution sandboxing
+- ✅ Code execution sandboxing
 - 🔄 Jupyter notebook integration
 - 🔄 Advanced RAG pipelines
 - 🔄 LDAP group management
