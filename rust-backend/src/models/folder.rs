@@ -78,8 +78,7 @@ pub struct FolderNameIdResponse {
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub meta: Option<serde_json::Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub parent_id: Option<String>,
+    pub parent_id: Option<String>, // Don't skip - frontend expects null, not undefined
     pub is_expanded: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<serde_json::Value>,

@@ -59,7 +59,9 @@ impl<'a> FolderService<'a> {
     ) -> AppResult<Option<Folder>> {
         let result = sqlx::query_as::<_, Folder>(
             r#"
-            SELECT id, user_id, name, parent_id, is_expanded, 
+            SELECT id, user_id, name, 
+                   NULLIF(parent_id, '') as parent_id, 
+                   is_expanded, 
                    NULL::text as items_str,
                    CAST(meta AS TEXT) as meta_str,
                    CAST(data AS TEXT) as data_str,
@@ -79,7 +81,9 @@ impl<'a> FolderService<'a> {
     pub async fn get_folders_by_user_id(&self, user_id: &str) -> AppResult<Vec<Folder>> {
         let folders = sqlx::query_as::<_, Folder>(
             r#"
-            SELECT id, user_id, name, parent_id, is_expanded,
+            SELECT id, user_id, name, 
+                   NULLIF(parent_id, '') as parent_id, 
+                   is_expanded,
                    NULL::text as items_str,
                    CAST(meta AS TEXT) as meta_str,
                    CAST(data AS TEXT) as data_str,
@@ -105,7 +109,9 @@ impl<'a> FolderService<'a> {
         let result = if let Some(parent_id) = parent_id {
             sqlx::query_as::<_, Folder>(
                 r#"
-                SELECT id, user_id, name, parent_id, is_expanded,
+                SELECT id, user_id, name, 
+                       NULLIF(parent_id, '') as parent_id, 
+                       is_expanded,
                        NULL::text as items_str,
                        CAST(meta AS TEXT) as meta_str,
                        CAST(data AS TEXT) as data_str,
@@ -122,7 +128,9 @@ impl<'a> FolderService<'a> {
         } else {
             sqlx::query_as::<_, Folder>(
                 r#"
-                SELECT id, user_id, name, parent_id, is_expanded,
+                SELECT id, user_id, name, 
+                       NULLIF(parent_id, '') as parent_id, 
+                       is_expanded,
                        NULL::text as items_str,
                        CAST(meta AS TEXT) as meta_str,
                        CAST(data AS TEXT) as data_str,
@@ -292,7 +300,9 @@ impl<'a> FolderService<'a> {
         Box::pin(async move {
             let children = sqlx::query_as::<_, Folder>(
                 r#"
-                SELECT id, user_id, name, parent_id, is_expanded,
+                SELECT id, user_id, name, 
+                       NULLIF(parent_id, '') as parent_id, 
+                       is_expanded,
                        NULL::text as items_str,
                        CAST(meta AS TEXT) as meta_str,
                        CAST(data AS TEXT) as data_str,

@@ -49,17 +49,99 @@ pub fn create_routes(cfg: &mut web::ServiceConfig) {
 
 async fn get_folders(state: web::Data<AppState>, auth_user: AuthUser) -> AppResult<HttpResponse> {
     let folder_service = FolderService::new(&state.db);
-    let folders = folder_service.get_folders_by_user_id(&auth_user.id).await?;
+    let mut folders = folder_service.get_folders_by_user_id(&auth_user.id).await?;
 
-    // TODO: Verify folder data integrity with files and knowledge
-    // For now, just return the folders
+    // Verify folder data integrity - check if files and collections referenced in folder.data still exist
+    // Note: Full access control checking requires group resolution which is expensive.
+    // For now, we do basic existence checking. Files and knowledge bases have their own
+    // access controls that are enforced when accessed.
+    use crate::services::file::FileService;
+    use crate::services::group::GroupService;
+    use crate::services::knowledge::KnowledgeService;
+
+    let file_service = FileService::new(&state.db);
+    let knowledge_service = KnowledgeService::new(&state.db);
+    let group_service = GroupService::new(&state.db);
+
+    // Get user groups once for all checks
+    let user_groups = group_service
+        .get_groups_by_member_id(&auth_user.id)
+        .await
+        .unwrap_or_default();
+    let user_group_ids: std::collections::HashSet<String> =
+        user_groups.iter().map(|g| g.id.clone()).collect();
+
+    for folder in folders.iter_mut() {
+        folder.parse_json_fields();
+
+        if let Some(ref mut data) = folder.data {
+            if let Some(files_array) = data.get("files").and_then(|f| f.as_array()).cloned() {
+                let original_count = files_array.len();
+                let mut valid_files = Vec::new();
+
+                for file_obj in &files_array {
+                    let file_type = file_obj.get("type").and_then(|t| t.as_str());
+                    let file_id = file_obj.get("id").and_then(|id| id.as_str());
+
+                    let mut is_valid = false;
+
+                    match (file_type, file_id) {
+                        (Some("file"), Some(id)) => {
+                            // Check if file exists (basic check)
+                            is_valid = file_service
+                                .get_file_by_id(id)
+                                .await
+                                .ok()
+                                .flatten()
+                                .is_some();
+                        }
+                        (Some("collection"), Some(id)) => {
+                            // Check if user has read access to the knowledge base
+                            is_valid = knowledge_service
+                                .check_access_by_user_id(id, &auth_user.id, "read", &user_group_ids)
+                                .await
+                                .unwrap_or(false);
+                        }
+                        _ => {
+                            // Other types are always valid
+                            is_valid = true;
+                        }
+                    }
+
+                    if is_valid {
+                        valid_files.push(file_obj.clone());
+                    }
+                }
+
+                // Update the data with valid files only if something changed
+                let new_count = valid_files.len();
+
+                if new_count < original_count {
+                    if let Some(data_obj) = data.as_object_mut() {
+                        data_obj.insert("files".to_string(), serde_json::Value::Array(valid_files));
+                    }
+
+                    // Update the folder in the database with cleaned data
+                    use crate::models::folder::FolderUpdateForm;
+                    let _ = folder_service
+                        .update_folder_by_id_and_user_id(
+                            &folder.id,
+                            &auth_user.id,
+                            &FolderUpdateForm {
+                                name: None,
+                                data: Some(data.clone()),
+                                meta: None,
+                            },
+                        )
+                        .await;
+                }
+            }
+        }
+    }
 
     let response: Vec<FolderNameIdResponse> = folders
         .into_iter()
-        .map(|mut f| {
-            f.parse_json_fields();
-            FolderNameIdResponse::from(f)
-        })
+        .map(|f| FolderNameIdResponse::from(f))
         .collect();
 
     Ok(HttpResponse::Ok().json(response))
