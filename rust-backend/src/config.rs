@@ -181,6 +181,8 @@ pub struct Config {
     pub code_execution_jupyter_auth_token: Option<String>,
     pub code_execution_jupyter_auth_password: Option<String>,
     pub code_execution_jupyter_timeout: Option<i32>,
+    pub code_execution_sandbox_url: Option<String>,
+    pub code_execution_sandbox_timeout: Option<i32>,
     pub enable_code_interpreter: bool,
     pub code_interpreter_engine: String,
     pub code_interpreter_prompt_template: Option<String>,
@@ -189,6 +191,8 @@ pub struct Config {
     pub code_interpreter_jupyter_auth_token: Option<String>,
     pub code_interpreter_jupyter_auth_password: Option<String>,
     pub code_interpreter_jupyter_timeout: Option<i32>,
+    pub code_interpreter_sandbox_url: Option<String>,
+    pub code_interpreter_sandbox_timeout: Option<i32>,
 
     // Webhooks
     pub webhook_url: Option<String>,
@@ -616,6 +620,13 @@ impl Config {
             code_execution_jupyter_timeout: env::var("CODE_EXECUTION_JUPYTER_TIMEOUT")
                 .ok()
                 .and_then(|s| s.parse().ok()),
+            code_execution_sandbox_url: env::var("CODE_EXECUTION_SANDBOX_URL")
+                .ok()
+                .or_else(|| Some("http://localhost:8090".to_string())),
+            code_execution_sandbox_timeout: env::var("CODE_EXECUTION_SANDBOX_TIMEOUT")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .or(Some(60)),
             enable_code_interpreter: env::var("ENABLE_CODE_INTERPRETER")
                 .unwrap_or_else(|_| "false".to_string())
                 .parse()
@@ -630,6 +641,15 @@ impl Config {
             code_interpreter_jupyter_timeout: env::var("CODE_INTERPRETER_JUPYTER_TIMEOUT")
                 .ok()
                 .and_then(|s| s.parse().ok()),
+            code_interpreter_sandbox_url: env::var("CODE_INTERPRETER_SANDBOX_URL")
+                .ok()
+                .or_else(|| env::var("CODE_EXECUTION_SANDBOX_URL").ok())
+                .or_else(|| Some("http://localhost:8090".to_string())),
+            code_interpreter_sandbox_timeout: env::var("CODE_INTERPRETER_SANDBOX_TIMEOUT")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .or_else(|| env::var("CODE_EXECUTION_SANDBOX_TIMEOUT").ok().and_then(|s| s.parse().ok()))
+                .or(Some(60)),
 
             // Webhooks
             webhook_url: env::var("WEBHOOK_URL").ok(),

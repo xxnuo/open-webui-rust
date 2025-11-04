@@ -46,6 +46,10 @@ struct CodeExecutionConfigForm {
     code_execution_jupyter_auth_password: Option<String>,
     #[serde(rename = "CODE_EXECUTION_JUPYTER_TIMEOUT")]
     code_execution_jupyter_timeout: Option<i32>,
+    #[serde(rename = "CODE_EXECUTION_SANDBOX_URL")]
+    code_execution_sandbox_url: Option<String>,
+    #[serde(rename = "CODE_EXECUTION_SANDBOX_TIMEOUT")]
+    code_execution_sandbox_timeout: Option<i32>,
     #[serde(rename = "ENABLE_CODE_INTERPRETER")]
     enable_code_interpreter: bool,
     #[serde(rename = "CODE_INTERPRETER_ENGINE")]
@@ -62,6 +66,10 @@ struct CodeExecutionConfigForm {
     code_interpreter_jupyter_auth_password: Option<String>,
     #[serde(rename = "CODE_INTERPRETER_JUPYTER_TIMEOUT")]
     code_interpreter_jupyter_timeout: Option<i32>,
+    #[serde(rename = "CODE_INTERPRETER_SANDBOX_URL")]
+    code_interpreter_sandbox_url: Option<String>,
+    #[serde(rename = "CODE_INTERPRETER_SANDBOX_TIMEOUT")]
+    code_interpreter_sandbox_timeout: Option<i32>,
 }
 
 pub fn create_routes(cfg: &mut web::ServiceConfig) {
@@ -306,6 +314,10 @@ async fn get_code_execution_config(
             .code_interpreter_jupyter_auth_password
             .clone(),
         code_interpreter_jupyter_timeout: config.code_interpreter_jupyter_timeout,
+        code_execution_sandbox_url: config.code_execution_sandbox_url.clone(),
+        code_execution_sandbox_timeout: config.code_execution_sandbox_timeout,
+        code_interpreter_sandbox_url: config.code_interpreter_sandbox_url.clone(),
+        code_interpreter_sandbox_timeout: config.code_interpreter_sandbox_timeout,
     }))
 }
 
@@ -332,6 +344,8 @@ async fn set_code_execution_config(
         config.code_execution_jupyter_auth_password =
             form_data.code_execution_jupyter_auth_password.clone();
         config.code_execution_jupyter_timeout = form_data.code_execution_jupyter_timeout;
+        config.code_execution_sandbox_url = form_data.code_execution_sandbox_url.clone();
+        config.code_execution_sandbox_timeout = form_data.code_execution_sandbox_timeout;
 
         config.enable_code_interpreter = form_data.enable_code_interpreter;
         config.code_interpreter_engine = form_data.code_interpreter_engine.clone();
@@ -344,6 +358,8 @@ async fn set_code_execution_config(
         config.code_interpreter_jupyter_auth_password =
             form_data.code_interpreter_jupyter_auth_password.clone();
         config.code_interpreter_jupyter_timeout = form_data.code_interpreter_jupyter_timeout;
+        config.code_interpreter_sandbox_url = form_data.code_interpreter_sandbox_url.clone();
+        config.code_interpreter_sandbox_timeout = form_data.code_interpreter_sandbox_timeout;
     }
 
     // Persist to database (best-effort, like Python)
@@ -394,6 +410,8 @@ async fn set_code_execution_config(
         code_execution_jupyter_auth_token: config.code_execution_jupyter_auth_token.clone(),
         code_execution_jupyter_auth_password: config.code_execution_jupyter_auth_password.clone(),
         code_execution_jupyter_timeout: config.code_execution_jupyter_timeout,
+        code_execution_sandbox_url: config.code_execution_sandbox_url.clone(),
+        code_execution_sandbox_timeout: config.code_execution_sandbox_timeout,
         enable_code_interpreter: config.enable_code_interpreter,
         code_interpreter_engine: config.code_interpreter_engine.clone(),
         code_interpreter_prompt_template: config.code_interpreter_prompt_template.clone(),
@@ -404,6 +422,8 @@ async fn set_code_execution_config(
             .code_interpreter_jupyter_auth_password
             .clone(),
         code_interpreter_jupyter_timeout: config.code_interpreter_jupyter_timeout,
+        code_interpreter_sandbox_url: config.code_interpreter_sandbox_url.clone(),
+        code_interpreter_sandbox_timeout: config.code_interpreter_sandbox_timeout,
     }))
 }
 

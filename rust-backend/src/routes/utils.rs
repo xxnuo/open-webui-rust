@@ -93,11 +93,25 @@ async fn download_chat_as_pdf(
 #[derive(Debug, Deserialize)]
 struct CodeForm {
     code: String,
+    #[serde(default = "default_language")]
+    language: String,
+}
+
+fn default_language() -> String {
+    "python".to_string()
 }
 
 #[derive(Debug, Serialize)]
 struct CodeResponse {
     code: String,
+}
+
+#[derive(Debug, Serialize)]
+struct CodeExecutionResult {
+    stdout: String,
+    stderr: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    result: Option<String>,
 }
 
 /// POST /code/format - Format JSON/YAML/Python code (admin only)
@@ -149,25 +163,63 @@ async fn format_code(
 /// POST /code/execute - Execute code (admin only)
 async fn execute_code(
     state: web::Data<AppState>,
-    _auth_user: AuthUser, // AdminMiddleware already checked
-    _form_data: web::Json<CodeForm>,
+    auth_user: AuthUser, // AdminMiddleware already checked
+    form_data: web::Json<CodeForm>,
 ) -> AppResult<HttpResponse> {
     let config = state.config.read().unwrap();
 
-    if config.code_execution_engine != "jupyter" {
+    if !config.enable_code_execution {
         return Err(AppError::BadRequest(
-            "Code execution engine not supported".to_string(),
+            "Code execution is not enabled".to_string(),
         ));
     }
 
-    // TODO: Implement Jupyter code execution
-    // This would require HTTP client to communicate with Jupyter server
-    // and handle authentication (token or password)
+    let engine = config.code_execution_engine.clone();
+    let timeout = config.code_execution_sandbox_timeout;
     drop(config);
 
-    Err(AppError::NotImplemented(
-        "Code execution not yet implemented".to_string(),
-    ))
+    match engine.as_str() {
+        "sandbox" => {
+            // Use sandbox executor for code execution
+            let client = state.sandbox_executor_client.as_ref().ok_or_else(|| {
+                AppError::InternalServerError("Sandbox executor client not initialized".to_string())
+            })?;
+
+            let result = client
+                .execute_code(
+                    form_data.code.clone(),
+                    form_data.language.clone(),
+                    timeout.map(|t| t as u64),
+                    Some(auth_user.id.clone()),
+                    None,
+                )
+                .await
+                .map_err(|e| {
+                    AppError::InternalServerError(format!("Code execution failed: {}", e))
+                })?;
+
+            // Convert SandboxExecuteResponse to CodeExecutionResult (Jupyter-compatible format)
+            let execution_result = CodeExecutionResult {
+                stdout: result.stdout,
+                stderr: result.stderr,
+                result: result.result,
+            };
+
+            Ok(HttpResponse::Ok().json(execution_result))
+        }
+        "jupyter" => {
+            // TODO: Implement Jupyter code execution
+            // This would require HTTP client to communicate with Jupyter server
+            // and handle authentication (token or password)
+            Err(AppError::NotImplemented(
+                "Jupyter code execution not yet implemented".to_string(),
+            ))
+        }
+        _ => Err(AppError::BadRequest(format!(
+            "Code execution engine '{}' not supported",
+            engine
+        ))),
+    }
 }
 
 /// GET /db/download - Download database (admin only, SQLite only)

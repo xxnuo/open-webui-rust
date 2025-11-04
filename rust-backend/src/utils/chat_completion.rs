@@ -8,7 +8,14 @@ use futures::stream::StreamExt;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
-use crate::{error::AppError, AppState};
+use crate::{
+    error::AppError,
+    middleware::code_interpreter::{
+        execute_code_block, format_execution_result, get_code_interpreter_timeout,
+        get_sandbox_client, is_code_interpreter_enabled, CodeBlockDetector,
+    },
+    AppState,
+};
 
 /// Default delta chunk size for batching streamed responses
 /// Matches Python's CHAT_RESPONSE_STREAM_DELTA_CHUNK_SIZE
@@ -123,9 +130,24 @@ pub async fn process_streaming_via_socketio(
     let mut collected_tool_calls: HashMap<usize, Value> = HashMap::new();
     let mut has_tool_calls = false;
 
+    // Code interpreter tracking
+    let code_interpreter_enabled = is_code_interpreter_enabled(&context.state);
+    let sandbox_client = if code_interpreter_enabled {
+        get_sandbox_client(&context.state)
+    } else {
+        None
+    };
+    let code_interpreter_timeout = get_code_interpreter_timeout(&context.state);
+    let mut code_block_detector = if code_interpreter_enabled && sandbox_client.is_some() {
+        Some(CodeBlockDetector::new())
+    } else {
+        None
+    };
+
     tracing::info!(
-        "🔴 Socket.IO STREAMING STARTED for user {}",
-        context.user_id
+        "🔴 Socket.IO STREAMING STARTED for user {} (code_interpreter: {})",
+        context.user_id,
+        code_interpreter_enabled
     );
 
     while let Some(chunk_result) = stream.next().await {
@@ -176,6 +198,94 @@ pub async fn process_streaming_via_socketio(
                                                 delta.get("content").and_then(|c| c.as_str())
                                             {
                                                 content.push_str(delta_content);
+
+                                                // Check for code blocks if code interpreter is enabled
+                                                if let Some(ref mut detector) = code_block_detector
+                                                {
+                                                    if let Some(ref client) = sandbox_client {
+                                                        let (code_blocks, _) =
+                                                            detector.process_chunk(delta_content);
+
+                                                        for code_block in code_blocks {
+                                                            tracing::info!(
+                                                                "🔍 Detected complete code block: {} ({} bytes)",
+                                                                code_block.language,
+                                                                code_block.code.len()
+                                                            );
+
+                                                            // Execute the code block
+                                                            match execute_code_block(
+                                                                &code_block,
+                                                                client,
+                                                                &context.user_id,
+                                                                code_interpreter_timeout,
+                                                            )
+                                                            .await
+                                                            {
+                                                                Ok(result) => {
+                                                                    tracing::info!(
+                                                                        "✅ Code execution completed: {} ({}ms)",
+                                                                        result.status,
+                                                                        result.execution_time_ms
+                                                                    );
+
+                                                                    // Format and emit execution result
+                                                                    let formatted_result =
+                                                                        format_execution_result(
+                                                                            &result,
+                                                                        );
+
+                                                                    // Add the execution result to content
+                                                                    content.push_str(
+                                                                        &formatted_result,
+                                                                    );
+
+                                                                    // Emit the execution result as a completion event
+                                                                    let result_event = json!({
+                                                                        "type": "chat:completion",
+                                                                        "data": {
+                                                                            "choices": [{
+                                                                                "index": 0,
+                                                                                "delta": {
+                                                                                    "content": formatted_result
+                                                                                }
+                                                                            }]
+                                                                        }
+                                                                    });
+                                                                    event_emitter(result_event)
+                                                                        .await;
+                                                                }
+                                                                Err(e) => {
+                                                                    tracing::error!(
+                                                                        "❌ Code execution failed: {}",
+                                                                        e
+                                                                    );
+
+                                                                    // Emit error as part of the stream
+                                                                    let error_msg = format!(
+                                                                        "\n**Code Execution Error:**\n```\n{}\n```\n\n",
+                                                                        e
+                                                                    );
+                                                                    content.push_str(&error_msg);
+
+                                                                    let error_event = json!({
+                                                                        "type": "chat:completion",
+                                                                        "data": {
+                                                                            "choices": [{
+                                                                                "index": 0,
+                                                                                "delta": {
+                                                                                    "content": error_msg
+                                                                                }
+                                                                            }]
+                                                                        }
+                                                                    });
+                                                                    event_emitter(error_event)
+                                                                        .await;
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
 
                                                 // Batch deltas like Python backend
                                                 delta_count += 1;

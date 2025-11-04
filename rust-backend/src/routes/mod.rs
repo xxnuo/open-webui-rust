@@ -2,6 +2,7 @@ pub mod audio;
 pub mod auth;
 pub mod channels;
 pub mod chats;
+pub mod code_execution;
 pub mod configs;
 pub mod evaluations;
 pub mod files;

@@ -25,6 +25,7 @@ use tracing_subscriber::FmtSubscriber;
 use crate::config::{Config, MutableConfig};
 use crate::db::Database;
 use crate::routes::create_routes;
+use crate::services::sandbox_executor::SandboxExecutorClient;
 use std::sync::{Arc, RwLock};
 
 #[derive(Clone)]
@@ -44,6 +45,8 @@ pub struct AppState {
     pub vector_db: Option<Arc<dyn retrieval::VectorDB>>,
     // Embedding provider for generating embeddings
     pub embedding_provider: Option<Arc<dyn retrieval::EmbeddingProvider>>,
+    // Sandbox executor client for secure code execution
+    pub sandbox_executor_client: Option<Arc<SandboxExecutorClient>>,
 }
 
 #[actix_web::main]
@@ -397,6 +400,21 @@ async fn main() -> anyhow::Result<()> {
         None
     };
 
+    // Initialize sandbox executor client if enabled
+    let sandbox_executor_client = if config.enable_code_execution {
+        let sandbox_url = config
+            .code_execution_sandbox_url
+            .clone()
+            .unwrap_or_else(|| "http://localhost:8090".to_string());
+
+        info!("🔒 Initializing Sandbox Executor Client");
+        info!("   URL: {}", sandbox_url);
+        Some(Arc::new(SandboxExecutorClient::new(sandbox_url)))
+    } else {
+        info!("⚠️  Code execution is disabled");
+        None
+    };
+
     let state = web::Data::new(AppState {
         db: db.clone(),
         config: Arc::new(RwLock::new(config.clone())),
@@ -407,6 +425,7 @@ async fn main() -> anyhow::Result<()> {
         http_client,
         vector_db,
         embedding_provider,
+        sandbox_executor_client,
     });
 
     // Start server

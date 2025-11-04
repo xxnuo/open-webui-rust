@@ -21,6 +21,7 @@ pub mod oauth;
 pub mod oauth_client;
 pub mod prompt;
 pub mod rag;
+pub mod sandbox_executor;
 pub mod static_files;
 pub mod tool;
 pub mod tool_runtime;
