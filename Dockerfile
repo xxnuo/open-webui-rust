@@ -23,6 +23,9 @@ FROM nginx:alpine
 # Copy built static files from builder
 COPY --from=frontend-builder /app/build /usr/share/nginx/html
 
+# Set default proxy timeout (can be overridden)
+ENV NGINX_PROXY_TIMEOUT=300s
+
 # Create nginx configuration for SPA with backend proxy
 RUN echo 'server { \
     listen 8080; \
@@ -41,6 +44,9 @@ RUN echo 'server { \
         proxy_set_header X-Forwarded-Proto $scheme; \
         proxy_buffering off; \
         proxy_request_buffering off; \
+        proxy_read_timeout 300s; \
+        proxy_connect_timeout 300s; \
+        proxy_send_timeout 300s; \
     } \
     \
     # Proxy OpenAI API requests to Rust backend \
