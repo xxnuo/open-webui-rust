@@ -370,7 +370,9 @@ async fn set_code_execution_config(
         "jupyter_auth": config.code_execution_jupyter_auth,
         "jupyter_auth_token": config.code_execution_jupyter_auth_token,
         "jupyter_auth_password": config.code_execution_jupyter_auth_password,
-        "jupyter_timeout": config.code_execution_jupyter_timeout
+        "jupyter_timeout": config.code_execution_jupyter_timeout,
+        "sandbox_url": config.code_execution_sandbox_url,
+        "sandbox_timeout": config.code_execution_sandbox_timeout
     });
     let _ = crate::services::ConfigService::update_section(
         &state.db,
@@ -386,7 +388,9 @@ async fn set_code_execution_config(
         "jupyter_auth": config.code_interpreter_jupyter_auth,
         "jupyter_auth_token": config.code_interpreter_jupyter_auth_token,
         "jupyter_auth_password": config.code_interpreter_jupyter_auth_password,
-        "jupyter_timeout": config.code_interpreter_jupyter_timeout
+        "jupyter_timeout": config.code_interpreter_jupyter_timeout,
+        "sandbox_url": config.code_interpreter_sandbox_url,
+        "sandbox_timeout": config.code_interpreter_sandbox_timeout
     });
     let _ = crate::services::ConfigService::update_section(
         &state.db,

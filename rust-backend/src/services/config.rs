@@ -157,7 +157,9 @@ impl ConfigService {
                 "jupyter_auth": config.code_execution_jupyter_auth,
                 "jupyter_auth_token": config.code_execution_jupyter_auth_token,
                 "jupyter_auth_password": config.code_execution_jupyter_auth_password,
-                "jupyter_timeout": config.code_execution_jupyter_timeout
+                "jupyter_timeout": config.code_execution_jupyter_timeout,
+                "sandbox_url": config.code_execution_sandbox_url,
+                "sandbox_timeout": config.code_execution_sandbox_timeout
             },
             "code_interpreter": {
                 "engine": config.code_interpreter_engine,
@@ -166,7 +168,9 @@ impl ConfigService {
                 "jupyter_auth": config.code_interpreter_jupyter_auth,
                 "jupyter_auth_token": config.code_interpreter_jupyter_auth_token,
                 "jupyter_auth_password": config.code_interpreter_jupyter_auth_password,
-                "jupyter_timeout": config.code_interpreter_jupyter_timeout
+                "jupyter_timeout": config.code_interpreter_jupyter_timeout,
+                "sandbox_url": config.code_interpreter_sandbox_url,
+                "sandbox_timeout": config.code_interpreter_sandbox_timeout
             },
             "ui": {
                 "banners": config.banners,
@@ -386,6 +390,11 @@ impl ConfigService {
             get_option_string(&["code_execution", "jupyter_auth_password"]);
         config.code_execution_jupyter_timeout =
             get_option_i32(&["code_execution", "jupyter_timeout"]);
+        config.code_execution_sandbox_url = get_option_string(&["code_execution", "sandbox_url"])
+            .or(config.code_execution_sandbox_url.clone());
+        config.code_execution_sandbox_timeout =
+            get_option_i32(&["code_execution", "sandbox_timeout"])
+                .or(config.code_execution_sandbox_timeout);
 
         // Merge Code Interpreter
         config.code_interpreter_engine = get_string(
@@ -404,6 +413,12 @@ impl ConfigService {
             get_option_string(&["code_interpreter", "jupyter_auth_password"]);
         config.code_interpreter_jupyter_timeout =
             get_option_i32(&["code_interpreter", "jupyter_timeout"]);
+        config.code_interpreter_sandbox_url =
+            get_option_string(&["code_interpreter", "sandbox_url"])
+                .or(config.code_interpreter_sandbox_url.clone());
+        config.code_interpreter_sandbox_timeout =
+            get_option_i32(&["code_interpreter", "sandbox_timeout"])
+                .or(config.code_interpreter_sandbox_timeout);
 
         // Merge UI
         config.banners = get_json(&["ui", "banners"], config.banners.clone());

@@ -45,6 +45,11 @@ impl SandboxExecutorClient {
         Self { client, base_url }
     }
 
+    /// Get the current base URL
+    pub fn base_url(&self) -> &str {
+        &self.base_url
+    }
+
     pub async fn execute_code(
         &self,
         code: String,

@@ -1,5 +1,6 @@
 use actix_web::{web, HttpResponse};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 use crate::{
     error::{AppError, AppResult},
@@ -181,9 +182,28 @@ async fn execute_code(
     match engine.as_str() {
         "sandbox" => {
             // Use sandbox executor for code execution
-            let client = state.sandbox_executor_client.as_ref().ok_or_else(|| {
-                AppError::InternalServerError("Sandbox executor client not initialized".to_string())
+            // Get the current sandbox URL from config (supports dynamic updates)
+            let config = state.config.read().unwrap();
+            let sandbox_url = config.code_execution_sandbox_url.clone().ok_or_else(|| {
+                AppError::InternalServerError("Sandbox executor URL not configured".to_string())
             })?;
+            drop(config);
+
+            // Create a new client or use the existing one with URL validation
+            let client = if let Some(existing_client) = state.sandbox_executor_client.as_ref() {
+                // Check if the URL has changed
+                if existing_client.base_url() == sandbox_url {
+                    existing_client.clone()
+                } else {
+                    // URL changed, create a new client
+                    Arc::new(
+                        crate::services::sandbox_executor::SandboxExecutorClient::new(sandbox_url),
+                    )
+                }
+            } else {
+                // No existing client, create a new one
+                Arc::new(crate::services::sandbox_executor::SandboxExecutorClient::new(sandbox_url))
+            };
 
             let result = client
                 .execute_code(

@@ -261,10 +261,24 @@ pub fn is_code_interpreter_enabled(state: &actix_web::web::Data<AppState>) -> bo
 }
 
 /// Get sandbox executor client from app state
+/// This function now returns a client with the current sandbox URL from config
+/// to support dynamic URL updates via admin settings
 pub fn get_sandbox_client(
     state: &actix_web::web::Data<AppState>,
 ) -> Option<Arc<SandboxExecutorClient>> {
-    state.sandbox_executor_client.clone()
+    let config = state.config.read().unwrap();
+    let sandbox_url = config.code_interpreter_sandbox_url.clone()?;
+    drop(config);
+
+    // Check if existing client has the same URL, otherwise create a new one
+    if let Some(existing_client) = state.sandbox_executor_client.as_ref() {
+        if existing_client.base_url() == sandbox_url {
+            return Some(existing_client.clone());
+        }
+    }
+
+    // Create a new client with the current URL
+    Some(Arc::new(SandboxExecutorClient::new(sandbox_url)))
 }
 
 /// Get code interpreter timeout from config
