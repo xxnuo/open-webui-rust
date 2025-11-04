@@ -1,5 +1,5 @@
 use crate::config::Config;
-use crate::container::ContainerManager;
+use crate::container::{ContainerManager, ContainerPool};
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::RwLock;
@@ -8,15 +8,21 @@ use tokio::sync::RwLock;
 pub struct AppState {
     pub config: Config,
     pub container_manager: Arc<ContainerManager>,
+    pub container_pool: Arc<ContainerPool>,
     pub stats: Arc<RwLock<ServiceStats>>,
     pub start_time: Instant,
 }
 
 impl AppState {
-    pub fn new(config: Config, container_manager: ContainerManager) -> Self {
+    pub fn new(
+        config: Config,
+        container_manager: ContainerManager,
+        container_pool: ContainerPool,
+    ) -> Self {
         Self {
             config,
             container_manager: Arc::new(container_manager),
+            container_pool: Arc::new(container_pool),
             stats: Arc::new(RwLock::new(ServiceStats::default())),
             start_time: Instant::now(),
         }

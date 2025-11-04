@@ -50,6 +50,14 @@ struct CodeExecutionConfigForm {
     code_execution_sandbox_url: Option<String>,
     #[serde(rename = "CODE_EXECUTION_SANDBOX_TIMEOUT")]
     code_execution_sandbox_timeout: Option<i32>,
+    #[serde(rename = "CODE_EXECUTION_SANDBOX_ENABLE_POOL")]
+    code_execution_sandbox_enable_pool: Option<bool>,
+    #[serde(rename = "CODE_EXECUTION_SANDBOX_POOL_SIZE")]
+    code_execution_sandbox_pool_size: Option<i32>,
+    #[serde(rename = "CODE_EXECUTION_SANDBOX_POOL_MAX_REUSE")]
+    code_execution_sandbox_pool_max_reuse: Option<i32>,
+    #[serde(rename = "CODE_EXECUTION_SANDBOX_POOL_MAX_AGE")]
+    code_execution_sandbox_pool_max_age: Option<i32>,
     #[serde(rename = "ENABLE_CODE_INTERPRETER")]
     enable_code_interpreter: bool,
     #[serde(rename = "CODE_INTERPRETER_ENGINE")]
@@ -316,6 +324,10 @@ async fn get_code_execution_config(
         code_interpreter_jupyter_timeout: config.code_interpreter_jupyter_timeout,
         code_execution_sandbox_url: config.code_execution_sandbox_url.clone(),
         code_execution_sandbox_timeout: config.code_execution_sandbox_timeout,
+        code_execution_sandbox_enable_pool: config.code_execution_sandbox_enable_pool,
+        code_execution_sandbox_pool_size: config.code_execution_sandbox_pool_size,
+        code_execution_sandbox_pool_max_reuse: config.code_execution_sandbox_pool_max_reuse,
+        code_execution_sandbox_pool_max_age: config.code_execution_sandbox_pool_max_age,
         code_interpreter_sandbox_url: config.code_interpreter_sandbox_url.clone(),
         code_interpreter_sandbox_timeout: config.code_interpreter_sandbox_timeout,
     }))
@@ -346,6 +358,11 @@ async fn set_code_execution_config(
         config.code_execution_jupyter_timeout = form_data.code_execution_jupyter_timeout;
         config.code_execution_sandbox_url = form_data.code_execution_sandbox_url.clone();
         config.code_execution_sandbox_timeout = form_data.code_execution_sandbox_timeout;
+        config.code_execution_sandbox_enable_pool = form_data.code_execution_sandbox_enable_pool;
+        config.code_execution_sandbox_pool_size = form_data.code_execution_sandbox_pool_size;
+        config.code_execution_sandbox_pool_max_reuse =
+            form_data.code_execution_sandbox_pool_max_reuse;
+        config.code_execution_sandbox_pool_max_age = form_data.code_execution_sandbox_pool_max_age;
 
         config.enable_code_interpreter = form_data.enable_code_interpreter;
         config.code_interpreter_engine = form_data.code_interpreter_engine.clone();
@@ -372,7 +389,11 @@ async fn set_code_execution_config(
         "jupyter_auth_password": config.code_execution_jupyter_auth_password,
         "jupyter_timeout": config.code_execution_jupyter_timeout,
         "sandbox_url": config.code_execution_sandbox_url,
-        "sandbox_timeout": config.code_execution_sandbox_timeout
+        "sandbox_timeout": config.code_execution_sandbox_timeout,
+        "sandbox_enable_pool": config.code_execution_sandbox_enable_pool,
+        "sandbox_pool_size": config.code_execution_sandbox_pool_size,
+        "sandbox_pool_max_reuse": config.code_execution_sandbox_pool_max_reuse,
+        "sandbox_pool_max_age": config.code_execution_sandbox_pool_max_age
     });
     let _ = crate::services::ConfigService::update_section(
         &state.db,
@@ -416,6 +437,10 @@ async fn set_code_execution_config(
         code_execution_jupyter_timeout: config.code_execution_jupyter_timeout,
         code_execution_sandbox_url: config.code_execution_sandbox_url.clone(),
         code_execution_sandbox_timeout: config.code_execution_sandbox_timeout,
+        code_execution_sandbox_enable_pool: config.code_execution_sandbox_enable_pool,
+        code_execution_sandbox_pool_size: config.code_execution_sandbox_pool_size,
+        code_execution_sandbox_pool_max_reuse: config.code_execution_sandbox_pool_max_reuse,
+        code_execution_sandbox_pool_max_age: config.code_execution_sandbox_pool_max_age,
         enable_code_interpreter: config.enable_code_interpreter,
         code_interpreter_engine: config.code_interpreter_engine.clone(),
         code_interpreter_prompt_template: config.code_interpreter_prompt_template.clone(),

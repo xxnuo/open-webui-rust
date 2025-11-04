@@ -202,6 +202,85 @@
 								</Tooltip>
 							</div>
 						</div>
+
+						<hr class="border-gray-100 dark:border-gray-850 my-2" />
+
+						<div class="mb-2.5 text-xs font-medium">{$i18n.t('Container Pool Settings')}</div>
+
+						<div class="mb-2.5">
+							<div class=" flex w-full justify-between">
+								<div class=" self-center text-xs font-medium">
+									{$i18n.t('Enable Container Pool')}
+								</div>
+
+								<Switch bind:state={config.CODE_EXECUTION_SANDBOX_ENABLE_POOL} />
+							</div>
+							<div class="text-gray-500 text-xs mt-1">
+								{$i18n.t('Reuse containers for faster execution (recommended)')}
+							</div>
+						</div>
+
+						{#if config.CODE_EXECUTION_SANDBOX_ENABLE_POOL}
+							<div class="flex gap-2 w-full items-center justify-between mb-2.5">
+								<div class="text-xs font-medium">
+									{$i18n.t('Pool Size Per Language')}
+								</div>
+
+								<div class="">
+									<Tooltip content={$i18n.t('Number of warm containers per language')}>
+										<input
+											class="dark:bg-gray-900 w-fit rounded-sm px-2 p-1 text-xs bg-transparent outline-hidden text-right"
+											type="number"
+											bind:value={config.CODE_EXECUTION_SANDBOX_POOL_SIZE}
+											placeholder={$i18n.t('e.g. 3')}
+											min="1"
+											max="10"
+											autocomplete="off"
+										/>
+									</Tooltip>
+								</div>
+							</div>
+
+							<div class="flex gap-2 w-full items-center justify-between mb-2.5">
+								<div class="text-xs font-medium">
+									{$i18n.t('Max Container Reuse')}
+								</div>
+
+								<div class="">
+									<Tooltip content={$i18n.t('Recreate container after N executions')}>
+										<input
+											class="dark:bg-gray-900 w-fit rounded-sm px-2 p-1 text-xs bg-transparent outline-hidden text-right"
+											type="number"
+											bind:value={config.CODE_EXECUTION_SANDBOX_POOL_MAX_REUSE}
+											placeholder={$i18n.t('e.g. 50')}
+											min="5"
+											max="200"
+											autocomplete="off"
+										/>
+									</Tooltip>
+								</div>
+							</div>
+
+							<div class="flex gap-2 w-full items-center justify-between">
+								<div class="text-xs font-medium">
+									{$i18n.t('Max Container Age (seconds)')}
+								</div>
+
+								<div class="">
+									<Tooltip content={$i18n.t('Recreate container after N seconds')}>
+										<input
+											class="dark:bg-gray-900 w-fit rounded-sm px-2 p-1 text-xs bg-transparent outline-hidden text-right"
+											type="number"
+											bind:value={config.CODE_EXECUTION_SANDBOX_POOL_MAX_AGE}
+											placeholder={$i18n.t('e.g. 600')}
+											min="60"
+											max="3600"
+											autocomplete="off"
+										/>
+									</Tooltip>
+								</div>
+							</div>
+						{/if}
 					{/if}
 				</div>
 

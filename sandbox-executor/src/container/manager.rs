@@ -465,4 +465,55 @@ impl ContainerManager {
             Err(e) => Err(SandboxError::DockerConnectionFailed(e.to_string())),
         }
     }
+
+    /// Check if a container exists and is running
+    pub async fn check_container_status(&self, container_id: &str) -> SandboxResult<bool> {
+        use bollard::query_parameters::InspectContainerOptions;
+
+        match self
+            .docker
+            .inspect_container(container_id, None::<InspectContainerOptions>)
+            .await
+        {
+            Ok(info) => {
+                // Check if container is running
+                Ok(info.state.and_then(|s| s.running).unwrap_or(false))
+            }
+            Err(_) => Ok(false), // Container doesn't exist
+        }
+    }
+
+    /// Execute a simple command without capturing all output (for cleanup operations)
+    pub async fn exec_simple_command(
+        &self,
+        container_id: &str,
+        command: Vec<String>,
+    ) -> SandboxResult<()> {
+        debug!(
+            "Executing simple command in container {}: {:?}",
+            container_id, command
+        );
+
+        let exec_config = CreateExecOptions {
+            attach_stdout: Some(false),
+            attach_stderr: Some(false),
+            cmd: Some(command),
+            user: Some("sandbox".to_string()),
+            working_dir: Some("/workspace".to_string()),
+            ..Default::default()
+        };
+
+        let exec_result = self
+            .docker
+            .create_exec(container_id, exec_config)
+            .await
+            .map_err(|e| SandboxError::ExecutionFailed(e.to_string()))?;
+
+        self.docker
+            .start_exec(&exec_result.id, None::<StartExecOptions>)
+            .await
+            .map_err(|e| SandboxError::ExecutionFailed(e.to_string()))?;
+
+        Ok(())
+    }
 }

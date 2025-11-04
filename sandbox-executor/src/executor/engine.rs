@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tracing::{error, info, warn};
 
 use crate::config::Config;
-use crate::container::ContainerManager;
+use crate::container::{ContainerManager, ContainerPool};
 use crate::error::{SandboxError, SandboxResult};
 use crate::executor::audit::AuditLogger;
 use crate::models::{ExecuteRequest, ExecuteResponse, ExecutionContext, ExecutionStatus, Language};
@@ -11,12 +11,17 @@ use crate::security::{limits::ResourceLimits, validate_code};
 
 pub struct ExecutionEngine {
     container_manager: Arc<ContainerManager>,
+    container_pool: Option<Arc<ContainerPool>>,
     config: Config,
     audit_logger: Option<AuditLogger>,
 }
 
 impl ExecutionEngine {
-    pub fn new(container_manager: Arc<ContainerManager>, config: Config) -> Self {
+    pub fn new(
+        container_manager: Arc<ContainerManager>,
+        container_pool: Option<Arc<ContainerPool>>,
+        config: Config,
+    ) -> Self {
         let audit_logger = if config.enable_audit_log {
             match AuditLogger::new(&config.audit_log_path) {
                 Ok(logger) => Some(logger),
@@ -31,6 +36,7 @@ impl ExecutionEngine {
 
         Self {
             container_manager,
+            container_pool,
             config,
             audit_logger,
         }
@@ -128,6 +134,14 @@ impl ExecutionEngine {
         &self,
         ctx: &ExecutionContext,
     ) -> SandboxResult<crate::models::ExecutionResult> {
+        // Use container pool if available (much faster!)
+        if let Some(ref pool) = self.container_pool {
+            info!("Using container pool for execution (fast path)");
+            return pool.execute_with_pool(ctx).await;
+        }
+
+        // Fallback to old method if pool is not available
+        info!("Using direct container creation (slow path)");
         let mut container_id: Option<String> = None;
 
         let result = async {

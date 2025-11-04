@@ -86,8 +86,12 @@ pub async fn execute_code(
     // Increment active executions
     state.increment_executions().await;
 
-    // Create execution engine
-    let engine = ExecutionEngine::new(state.container_manager.clone(), state.config.clone());
+    // Create execution engine with container pool for fast execution
+    let engine = ExecutionEngine::new(
+        state.container_manager.clone(),
+        Some(state.container_pool.clone()),
+        state.config.clone(),
+    );
 
     // Execute code
     let result = engine.execute(request.into_inner()).await;

@@ -183,6 +183,10 @@ pub struct Config {
     pub code_execution_jupyter_timeout: Option<i32>,
     pub code_execution_sandbox_url: Option<String>,
     pub code_execution_sandbox_timeout: Option<i32>,
+    pub code_execution_sandbox_enable_pool: Option<bool>,
+    pub code_execution_sandbox_pool_size: Option<i32>,
+    pub code_execution_sandbox_pool_max_reuse: Option<i32>,
+    pub code_execution_sandbox_pool_max_age: Option<i32>,
     pub enable_code_interpreter: bool,
     pub code_interpreter_engine: String,
     pub code_interpreter_prompt_template: Option<String>,
@@ -627,6 +631,18 @@ impl Config {
                 .ok()
                 .and_then(|s| s.parse().ok())
                 .or(Some(60)),
+            code_execution_sandbox_enable_pool: env::var("CODE_EXECUTION_SANDBOX_ENABLE_POOL")
+                .ok()
+                .and_then(|s| s.parse().ok()),
+            code_execution_sandbox_pool_size: env::var("CODE_EXECUTION_SANDBOX_POOL_SIZE")
+                .ok()
+                .and_then(|s| s.parse().ok()),
+            code_execution_sandbox_pool_max_reuse: env::var("CODE_EXECUTION_SANDBOX_POOL_MAX_REUSE")
+                .ok()
+                .and_then(|s| s.parse().ok()),
+            code_execution_sandbox_pool_max_age: env::var("CODE_EXECUTION_SANDBOX_POOL_MAX_AGE")
+                .ok()
+                .and_then(|s| s.parse().ok()),
             enable_code_interpreter: env::var("ENABLE_CODE_INTERPRETER")
                 .unwrap_or_else(|_| "false".to_string())
                 .parse()

@@ -41,8 +41,27 @@ async fn main() -> std::io::Result<()> {
 
     info!("🐳 Container manager initialized");
 
+    // Initialize container pool for fast execution
+    let container_manager_arc = std::sync::Arc::new(container_manager);
+    let config_arc = std::sync::Arc::new(config.clone());
+    let container_pool =
+        container::ContainerPool::new(container_manager_arc.clone(), config_arc.clone());
+
+    // Pre-warm the pool with containers
+    if let Err(e) = container_pool.initialize().await {
+        tracing::warn!("Failed to initialize container pool: {}", e);
+        info!("⚠️  Running without container pool (slower performance)");
+    } else {
+        info!("⚡ Container pool initialized (fast execution enabled)");
+    }
+
+    // Create a dummy ContainerManager for AppState (it will use the pool instead)
+    let dummy_manager = container::ContainerManager::new(&config)
+        .await
+        .expect("Failed to create container manager");
+
     // Create application state
-    let app_state = web::Data::new(AppState::new(config.clone(), container_manager));
+    let app_state = web::Data::new(AppState::new(config.clone(), dummy_manager, container_pool));
 
     let bind_addr = format!("{}:{}", config.host, config.port);
     info!("🌐 Starting HTTP server on {}", bind_addr);

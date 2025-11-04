@@ -28,6 +28,12 @@ pub struct Config {
     pub enable_streaming: bool,
     pub keep_containers: bool, // For debugging
 
+    // Container Pool settings
+    pub enable_container_pool: bool,
+    pub pool_size_per_language: usize,
+    pub pool_max_container_reuse: u32,
+    pub pool_max_container_age_seconds: u64,
+
     // Language support
     pub enable_python: bool,
     pub enable_javascript: bool,
@@ -74,6 +80,12 @@ impl Default for Config {
             // Execution defaults
             enable_streaming: true,
             keep_containers: false,
+
+            // Container Pool defaults
+            enable_container_pool: true,
+            pool_size_per_language: 3,
+            pool_max_container_reuse: 50,
+            pool_max_container_age_seconds: 600, // 10 minutes
 
             // Language support - all enabled by default
             enable_python: true,
@@ -184,6 +196,31 @@ impl Config {
             config.keep_containers = keep
                 .parse()
                 .map_err(|e| format!("Invalid keep_containers: {}", e))?;
+        }
+
+        // Container Pool settings
+        if let Ok(enable_pool) = env::var("ENABLE_CONTAINER_POOL") {
+            config.enable_container_pool = enable_pool
+                .parse()
+                .map_err(|e| format!("Invalid enable_container_pool: {}", e))?;
+        }
+
+        if let Ok(pool_size) = env::var("POOL_SIZE_PER_LANGUAGE") {
+            config.pool_size_per_language = pool_size
+                .parse()
+                .map_err(|e| format!("Invalid pool_size_per_language: {}", e))?;
+        }
+
+        if let Ok(max_reuse) = env::var("POOL_MAX_CONTAINER_REUSE") {
+            config.pool_max_container_reuse = max_reuse
+                .parse()
+                .map_err(|e| format!("Invalid pool_max_container_reuse: {}", e))?;
+        }
+
+        if let Ok(max_age) = env::var("POOL_MAX_CONTAINER_AGE_SECONDS") {
+            config.pool_max_container_age_seconds = max_age
+                .parse()
+                .map_err(|e| format!("Invalid pool_max_container_age_seconds: {}", e))?;
         }
 
         // Language support
