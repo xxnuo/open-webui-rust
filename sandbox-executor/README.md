@@ -60,7 +60,7 @@ That's it! The service is now running on `http://localhost:8090`
 cd sandbox-executor
 
 # Step 1: Build runtime container
-docker build -t sandbox-executor-runtime:latest -f Dockerfile.runtime .
+docker build -t sandbox-runtime:latest -f Dockerfile.runtime .
 
 # Step 2: Build service
 docker build -t sandbox-executor:latest -f Dockerfile .
@@ -71,7 +71,7 @@ docker run -d \
   -p 8090:8090 \
   -v /var/run/docker.sock:/var/run/docker.sock \
   --env-file env.example \
-  -e CONTAINER_IMAGE=sandbox-executor-runtime:latest \
+  -e CONTAINER_IMAGE=sandbox-runtime:latest \
   sandbox-executor:latest
 
 # Step 4: Verify
@@ -84,7 +84,7 @@ curl http://localhost:8090/api/v1/health
 cd sandbox-executor
 
 # Build the runtime image first
-docker build -t sandbox-executor-runtime:latest -f Dockerfile.runtime .
+docker build -t sandbox-runtime:latest -f Dockerfile.runtime .
 
 # Copy environment file
 cp env.example .env
@@ -307,7 +307,7 @@ docker logs sandbox-executor
 
 ```bash
 # Verify runtime image exists
-docker images | grep sandbox-executor-runtime
+docker images | grep sandbox-runtime
 
 # Check service health
 curl http://localhost:8090/api/v1/health
@@ -500,7 +500,7 @@ cargo clippy
 - Verify DOCKER_HOST environment variable
 
 ### Container Creation Failed
-- Ensure runtime image is built: `docker build -t sandbox-executor-runtime:latest -f Dockerfile.runtime .`
+- Ensure runtime image is built: `docker build -t sandbox-runtime:latest -f Dockerfile.runtime .`
 - Check Docker daemon logs
 - Verify sufficient system resources
 

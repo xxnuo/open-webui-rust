@@ -10,7 +10,7 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 echo -e "${BLUE}Step 1: Building runtime container image...${NC}"
-docker build -t sandbox-executor-runtime:latest -f Dockerfile.runtime .
+docker build -t sandbox-runtime:latest -f Dockerfile.runtime .
 
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✓ Runtime image built successfully${NC}"

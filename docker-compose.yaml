@@ -134,9 +134,9 @@ services:
     # build:
     #   context: ./sandbox-executor
     #   dockerfile: Dockerfile.runtime
-    # image: sandbox-executor-runtime:latest
-    image: public.ecr.aws/o3p7x2f5/knoxchat/sandbox-executor-runtime:latest
-    container_name: sandbox-executor-runtime
+    # image: sandbox-runtime:latest
+    image: public.ecr.aws/o3p7x2f5/knoxchat/sandbox-runtime:latest
+    container_name: sandbox-runtime
     command: /bin/true  # Just pulls the image
     networks:
       - open-webui-network
@@ -165,7 +165,7 @@ services:
       - MAX_CONCURRENT_EXECUTIONS=${SANDBOX_MAX_CONCURRENT_EXECUTIONS:-10}
       - RATE_LIMIT_PER_MINUTE=${SANDBOX_RATE_LIMIT_PER_MINUTE:-30}
       - RATE_LIMIT_BURST=${SANDBOX_RATE_LIMIT_BURST:-10}
-      - CONTAINER_IMAGE=public.ecr.aws/o3p7x2f5/knoxchat/sandbox-executor-runtime:latest
+      - CONTAINER_IMAGE=public.ecr.aws/o3p7x2f5/knoxchat/sandbox-runtime:latest
       - NETWORK_MODE=${SANDBOX_NETWORK_MODE:-none}
       - READ_ONLY_ROOT=${SANDBOX_READ_ONLY_ROOT:-false}
       - DROP_ALL_CAPABILITIES=${SANDBOX_DROP_ALL_CAPABILITIES:-true}

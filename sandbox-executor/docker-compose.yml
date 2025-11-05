@@ -6,8 +6,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.runtime
-    image: sandbox-executor-runtime:latest
-    container_name: sandbox-runtime-builder
+    image: sandbox-runtime:latest
+    # image: public.ecr.aws/o3p7x2f5/knoxchat/sandbox-runtime:latest
+    container_name: sandbox-runtime
     command: /bin/true  # Just builds the image
 
   # The sandbox executor service
@@ -16,6 +17,7 @@ services:
       context: .
       dockerfile: Dockerfile
     image: sandbox-executor:latest
+    # image: public.ecr.aws/o3p7x2f5/knoxchat/sandbox-executor:latest
     container_name: sandbox-executor
     user: root  # Needs root to access Docker socket
     ports:
@@ -34,7 +36,7 @@ services:
       - MAX_CONCURRENT_EXECUTIONS=10
       - RATE_LIMIT_PER_MINUTE=30
       - RATE_LIMIT_BURST=10
-      - CONTAINER_IMAGE=sandbox-executor-runtime:latest
+      - CONTAINER_IMAGE=sandbox-runtime:latest
       - NETWORK_MODE=none
       - READ_ONLY_ROOT=false
       - DROP_ALL_CAPABILITIES=true

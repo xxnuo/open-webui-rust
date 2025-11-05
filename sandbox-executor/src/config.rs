@@ -72,7 +72,7 @@ impl Default for Config {
             rate_limit_burst: 10,
 
             // Container defaults
-            container_image: "sandbox-executor-runtime:latest".to_string(),
+            container_image: "sandbox-runtime:latest".to_string(),
             network_mode: NetworkMode::None,
             read_only_root: false, // TODO: Enable with proper tmpfs configuration
             drop_all_capabilities: true,
