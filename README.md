@@ -2,6 +2,12 @@
 
 High‑Performance Rust Implementation of Open WebUI
 
+<p align="center">
+   <a href="https://youtu.be/xAPVZR_2nFk" target="_blank" rel="noopener noreferrer">
+      <img width="600" src="./img/video-cover.png" alt="Open WebUI Backend in Rust">
+   </a>
+</p>
+
 ## Docker Quick Start
 
 ```
@@ -10,7 +16,7 @@ docker compose up -d
 ```
 > Ensure Docker and Docker Compose are ready
 
-https://github.com/user-attachments/assets/d1bf00a3-1838-4658-84da-d8bfc84a9ec3
+<iframe width="560" height="315" src="https://www.youtube.com/embed/xAPVZR_2nFk?si=6SFzwOrwPBO_K_HY" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
 
 ## Overview
 
