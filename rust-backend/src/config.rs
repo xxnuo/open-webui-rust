@@ -272,8 +272,9 @@ impl Config {
             }),
 
             // Database
-            database_url: env::var("DATABASE_URL")
-                .unwrap_or_else(|_| "postgresql://postgres:postgres@localhost:5432/openwebui".to_string()),
+            database_url: env::var("DATABASE_URL").unwrap_or_else(|_| {
+                "postgresql://postgres:postgres@localhost:5432/openwebui".to_string()
+            }),
             database_pool_size: env::var("DATABASE_POOL_SIZE")
                 .unwrap_or_else(|_| "10".to_string())
                 .parse()
@@ -317,15 +318,15 @@ impl Config {
                 .unwrap_or_else(|_| "false".to_string())
                 .parse()
                 .unwrap_or(false),
-            api_key_allowed_endpoints: env::var("API_KEY_ALLOWED_ENDPOINTS")
-                .unwrap_or_default(),
+            api_key_allowed_endpoints: env::var("API_KEY_ALLOWED_ENDPOINTS").unwrap_or_default(),
             default_user_role: env::var("DEFAULT_USER_ROLE")
                 .unwrap_or_else(|_| "pending".to_string()),
             show_admin_details: env::var("SHOW_ADMIN_DETAILS")
                 .unwrap_or_else(|_| "true".to_string())
                 .parse()
                 .unwrap_or(true),
-            webui_url: env::var("WEBUI_URL").unwrap_or_else(|_| "http://localhost:8080".to_string()),
+            webui_url: env::var("WEBUI_URL")
+                .unwrap_or_else(|_| "http://localhost:8080".to_string()),
             pending_user_overlay_title: env::var("PENDING_USER_OVERLAY_TITLE").ok(),
             pending_user_overlay_content: env::var("PENDING_USER_OVERLAY_CONTENT").ok(),
             response_watermark: env::var("RESPONSE_WATERMARK").ok(),
@@ -346,14 +347,10 @@ impl Config {
                 .unwrap_or_else(|_| "uid".to_string()),
             ldap_attribute_for_mail: env::var("LDAP_ATTRIBUTE_FOR_MAIL")
                 .unwrap_or_else(|_| "mail".to_string()),
-            ldap_app_dn: env::var("LDAP_APP_DN")
-                .unwrap_or_default(),
-            ldap_app_password: env::var("LDAP_APP_PASSWORD")
-                .unwrap_or_default(),
-            ldap_search_base: env::var("LDAP_SEARCH_BASE")
-                .unwrap_or_default(),
-            ldap_search_filters: env::var("LDAP_SEARCH_FILTERS")
-                .unwrap_or_default(),
+            ldap_app_dn: env::var("LDAP_APP_DN").unwrap_or_default(),
+            ldap_app_password: env::var("LDAP_APP_PASSWORD").unwrap_or_default(),
+            ldap_search_base: env::var("LDAP_SEARCH_BASE").unwrap_or_default(),
+            ldap_search_filters: env::var("LDAP_SEARCH_FILTERS").unwrap_or_default(),
             ldap_use_tls: env::var("LDAP_USE_TLS")
                 .unwrap_or_else(|_| "true".to_string())
                 .parse()
@@ -370,8 +367,7 @@ impl Config {
                 .unwrap_or_else(|_| "false".to_string())
                 .parse()
                 .unwrap_or(false),
-            scim_token: env::var("SCIM_TOKEN")
-                .unwrap_or_default(),
+            scim_token: env::var("SCIM_TOKEN").unwrap_or_default(),
 
             // CORS
             cors_allow_origin: env::var("CORS_ALLOW_ORIGIN").unwrap_or_else(|_| "*".to_string()),
@@ -460,9 +456,8 @@ impl Config {
                     .collect()
             },
             openai_api_keys: {
-                let keys_str = env::var("OPENAI_API_KEYS").unwrap_or_else(|_| {
-                    env::var("OPENAI_API_KEY").unwrap_or_default()
-                });
+                let keys_str = env::var("OPENAI_API_KEYS")
+                    .unwrap_or_else(|_| env::var("OPENAI_API_KEY").unwrap_or_default());
                 keys_str.split(';').map(|s| s.trim().to_string()).collect()
             },
             openai_api_configs: serde_json::json!({}),
@@ -557,8 +552,8 @@ impl Config {
             rag_openai_api_base_url: env::var("RAG_OPENAI_API_BASE_URL")
                 .or_else(|_| env::var("OPENAI_API_BASE_URL"))
                 .unwrap_or_else(|_| "https://api.openai.com/v1".to_string()),
-            rag_template: env::var("RAG_TEMPLATE").unwrap_or_else(|_| 
-                "Use the following context as your learned knowledge:\n[context]\n\nWhen responding, remember to use the knowledge provided above.".to_string()),
+            rag_template: env::var("RAG_TEMPLATE")
+                .unwrap_or_else(|_| crate::utils::retrieval::DEFAULT_RAG_TEMPLATE.to_string()),
             rag_full_context: env::var("RAG_FULL_CONTEXT")
                 .unwrap_or_else(|_| "false".to_string())
                 .parse()
@@ -589,27 +584,35 @@ impl Config {
                 .unwrap_or_else(|_| "false".to_string())
                 .parse()
                 .unwrap_or(false),
-            rag_embedding_model_trust_remote_code: env::var("RAG_EMBEDDING_MODEL_TRUST_REMOTE_CODE")
-                .unwrap_or_else(|_| "true".to_string())
-                .parse()
-                .unwrap_or(true),
-            rag_reranking_model_trust_remote_code: env::var("RAG_RERANKING_MODEL_TRUST_REMOTE_CODE")
-                .unwrap_or_else(|_| "true".to_string())
-                .parse()
-                .unwrap_or(true),
+            rag_embedding_model_trust_remote_code: env::var(
+                "RAG_EMBEDDING_MODEL_TRUST_REMOTE_CODE",
+            )
+            .unwrap_or_else(|_| "true".to_string())
+            .parse()
+            .unwrap_or(true),
+            rag_reranking_model_trust_remote_code: env::var(
+                "RAG_RERANKING_MODEL_TRUST_REMOTE_CODE",
+            )
+            .unwrap_or_else(|_| "true".to_string())
+            .parse()
+            .unwrap_or(true),
 
             // Sentence Transformers
             sentence_transformers_home: env::var("SENTENCE_TRANSFORMERS_HOME").ok(),
             sentence_transformers_backend: env::var("SENTENCE_TRANSFORMERS_BACKEND")
                 .unwrap_or_else(|_| "torch".to_string()),
             sentence_transformers_model_kwargs: env::var("SENTENCE_TRANSFORMERS_MODEL_KWARGS").ok(),
-            sentence_transformers_cross_encoder_backend: env::var("SENTENCE_TRANSFORMERS_CROSS_ENCODER_BACKEND")
-                .unwrap_or_else(|_| "torch".to_string()),
-            sentence_transformers_cross_encoder_model_kwargs: env::var("SENTENCE_TRANSFORMERS_CROSS_ENCODER_MODEL_KWARGS").ok(),
+            sentence_transformers_cross_encoder_backend: env::var(
+                "SENTENCE_TRANSFORMERS_CROSS_ENCODER_BACKEND",
+            )
+            .unwrap_or_else(|_| "torch".to_string()),
+            sentence_transformers_cross_encoder_model_kwargs: env::var(
+                "SENTENCE_TRANSFORMERS_CROSS_ENCODER_MODEL_KWARGS",
+            )
+            .ok(),
 
             // RAG Embedding Prefixes
-            rag_embedding_query_prefix: env::var("RAG_EMBEDDING_QUERY_PREFIX")
-                .unwrap_or_default(),
+            rag_embedding_query_prefix: env::var("RAG_EMBEDDING_QUERY_PREFIX").unwrap_or_default(),
             rag_embedding_content_prefix: env::var("RAG_EMBEDDING_CONTENT_PREFIX")
                 .unwrap_or_default(),
             rag_embedding_prefix_field_name: env::var("RAG_EMBEDDING_PREFIX_FIELD_NAME").ok(),
@@ -620,7 +623,8 @@ impl Config {
             code_execution_jupyter_url: env::var("CODE_EXECUTION_JUPYTER_URL").ok(),
             code_execution_jupyter_auth: env::var("CODE_EXECUTION_JUPYTER_AUTH").ok(),
             code_execution_jupyter_auth_token: env::var("CODE_EXECUTION_JUPYTER_AUTH_TOKEN").ok(),
-            code_execution_jupyter_auth_password: env::var("CODE_EXECUTION_JUPYTER_AUTH_PASSWORD").ok(),
+            code_execution_jupyter_auth_password: env::var("CODE_EXECUTION_JUPYTER_AUTH_PASSWORD")
+                .ok(),
             code_execution_jupyter_timeout: env::var("CODE_EXECUTION_JUPYTER_TIMEOUT")
                 .ok()
                 .and_then(|s| s.parse().ok()),
@@ -637,9 +641,11 @@ impl Config {
             code_execution_sandbox_pool_size: env::var("CODE_EXECUTION_SANDBOX_POOL_SIZE")
                 .ok()
                 .and_then(|s| s.parse().ok()),
-            code_execution_sandbox_pool_max_reuse: env::var("CODE_EXECUTION_SANDBOX_POOL_MAX_REUSE")
-                .ok()
-                .and_then(|s| s.parse().ok()),
+            code_execution_sandbox_pool_max_reuse: env::var(
+                "CODE_EXECUTION_SANDBOX_POOL_MAX_REUSE",
+            )
+            .ok()
+            .and_then(|s| s.parse().ok()),
             code_execution_sandbox_pool_max_age: env::var("CODE_EXECUTION_SANDBOX_POOL_MAX_AGE")
                 .ok()
                 .and_then(|s| s.parse().ok()),
@@ -652,8 +658,12 @@ impl Config {
             code_interpreter_prompt_template: env::var("CODE_INTERPRETER_PROMPT_TEMPLATE").ok(),
             code_interpreter_jupyter_url: env::var("CODE_INTERPRETER_JUPYTER_URL").ok(),
             code_interpreter_jupyter_auth: env::var("CODE_INTERPRETER_JUPYTER_AUTH").ok(),
-            code_interpreter_jupyter_auth_token: env::var("CODE_INTERPRETER_JUPYTER_AUTH_TOKEN").ok(),
-            code_interpreter_jupyter_auth_password: env::var("CODE_INTERPRETER_JUPYTER_AUTH_PASSWORD").ok(),
+            code_interpreter_jupyter_auth_token: env::var("CODE_INTERPRETER_JUPYTER_AUTH_TOKEN")
+                .ok(),
+            code_interpreter_jupyter_auth_password: env::var(
+                "CODE_INTERPRETER_JUPYTER_AUTH_PASSWORD",
+            )
+            .ok(),
             code_interpreter_jupyter_timeout: env::var("CODE_INTERPRETER_JUPYTER_TIMEOUT")
                 .ok()
                 .and_then(|s| s.parse().ok()),
@@ -664,7 +674,11 @@ impl Config {
             code_interpreter_sandbox_timeout: env::var("CODE_INTERPRETER_SANDBOX_TIMEOUT")
                 .ok()
                 .and_then(|s| s.parse().ok())
-                .or_else(|| env::var("CODE_EXECUTION_SANDBOX_TIMEOUT").ok().and_then(|s| s.parse().ok()))
+                .or_else(|| {
+                    env::var("CODE_EXECUTION_SANDBOX_TIMEOUT")
+                        .ok()
+                        .and_then(|s| s.parse().ok())
+                })
                 .or(Some(60)),
 
             // Webhooks
@@ -708,10 +722,12 @@ impl Config {
                 .unwrap_or_else(|_| "true".to_string())
                 .parse()
                 .unwrap_or(true),
-            autocomplete_generation_input_max_length: env::var("AUTOCOMPLETE_GENERATION_INPUT_MAX_LENGTH")
-                .unwrap_or_else(|_| "200".to_string())
-                .parse()
-                .unwrap_or(200),
+            autocomplete_generation_input_max_length: env::var(
+                "AUTOCOMPLETE_GENERATION_INPUT_MAX_LENGTH",
+            )
+            .unwrap_or_else(|_| "200".to_string())
+            .parse()
+            .unwrap_or(200),
             enable_tags_generation: env::var("ENABLE_TAGS_GENERATION")
                 .unwrap_or_else(|_| "true".to_string())
                 .parse()
@@ -730,12 +746,16 @@ impl Config {
                 .unwrap_or(true),
             follow_up_generation_prompt_template: env::var("FOLLOW_UP_GENERATION_PROMPT_TEMPLATE")
                 .unwrap_or_else(|_| String::new()),
-            image_prompt_generation_prompt_template: env::var("IMAGE_PROMPT_GENERATION_PROMPT_TEMPLATE")
-                .unwrap_or_else(|_| String::new()),
+            image_prompt_generation_prompt_template: env::var(
+                "IMAGE_PROMPT_GENERATION_PROMPT_TEMPLATE",
+            )
+            .unwrap_or_else(|_| String::new()),
             query_generation_prompt_template: env::var("QUERY_GENERATION_PROMPT_TEMPLATE")
                 .unwrap_or_else(|_| String::new()),
-            tools_function_calling_prompt_template: env::var("TOOLS_FUNCTION_CALLING_PROMPT_TEMPLATE")
-                .unwrap_or_else(|_| String::new()),
+            tools_function_calling_prompt_template: env::var(
+                "TOOLS_FUNCTION_CALLING_PROMPT_TEMPLATE",
+            )
+            .unwrap_or_else(|_| String::new()),
 
             // User permissions
             enable_user_webhooks: env::var("ENABLE_USER_WEBHOOKS")

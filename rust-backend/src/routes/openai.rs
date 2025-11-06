@@ -1202,11 +1202,139 @@ pub async fn handle_chat_completions(
         tracing::debug!("ℹ️  No tools requested for this chat completion");
     }
 
-    // Extract metadata for direct connections (this is different from Socket.IO metadata)
-    let metadata = payload_obj
+    // ============================================================================
+    // PROCESS FILES/NOTES AS CONTEXT (RAG)
+    // ============================================================================
+    // Extract files from root level (frontend sends it there, not in metadata)
+    // Then extract/create metadata object
+    let files_from_root = payload_obj
+        .as_object_mut()
+        .and_then(|obj| obj.remove("files"));
+
+    let mut metadata = payload_obj
         .as_object_mut()
         .and_then(|obj| obj.remove("metadata"))
         .unwrap_or(serde_json::json!({}));
+
+    // Add files to metadata if they exist (matching Python backend behavior)
+    if let Some(files) = files_from_root {
+        if let Some(metadata_obj) = metadata.as_object_mut() {
+            metadata_obj.insert("files".to_string(), files);
+        }
+    }
+
+    // Process files/notes/chats as RAG context if present
+    let mut sources = Vec::new();
+    if let Some(files_array) = metadata.get("files").and_then(|f| f.as_array()) {
+        if !files_array.is_empty() {
+            tracing::info!(
+                "📎 Processing {} file attachment(s) for RAG context",
+                files_array.len()
+            );
+
+            // Parse file items
+            let mut file_items: Vec<crate::utils::retrieval::FileItem> = files_array
+                .iter()
+                .filter_map(|item| serde_json::from_value(item.clone()).ok())
+                .collect();
+
+            // Deduplicate files (same as Python backend)
+            // Use a HashSet to track seen items based on JSON representation
+            let mut seen = std::collections::HashSet::new();
+            file_items.retain(|item| {
+                let key = serde_json::to_string(item).unwrap_or_default();
+                seen.insert(key)
+            });
+
+            if file_items.len() < files_array.len() {
+                tracing::debug!(
+                    "📋 Removed {} duplicate file(s), processing {} unique file(s)",
+                    files_array.len() - file_items.len(),
+                    file_items.len()
+                );
+            }
+
+            if !file_items.is_empty() {
+                // Get user groups for access control
+                use crate::services::group::GroupService;
+                use std::collections::HashSet;
+
+                let group_service = GroupService::new(&state.db);
+                let groups = group_service
+                    .get_groups_by_member_id(&auth_user.user.id)
+                    .await
+                    .unwrap_or_default();
+                let user_group_ids: HashSet<String> = groups.into_iter().map(|g| g.id).collect();
+
+                // Extract sources from file items (notes, files, chats, etc.)
+                match crate::utils::retrieval::get_sources_from_items(
+                    &state,
+                    file_items.clone(),
+                    &auth_user.user,
+                    &user_group_ids,
+                )
+                .await
+                {
+                    Ok(extracted_sources) => {
+                        // Count unique source IDs (matching Python's sources_count logic)
+                        let unique_ids: std::collections::HashSet<String> = extracted_sources
+                            .iter()
+                            .filter_map(|s| {
+                                s.source
+                                    .get("id")
+                                    .and_then(|id| id.as_str())
+                                    .map(String::from)
+                            })
+                            .collect();
+
+                        sources = extracted_sources;
+                        tracing::info!(
+                            "✅ Successfully extracted {} source(s) from {} unique document(s)",
+                            sources.len(),
+                            unique_ids.len()
+                        );
+
+                        // Inject sources into messages if we have any
+                        if !sources.is_empty() {
+                            // Get RAG template from config
+                            let rag_template = {
+                                let config = state.config.read().unwrap();
+                                config.rag_template.clone()
+                            };
+
+                            // Get mutable reference to messages array
+                            if let Some(messages_value) = payload_obj.get_mut("messages") {
+                                if let Some(messages_array) = messages_value.as_array_mut() {
+                                    match crate::utils::retrieval::inject_sources_into_messages(
+                                        sources.clone(),
+                                        messages_array,
+                                        &rag_template,
+                                    ) {
+                                        Ok(_) => {
+                                            tracing::info!(
+                                                "✅ Successfully injected RAG context into user message"
+                                            );
+                                        }
+                                        Err(e) => {
+                                            tracing::error!(
+                                                "❌ Failed to inject RAG context: {}",
+                                                e
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("❌ Failed to extract sources from file items: {}", e);
+                    }
+                }
+            }
+        }
+    } else {
+        tracing::debug!("ℹ️  No file attachments in this chat completion request");
+    }
 
     tracing::debug!(
         "Chat completion request - model_id: {}, model_item: {}",
