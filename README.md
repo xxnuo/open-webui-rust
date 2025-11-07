@@ -54,6 +54,7 @@ The Rust backend is a drop-in replacement for the Python backend, offering:
 | Name | Sponsorship Amount | Contributed Files | Privileges |
 |------|----------|---------|---------|
 | [![Baitian Medical](./img/baitian.png)](https://baitianjituan.com) | ¥5000 | 300 | Dedicated Technical Support |
+| 孔祥康 | ¥500 | 30 | Email/IM Service |
 | Knox User Anonymous Sponsorship | ¥300 | 18 | Email/IM Service |
 | [Bestming](https://www.mingagent.com) | ¥100 | 6 | Email/IM Service |
 | HJPING | ¥100 | 6 | Email/IM Service |
