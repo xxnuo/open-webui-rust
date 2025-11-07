@@ -9,14 +9,34 @@ pub struct Knowledge {
     pub user_id: String,
     pub name: String,
     pub description: Option<String>,
-    #[sqlx(json)]
+    #[sqlx(skip)]
     pub data: Option<JsonValue>,
-    #[sqlx(json)]
+    #[sqlx(default)]
+    pub data_str: Option<String>,
+    #[sqlx(skip)]
     pub meta: Option<JsonValue>,
-    #[sqlx(json)]
+    #[sqlx(default)]
+    pub meta_str: Option<String>,
+    #[sqlx(skip)]
     pub access_control: Option<JsonValue>,
+    #[sqlx(default)]
+    pub access_control_str: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
+}
+
+impl Knowledge {
+    pub fn parse_json_fields(&mut self) {
+        if let Some(ref data_str) = self.data_str {
+            self.data = serde_json::from_str(data_str).ok();
+        }
+        if let Some(ref meta_str) = self.meta_str {
+            self.meta = serde_json::from_str(meta_str).ok();
+        }
+        if let Some(ref ac_str) = self.access_control_str {
+            self.access_control = serde_json::from_str(ac_str).ok();
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]

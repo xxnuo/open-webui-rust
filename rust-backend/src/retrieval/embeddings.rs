@@ -3,10 +3,16 @@ use async_openai::{
     types::{CreateEmbeddingRequest, EmbeddingInput},
     Client,
 };
-use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::{RwLock, Semaphore};
-use tracing::{debug, info, warn};
+use tokio::sync::Semaphore;
+use tracing::{debug, info};
+
+#[cfg(feature = "embeddings")]
+use std::path::PathBuf;
+#[cfg(feature = "embeddings")]
+use tokio::sync::RwLock;
+#[cfg(feature = "embeddings")]
+use tracing::warn;
 
 #[cfg(feature = "embeddings")]
 use candle_core::{Device, Tensor};
@@ -237,6 +243,201 @@ impl EmbeddingProvider for OpenAIEmbeddings {
 
         // OpenAI has a limit of ~8000 tokens per request, so batch accordingly
         // Assuming average of 100 tokens per text, batch size of 50 should be safe
+        let batch_size = 50;
+
+        self.embed_batch(texts, batch_size).await
+    }
+
+    fn dimension(&self) -> usize {
+        self.dimension
+    }
+
+    fn model_name(&self) -> &str {
+        &self.model
+    }
+}
+
+/// Knox Chat embedding provider
+pub struct KnoxChatEmbeddings {
+    client: reqwest::Client,
+    api_key: String,
+    base_url: String,
+    model: String,
+    dimension: usize,
+    /// Semaphore to limit concurrent requests
+    semaphore: Arc<Semaphore>,
+}
+
+impl KnoxChatEmbeddings {
+    /// Create a new Knox Chat embedding provider
+    pub fn new(
+        api_key: Option<String>,
+        base_url: Option<String>,
+        model: Option<String>,
+    ) -> Result<Self, EmbeddingError> {
+        let api_key = api_key
+            .or_else(|| std::env::var("KNOXCHAT_API_KEY").ok())
+            .ok_or_else(|| {
+                EmbeddingError::ConfigError(
+                    "KNOXCHAT_API_KEY not set and no API key provided".to_string(),
+                )
+            })?;
+
+        let base_url = base_url
+            .or_else(|| std::env::var("KNOXCHAT_BASE_URL").ok())
+            .unwrap_or_else(|| "https://knox.chat".to_string());
+
+        let model = model.unwrap_or_else(|| "voyage-3.5".to_string());
+
+        // Determine dimension based on model
+        // Common Knox Chat / Voyage models and their dimensions
+        let dimension = match model.as_str() {
+            "voyage-3.5" => 1024,
+            "voyage-3.5-lite" => 1024,
+            "voyage-code-3" => 2048,
+            "voyage-finance-2" => 1024,
+            "voyage-law-2" => 1024,
+            "voyage-code-2" => 1024,
+            "voyage-3-large" => 2048,
+
+            _ => 1024, // Default
+        };
+
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(120))
+            .build()
+            .map_err(|e| {
+                EmbeddingError::ConfigError(format!("Failed to create HTTP client: {}", e))
+            })?;
+
+        // Limit concurrent requests
+        let max_concurrent = std::env::var("KNOXCHAT_MAX_CONCURRENT")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(10);
+
+        info!(
+            "Initialized Knox Chat embeddings: model={}, dimension={}, max_concurrent={}, base_url={}",
+            model, dimension, max_concurrent, base_url
+        );
+
+        Ok(Self {
+            client,
+            api_key,
+            base_url,
+            model,
+            dimension,
+            semaphore: Arc::new(Semaphore::new(max_concurrent)),
+        })
+    }
+
+    /// Create from environment variables
+    pub fn from_env() -> Result<Self, EmbeddingError> {
+        let api_key = std::env::var("KNOXCHAT_API_KEY").ok();
+        let base_url = std::env::var("KNOXCHAT_BASE_URL").ok();
+        let model = std::env::var("RAG_EMBEDDING_MODEL").ok();
+        Self::new(api_key, base_url, model)
+    }
+
+    /// Embed texts in batches
+    async fn embed_batch(
+        &self,
+        texts: Vec<String>,
+        batch_size: usize,
+    ) -> Result<Vec<Vec<f32>>, EmbeddingError> {
+        let mut all_embeddings = Vec::new();
+
+        for chunk in texts.chunks(batch_size) {
+            let _permit = self.semaphore.acquire().await.map_err(|e| {
+                EmbeddingError::ApiError(format!("Failed to acquire semaphore: {}", e))
+            })?;
+
+            debug!("Embedding batch of {} texts", chunk.len());
+
+            let url = format!("{}/v1/embeddings", self.base_url);
+
+            let payload = serde_json::json!({
+                "input": chunk,
+                "model": self.model,
+            });
+
+            let response = self
+                .client
+                .post(&url)
+                .header("Authorization", format!("Bearer {}", self.api_key))
+                .header("Content-Type", "application/json")
+                .json(&payload)
+                .send()
+                .await
+                .map_err(|e| {
+                    EmbeddingError::ApiError(format!("Knox Chat API request failed: {}", e))
+                })?;
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let error_text = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Unknown error".to_string());
+                return Err(EmbeddingError::ApiError(format!(
+                    "Knox Chat API error ({}): {}",
+                    status, error_text
+                )));
+            }
+
+            let response_json: serde_json::Value = response.json().await.map_err(|e| {
+                EmbeddingError::ApiError(format!("Failed to parse Knox Chat response: {}", e))
+            })?;
+
+            // Parse response format: {"data": [{"embedding": [...], "index": 0}, ...]}
+            let data = response_json
+                .get("data")
+                .and_then(|d| d.as_array())
+                .ok_or_else(|| {
+                    EmbeddingError::ApiError(
+                        "Invalid Knox Chat response format: missing 'data' array".to_string(),
+                    )
+                })?;
+
+            for item in data {
+                let embedding = item
+                    .get("embedding")
+                    .and_then(|e| e.as_array())
+                    .ok_or_else(|| {
+                        EmbeddingError::ApiError(
+                            "Invalid Knox Chat response format: missing 'embedding' array"
+                                .to_string(),
+                        )
+                    })?
+                    .iter()
+                    .map(|v| {
+                        v.as_f64().map(|f| f as f32).ok_or_else(|| {
+                            EmbeddingError::ApiError("Invalid embedding value".to_string())
+                        })
+                    })
+                    .collect::<Result<Vec<f32>, _>>()?;
+
+                all_embeddings.push(embedding);
+            }
+        }
+
+        Ok(all_embeddings)
+    }
+}
+
+#[async_trait::async_trait]
+impl EmbeddingProvider for KnoxChatEmbeddings {
+    async fn embed(&self, texts: Vec<String>) -> Result<Vec<Vec<f32>>, EmbeddingError> {
+        if texts.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        info!(
+            "Generating embeddings for {} texts using Knox Chat",
+            texts.len()
+        );
+
+        // Knox Chat can handle reasonable batch sizes
         let batch_size = 50;
 
         self.embed_batch(texts, batch_size).await
@@ -695,12 +896,16 @@ impl EmbeddingFactory {
                 #[cfg(not(feature = "embeddings"))]
                 {
                     Err(EmbeddingError::ConfigError(
-                        "Local embeddings support not compiled. Enable the 'embeddings' feature or set RAG_EMBEDDING_ENGINE to 'openai'".to_string()
+                        "Local embeddings support not compiled. Enable the 'embeddings' feature or set RAG_EMBEDDING_ENGINE to 'openai' or 'knoxchat'".to_string()
                     ))
                 }
             }
             "openai" => {
                 let provider = OpenAIEmbeddings::from_env()?;
+                Ok(Arc::new(provider))
+            }
+            "knoxchat" | "knox" => {
+                let provider = KnoxChatEmbeddings::from_env()?;
                 Ok(Arc::new(provider))
             }
             "local" | "sentence-transformers" => {
@@ -717,7 +922,7 @@ impl EmbeddingFactory {
                 }
             }
             _ => Err(EmbeddingError::ConfigError(format!(
-                "Unsupported embedding engine: {}. Supported: openai, local, sentence-transformers, or '' (empty for local)",
+                "Unsupported embedding engine: {}. Supported: openai, knoxchat, local, sentence-transformers, or '' (empty for local)",
                 engine
             ))),
         }
@@ -729,6 +934,16 @@ impl EmbeddingFactory {
         model: Option<String>,
     ) -> Result<Arc<dyn EmbeddingProvider>, EmbeddingError> {
         let provider = OpenAIEmbeddings::new(api_key, model)?;
+        Ok(Arc::new(provider))
+    }
+
+    /// Create a Knox Chat embedding provider with custom configuration
+    pub fn create_knoxchat(
+        api_key: Option<String>,
+        base_url: Option<String>,
+        model: Option<String>,
+    ) -> Result<Arc<dyn EmbeddingProvider>, EmbeddingError> {
+        let provider = KnoxChatEmbeddings::new(api_key, base_url, model)?;
         Ok(Arc::new(provider))
     }
 

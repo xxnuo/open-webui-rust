@@ -46,16 +46,16 @@ impl<'a> KnowledgeService<'a> {
     }
 
     pub async fn get_knowledge_by_id(&self, id: &str) -> AppResult<Option<Knowledge>> {
-        let result = sqlx::query_as::<_, Knowledge>(
+        let mut result = sqlx::query_as::<_, Knowledge>(
             r#"
             SELECT 
                 id, 
                 user_id, 
                 name, 
                 description, 
-                COALESCE(data, '{}'::jsonb) as data, 
-                COALESCE(meta, '{}'::jsonb) as meta, 
-                access_control, 
+                CAST(data AS TEXT) as data_str,
+                CAST(meta AS TEXT) as meta_str,
+                CAST(access_control AS TEXT) as access_control_str,
                 created_at, 
                 updated_at
             FROM knowledge
@@ -66,20 +66,24 @@ impl<'a> KnowledgeService<'a> {
         .fetch_optional(&self.db.pool)
         .await?;
 
+        if let Some(ref mut knowledge) = result {
+            knowledge.parse_json_fields();
+        }
+
         Ok(result)
     }
 
     pub async fn get_knowledge_by_user_id(&self, user_id: &str) -> AppResult<Vec<Knowledge>> {
-        let knowledge = sqlx::query_as::<_, Knowledge>(
+        let mut knowledge = sqlx::query_as::<_, Knowledge>(
             r#"
             SELECT 
                 id, 
                 user_id, 
                 name, 
                 description, 
-                COALESCE(data, '{}'::jsonb) as data, 
-                COALESCE(meta, '{}'::jsonb) as meta, 
-                access_control, 
+                CAST(data AS TEXT) as data_str,
+                CAST(meta AS TEXT) as meta_str,
+                CAST(access_control AS TEXT) as access_control_str,
                 created_at, 
                 updated_at
             FROM knowledge
@@ -91,20 +95,24 @@ impl<'a> KnowledgeService<'a> {
         .fetch_all(&self.db.pool)
         .await?;
 
+        for k in &mut knowledge {
+            k.parse_json_fields();
+        }
+
         Ok(knowledge)
     }
 
     pub async fn get_all_knowledge(&self) -> AppResult<Vec<Knowledge>> {
-        let knowledge = sqlx::query_as::<_, Knowledge>(
+        let mut knowledge = sqlx::query_as::<_, Knowledge>(
             r#"
             SELECT 
                 id, 
                 user_id, 
                 name, 
                 description, 
-                COALESCE(data, '{}'::jsonb) as data, 
-                COALESCE(meta, '{}'::jsonb) as meta, 
-                access_control, 
+                CAST(data AS TEXT) as data_str,
+                CAST(meta AS TEXT) as meta_str,
+                CAST(access_control AS TEXT) as access_control_str,
                 created_at, 
                 updated_at
             FROM knowledge
@@ -113,6 +121,10 @@ impl<'a> KnowledgeService<'a> {
         )
         .fetch_all(&self.db.pool)
         .await?;
+
+        for k in &mut knowledge {
+            k.parse_json_fields();
+        }
 
         Ok(knowledge)
     }

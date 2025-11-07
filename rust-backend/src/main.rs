@@ -314,6 +314,31 @@ async fn main() -> anyhow::Result<()> {
                     }
                 }
             }
+            "knoxchat" | "knox" => {
+                let api_key = std::env::var("KNOXCHAT_API_KEY").ok();
+                let base_url = std::env::var("KNOXCHAT_BASE_URL").ok();
+                let model_name = if !config.rag_embedding_model.is_empty() {
+                    Some(config.rag_embedding_model.clone())
+                } else {
+                    None
+                };
+
+                match retrieval::embeddings::KnoxChatEmbeddings::new(api_key, base_url, model_name)
+                {
+                    Ok(provider) => {
+                        info!("✅ Embedding provider initialized (Knox Chat)");
+                        Some(Arc::new(provider) as Arc<dyn retrieval::EmbeddingProvider>)
+                    }
+                    Err(e) => {
+                        warn!(
+                            "⚠️  Failed to initialize Knox Chat embedding provider: {}",
+                            e
+                        );
+                        warn!("   Set KNOXCHAT_API_KEY to enable Knox Chat embeddings");
+                        None
+                    }
+                }
+            }
             "" | "local" | "sentence-transformers" => {
                 // Local sentence transformers using Candle
                 #[cfg(feature = "embeddings")]
@@ -337,8 +362,27 @@ async fn main() -> anyhow::Result<()> {
                             warn!("   Model: {}", config.rag_embedding_model);
                             warn!("   Tip: Model will be downloaded from HuggingFace on first use");
 
+                            // Try Knox Chat fallback if API key is available
+                            if let Ok(knox_api_key) = std::env::var("KNOXCHAT_API_KEY") {
+                                info!("ℹ️  Attempting Knox Chat fallback...");
+                                match retrieval::embeddings::KnoxChatEmbeddings::new(
+                                    Some(knox_api_key),
+                                    None,
+                                    Some("voyage-3.5".to_string()),
+                                ) {
+                                    Ok(provider) => {
+                                        info!("✅ Knox Chat fallback initialized");
+                                        Some(Arc::new(provider)
+                                            as Arc<dyn retrieval::EmbeddingProvider>)
+                                    }
+                                    Err(e) => {
+                                        warn!("⚠️  Knox Chat fallback failed: {}", e);
+                                        None
+                                    }
+                                }
+                            }
                             // Try OpenAI fallback if API key is available
-                            if !config.rag_openai_api_key.is_empty() {
+                            else if !config.rag_openai_api_key.is_empty() {
                                 info!("ℹ️  Attempting OpenAI fallback...");
                                 match retrieval::embeddings::OpenAIEmbeddings::new(
                                     Some(config.rag_openai_api_key.clone()),
@@ -365,12 +409,30 @@ async fn main() -> anyhow::Result<()> {
                     warn!("⚠️  Sentence transformers not compiled (embeddings feature disabled)");
                     warn!("   To enable local embeddings:");
                     warn!("   - Rebuild with: cargo build --release --features embeddings");
-                    warn!("   Or use OpenAI instead:");
-                    warn!("   - Set RAG_EMBEDDING_ENGINE=openai");
-                    warn!("   - Set RAG_OPENAI_API_KEY and RAG_EMBEDDING_MODEL");
+                    warn!("   Or use remote embeddings:");
+                    warn!("   - Set RAG_EMBEDDING_ENGINE=knoxchat and KNOXCHAT_API_KEY");
+                    warn!("   - Set RAG_EMBEDDING_ENGINE=openai and RAG_OPENAI_API_KEY");
 
+                    // Try Knox Chat fallback if API key is available
+                    if let Ok(knox_api_key) = std::env::var("KNOXCHAT_API_KEY") {
+                        info!("ℹ️  Attempting Knox Chat fallback...");
+                        match retrieval::embeddings::KnoxChatEmbeddings::new(
+                            Some(knox_api_key),
+                            None,
+                            Some("voyage-3.5".to_string()),
+                        ) {
+                            Ok(provider) => {
+                                info!("✅ Knox Chat fallback initialized");
+                                Some(Arc::new(provider) as Arc<dyn retrieval::EmbeddingProvider>)
+                            }
+                            Err(e) => {
+                                warn!("⚠️  Knox Chat fallback failed: {}", e);
+                                None
+                            }
+                        }
+                    }
                     // Try OpenAI fallback if API key is available
-                    if !config.rag_openai_api_key.is_empty() {
+                    else if !config.rag_openai_api_key.is_empty() {
                         info!("ℹ️  Attempting OpenAI fallback...");
                         match retrieval::embeddings::OpenAIEmbeddings::new(
                             Some(config.rag_openai_api_key.clone()),
@@ -392,7 +454,7 @@ async fn main() -> anyhow::Result<()> {
             }
             _ => {
                 warn!("⚠️  Unknown embedding engine: {}", engine);
-                warn!("   Supported engines: openai, local, sentence-transformers, or '' (empty for local)");
+                warn!("   Supported engines: openai, knoxchat, local, sentence-transformers, or '' (empty for local)");
                 None
             }
         }
