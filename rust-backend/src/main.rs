@@ -1,3 +1,4 @@
+mod cache_manager;
 mod config;
 mod db;
 mod error;
@@ -96,6 +97,11 @@ async fn main() -> anyhow::Result<()> {
     } else {
         None
     };
+
+    // Initialize cache manager
+    let cache_manager = cache_manager::CacheManager::init(redis.clone());
+    cache_manager.start_cleanup_tasks();
+    info!("Cache manager initialized and cleanup tasks started");
 
     // Initialize native Rust Socket.IO
     let socketio_enabled = std::env::var("ENABLE_SOCKETIO")

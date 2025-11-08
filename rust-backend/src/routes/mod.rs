@@ -1,5 +1,6 @@
 pub mod audio;
 pub mod auth;
+pub mod cache;
 pub mod channels;
 pub mod chats;
 pub mod code_execution;
@@ -30,6 +31,7 @@ use actix_web::web;
 pub fn create_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(web::scope("/audio").configure(audio::create_routes))
         .service(web::scope("/auths").configure(auth::create_routes))
+        .service(web::scope("/api/v1").configure(cache::configure))
         .service(web::scope("/channels").configure(channels::create_routes))
         .service(web::scope("/chats").configure(chats::create_routes))
         .service(web::scope("/configs").configure(configs::create_routes))
