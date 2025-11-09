@@ -3,6 +3,7 @@ pub mod auth;
 pub mod cache;
 pub mod chat;
 pub mod chat_completion;
+pub mod chat_middleware;
 pub mod embeddings;
 pub mod misc;
 pub mod password;

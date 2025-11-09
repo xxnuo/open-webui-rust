@@ -832,22 +832,107 @@ async fn get_app_latest_version() -> HttpResponse {
 }
 
 // Models endpoints
-async fn get_models(_state: web::Data<AppState>) -> HttpResponse {
+async fn get_models(
+    state: web::Data<AppState>,
+    auth_user: Option<middleware::AuthUser>,
+) -> HttpResponse {
     use serde_json::json;
 
-    // TODO: Implement model fetching from configured backends
-    HttpResponse::Ok().json(json!({
-        "data": []
-    }))
+    // Get config for model service
+    let config = state.config.read().unwrap().clone();
+    let model_service = crate::services::models::ModelService::new(config.clone());
+
+    // Fetch all models
+    match model_service.get_all_models(&state.db).await {
+        Ok(mut models) => {
+            // Apply user-based filtering if authenticated
+            if let Some(user) = auth_user {
+                models =
+                    model_service.filter_models_by_access(models, &user.user.id, &user.user.role);
+            } else {
+                // For unauthenticated users, only show public models
+                models = model_service.filter_models_by_access(models, "", "guest");
+            }
+
+            // Apply model ordering if configured
+            if !config.model_order_list.is_empty() {
+                let order_map: std::collections::HashMap<String, usize> = config
+                    .model_order_list
+                    .iter()
+                    .enumerate()
+                    .map(|(i, s)| (s.clone(), i))
+                    .collect();
+
+                models.sort_by(|a, b| {
+                    let a_order = order_map.get(&a.id).copied().unwrap_or(usize::MAX);
+                    let b_order = order_map.get(&b.id).copied().unwrap_or(usize::MAX);
+
+                    a_order.cmp(&b_order).then_with(|| {
+                        // If both have same order (or no order), sort by name
+                        let a_name = a.name.as_deref().unwrap_or(&a.id);
+                        let b_name = b.name.as_deref().unwrap_or(&b.id);
+                        a_name.cmp(b_name)
+                    })
+                });
+            }
+
+            // Process model tags
+            for model in &mut models {
+                let mut tags = Vec::new();
+
+                // Collect tags from info.meta.tags
+                if let Some(info) = &model.info {
+                    if let Some(meta) = &info.meta {
+                        if let Some(meta_tags) = &meta.tags {
+                            tags.extend(meta_tags.clone());
+                        }
+                    }
+                }
+
+                // Collect tags from model.tags
+                if let Some(model_tags) = &model.tags {
+                    tags.extend(model_tags.clone());
+                }
+
+                // Deduplicate tags
+                tags.sort_by(|a, b| a.name.cmp(&b.name));
+                tags.dedup_by(|a, b| a.name == b.name);
+
+                model.tags = if tags.is_empty() { None } else { Some(tags) };
+            }
+
+            HttpResponse::Ok().json(json!({
+                "data": models
+            }))
+        }
+        Err(e) => {
+            tracing::error!("Failed to fetch models: {}", e);
+            HttpResponse::Ok().json(json!({
+                "data": []
+            }))
+        }
+    }
 }
 
-async fn get_base_models(_state: web::Data<AppState>) -> HttpResponse {
+async fn get_base_models(state: web::Data<AppState>) -> HttpResponse {
     use serde_json::json;
 
-    // TODO: Implement base model fetching
-    HttpResponse::Ok().json(json!({
-        "data": []
-    }))
+    // Get config for model service
+    let config = state.config.read().unwrap().clone();
+    let model_service = crate::services::models::ModelService::new(config);
+
+    // Fetch base models (no filtering or customization)
+    match model_service.get_all_base_models(&state.db).await {
+        Ok(models) => HttpResponse::Ok().json(json!({
+            "data": models
+        })),
+        Err(e) => {
+            tracing::error!("Failed to fetch base models: {}", e);
+            HttpResponse::Ok().json(json!({
+                "data": []
+            }))
+        }
+    }
 }
 
 // Chat endpoints
@@ -1056,13 +1141,133 @@ async fn chat_action(
 
 // Embeddings endpoint
 async fn embeddings(
-    _state: web::Data<AppState>,
-    _payload: web::Json<serde_json::Value>,
+    state: web::Data<AppState>,
+    payload: web::Json<serde_json::Value>,
+    auth_user: Option<middleware::AuthUser>,
 ) -> Result<HttpResponse, crate::error::AppError> {
-    // TODO: Implement embeddings handler
-    Err(crate::error::AppError::NotImplemented(
-        "Embeddings endpoint not fully implemented yet".to_string(),
-    ))
+    use serde_json::json;
+
+    let mut form_data = payload.into_inner();
+
+    // Get model ID from request
+    let model_id = form_data
+        .get("model")
+        .and_then(|m| m.as_str())
+        .ok_or_else(|| crate::error::AppError::BadRequest("Model ID required".to_string()))?
+        .to_string();
+
+    // Get config and fetch models
+    let config = state.config.read().unwrap().clone();
+    let model_service = crate::services::models::ModelService::new(config.clone());
+
+    let all_models = model_service.get_all_models(&state.db).await?;
+
+    // Find the requested model
+    let model = all_models
+        .iter()
+        .find(|m| m.id == model_id)
+        .ok_or_else(|| crate::error::AppError::NotFound("Model not found".to_string()))?;
+
+    // Check access control
+    if let Some(ref user) = auth_user {
+        if user.user.role != "admin" {
+            if !model_service.check_model_access(model, &user.user.id, &user.user.role) {
+                return Err(crate::error::AppError::Forbidden(
+                    "Access denied to this model".to_string(),
+                ));
+            }
+        }
+    }
+
+    // Determine which backend to use based on model type
+    let is_openai_model = model.owned_by == "openai"
+        || model.owned_by == "azure"
+        || (model.pipeline.is_none() && model.owned_by != "custom");
+
+    if is_openai_model {
+        // Use OpenAI embeddings endpoint
+        // Get the URL index from model info
+        let url_idx = model
+            .info
+            .as_ref()
+            .and_then(|info| info.params.as_ref())
+            .and_then(|params| params.get("urlIdx"))
+            .and_then(|idx| idx.as_u64())
+            .unwrap_or(0) as usize;
+
+        // Get OpenAI config
+        if url_idx >= config.openai_api_base_urls.len() {
+            return Err(crate::error::AppError::BadRequest(
+                "Invalid URL index for model".to_string(),
+            ));
+        }
+
+        let base_url = &config.openai_api_base_urls[url_idx];
+        let api_key = config
+            .openai_api_keys
+            .get(url_idx)
+            .cloned()
+            .unwrap_or_default();
+
+        // Prepare embedding request
+        let embedding_url = format!("{}/embeddings", base_url);
+
+        let mut request = state.http_client.post(&embedding_url);
+
+        if !api_key.is_empty() {
+            request = request.header("Authorization", format!("Bearer {}", api_key));
+        }
+
+        // Send request
+        let response = request
+            .json(&form_data)
+            .send()
+            .await
+            .map_err(|e| crate::error::AppError::ExternalServiceError(e.to_string()))?;
+
+        let status = response.status();
+        let response_body: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| crate::error::AppError::ExternalServiceError(e.to_string()))?;
+
+        if !status.is_success() {
+            return Ok(HttpResponse::build(
+                actix_web::http::StatusCode::from_u16(status.as_u16()).unwrap(),
+            )
+            .json(response_body));
+        }
+
+        Ok(HttpResponse::Ok().json(response_body))
+    } else if let Some(pipeline) = &model.pipeline {
+        // Handle pipeline/function models
+        if pipeline.pipeline_type.as_deref() == Some("pipe") {
+            // TODO: Implement function/pipeline embedding generation
+            // This would require calling the Python function module
+            Err(crate::error::AppError::NotImplemented(
+                "Pipeline embeddings not yet implemented".to_string(),
+            ))
+        } else {
+            Err(crate::error::AppError::BadRequest(
+                "Invalid model type for embeddings".to_string(),
+            ))
+        }
+    } else {
+        // Custom model - try to use underlying base model
+        if let Some(info) = &model.info {
+            if let Some(params) = &info.params {
+                if let Some(base_model_id) = params.get("base_model_id").and_then(|v| v.as_str()) {
+                    // Use Box::pin to handle recursive async call
+                    form_data["model"] = json!(base_model_id);
+                    return Box::pin(embeddings(state, web::Json(form_data), auth_user)).await;
+                }
+            }
+        }
+
+        Err(crate::error::AppError::NotImplemented(
+            "Custom model embeddings require base_model_id".to_string(),
+        ))
+    }
 }
 
 // Task management

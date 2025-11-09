@@ -176,6 +176,7 @@ pub struct Config {
 
     // Code Execution
     pub code_execution_engine: String,
+    pub enable_pipeline_filters: bool,
     pub code_execution_jupyter_url: Option<String>,
     pub code_execution_jupyter_auth: Option<String>,
     pub code_execution_jupyter_auth_token: Option<String>,
@@ -620,6 +621,10 @@ impl Config {
             // Code Execution
             code_execution_engine: env::var("CODE_EXECUTION_ENGINE")
                 .unwrap_or_else(|_| "python".to_string()),
+            enable_pipeline_filters: env::var("ENABLE_PIPELINE_FILTERS")
+                .unwrap_or_else(|_| "true".to_string())
+                .to_lowercase()
+                == "true",
             code_execution_jupyter_url: env::var("CODE_EXECUTION_JUPYTER_URL").ok(),
             code_execution_jupyter_auth: env::var("CODE_EXECUTION_JUPYTER_AUTH").ok(),
             code_execution_jupyter_auth_token: env::var("CODE_EXECUTION_JUPYTER_AUTH_TOKEN").ok(),
