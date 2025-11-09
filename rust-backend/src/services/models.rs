@@ -148,6 +148,11 @@ impl ModelService {
     async fn fetch_openai_models(&self) -> AppResult<Vec<Model>> {
         let mut all_models = Vec::new();
 
+        // Skip if no URLs are configured
+        if self.config.openai_api_base_urls.is_empty() {
+            return Ok(all_models);
+        }
+
         for (idx, base_url) in self.config.openai_api_base_urls.iter().enumerate() {
             let api_key = self
                 .config
@@ -163,6 +168,32 @@ impl ModelService {
                 .or_else(|| self.config.openai_api_configs.get(base_url))
                 .and_then(|v| v.as_object())
                 .cloned();
+
+            // Check if this endpoint is explicitly disabled
+            let enabled = api_config
+                .as_ref()
+                .and_then(|cfg| cfg.get("enable"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
+
+            if !enabled {
+                continue;
+            }
+
+            // Skip if no API key is provided (unless it's explicitly configured as auth_type "none")
+            let auth_type = api_config
+                .as_ref()
+                .and_then(|cfg| cfg.get("auth_type"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("bearer");
+
+            if api_key.is_empty() && auth_type != "none" {
+                warn!(
+                    "Skipping OpenAI endpoint {} - no API key configured and auth_type is not 'none'",
+                    base_url
+                );
+                continue;
+            }
 
             match self
                 .fetch_models_from_endpoint(base_url, &api_key, api_config.as_ref())

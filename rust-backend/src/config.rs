@@ -440,26 +440,38 @@ impl Config {
                 .unwrap_or_else(|_| "https://api.openai.com/v1".to_string()),
             openai_api_key: env::var("OPENAI_API_KEY").unwrap_or_default(),
             openai_api_base_urls: {
-                let urls_str = env::var("OPENAI_API_BASE_URLS").unwrap_or_else(|_| {
-                    env::var("OPENAI_API_BASE_URL")
-                        .unwrap_or_else(|_| "https://api.openai.com/v1".to_string())
-                });
-                urls_str
-                    .split(';')
-                    .map(|s| {
-                        let trimmed = s.trim();
-                        if trimmed.is_empty() {
-                            "https://api.openai.com/v1".to_string()
-                        } else {
-                            trimmed.to_string()
-                        }
-                    })
-                    .collect()
+                let urls_str = env::var("OPENAI_API_BASE_URLS")
+                    .or_else(|_| env::var("OPENAI_API_BASE_URL"))
+                    .unwrap_or_default();
+
+                if urls_str.is_empty() {
+                    // No URLs configured - return empty vec
+                    vec![]
+                } else {
+                    urls_str
+                        .split(';')
+                        .filter_map(|s| {
+                            let trimmed = s.trim();
+                            if trimmed.is_empty() {
+                                None
+                            } else {
+                                Some(trimmed.to_string())
+                            }
+                        })
+                        .collect()
+                }
             },
             openai_api_keys: {
                 let keys_str = env::var("OPENAI_API_KEYS")
-                    .unwrap_or_else(|_| env::var("OPENAI_API_KEY").unwrap_or_default());
-                keys_str.split(';').map(|s| s.trim().to_string()).collect()
+                    .or_else(|_| env::var("OPENAI_API_KEY"))
+                    .unwrap_or_default();
+
+                if keys_str.is_empty() {
+                    // No keys configured - return empty vec
+                    vec![]
+                } else {
+                    keys_str.split(';').map(|s| s.trim().to_string()).collect()
+                }
             },
             openai_api_configs: serde_json::json!({}),
 
