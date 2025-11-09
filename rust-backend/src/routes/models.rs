@@ -341,7 +341,7 @@ async fn get_model_profile_image(
     }
 
     // Return default favicon
-    let static_dir = std::path::Path::new("../backend/open_webui/static");
+    let static_dir = std::path::Path::new("../svelte-frontend/static/static");
     let favicon_path = static_dir.join("favicon.png");
 
     match std::fs::read(favicon_path) {

@@ -27,22 +27,10 @@ The Rust backend is a drop-in replacement for the Python backend, offering:
 - **Zero-copy streaming** for chat completions
 - **Production-ready** with comprehensive error handling
 
-## **IMPORTANT‼️** Rust Backend Current Complete Code Status: 87% (Runnable Project, Some Features Missing)
+## **IMPORTANT‼️** Your sponsorship will accelerate and improve the project development progress:
 
-- **Initial Version Based on Open WebUI 0.6.32** The development of this project's initial version updates files according to sponsorship amounts. Backend files are added based on donations/sponsorships until the complete backend files are added:
-
-   - **Target: $10,000 or Sufficient Star Count to Add Complete Backend Code**
-
-   1. Sponsorship of $20-$99: Update 2 files, add sponsor to project contributors list, e.g.: John Doe-$66
-   2. Each Star: Add 5 files
-   3. Sponsorship of $100-$500: Update 6 files, add sponsor to project contributors list with designated link, e.g.: [Jane Doe-$180](https://Jane-Doe.domain)
-   4. Sponsorship of $501-$2000: Update 10 files, add sponsor to project contributors list with designated link and image, e.g.: <br/>
-   <a href="https://knox.chat" target="_blank" rel="noopener noreferrer">
-    <img width="80" src="./img/logo99.png" alt="Name">
-   </a><br/>
-   5. Sponsorship of $10,000: Directly update all files and list as project partner, add sponsor to project contributors list with designated link and image, and provide usage and deployment support.
-
-- **For Sponsorships: Please Scan the QR Code Below via Alipay or Paypal to Sponsor and Contact: support@knox.chat**
+- **Please Scan the QR Code Below via Alipay or Paypal to Sponsor**
+- **Contact us: support@knox.chat**
 
 <p align="center" style="display: flex; align-items: center; justify-content: center; gap: 20px;">
    <img width="246" src="./img/ali.png" alt="Name">

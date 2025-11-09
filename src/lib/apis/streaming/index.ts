@@ -4,9 +4,9 @@ import type { ParsedEvent } from 'eventsource-parser';
 type TextStreamUpdate = {
 	done: boolean;
 	value: string;
-	sources?: any;
-	selectedModelId?: any;
-	error?: any;
+	sources?: Record<string, unknown>;
+	selectedModelId?: string;
+	error?: string | Error;
 	usage?: ResponseUsage;
 };
 

@@ -225,7 +225,7 @@ async fn get_user_profile_image(
     }
 
     // Return default user avatar
-    let static_dir = std::path::Path::new("../backend/open_webui/static");
+    let static_dir = std::path::Path::new("../svelte-frontend/static/static");
     let user_avatar_path = static_dir.join("user.png");
 
     match std::fs::read(user_avatar_path) {

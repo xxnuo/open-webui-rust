@@ -614,7 +614,7 @@ async fn main() -> anyhow::Result<()> {
             // Serve default user avatar at root (for backward compatibility)
             .route("/user.png", web::get().to(serve_user_avatar))
             // Serve static files from static directory
-            .service(Files::new("/static", "../static/static"))
+            .service(Files::new("/static", "../svelte-frontend/static/static"))
     })
     // CRITICAL: Disable keep-alive buffering for real-time streaming
     .keep_alive(actix_web::http::KeepAlive::Timeout(
@@ -631,14 +631,14 @@ async fn main() -> anyhow::Result<()> {
 
 // Serve default user avatar
 async fn serve_user_avatar() -> Result<actix_files::NamedFile, crate::error::AppError> {
-    let path = std::path::Path::new("../static/static/user.png");
+    let path = std::path::Path::new("../svelte-frontend/static/static/user.png");
     actix_files::NamedFile::open(path)
         .map_err(|_| crate::error::AppError::NotFound("User avatar not found".to_string()))
 }
 
 // Serve favicon
 async fn serve_favicon() -> Result<actix_files::NamedFile, crate::error::AppError> {
-    let path = std::path::Path::new("../static/static/favicon.png");
+    let path = std::path::Path::new("../svelte-frontend/static/static/favicon.png");
     actix_files::NamedFile::open(path)
         .map_err(|_| crate::error::AppError::NotFound("Favicon not found".to_string()))
 }

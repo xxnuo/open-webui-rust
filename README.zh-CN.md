@@ -27,25 +27,13 @@ Rust 后端是 Python 后端的直接替代品, 有这些好处:
 - **零拷贝流式传输**用于聊天生成
 - **生产就绪**具有全面的错误处理
 
-## **重要‼️** Rust后端当前完整代码状态：87% (可运行项目、部分功能缺失)
+## **重要‼️** 您的赞助将会加速与完善项目开发进度：
 
-- **初始版本基于Open WebUI 0.6.32开发**
-本项目初始版本开发根据赞助数量更新文件数，根据打赏/赞助添加后端文件直至添加完整的后端文件：
+- **请通过以下二维码进行支付宝或Paypal扫码赞助并微信联系：knoxsale**
 
-   - **目标1万元或足够的Star数量添加完整后端代码**
-
-   1. 赞助¥20-¥99更新2个文件，添加赞助者至项目共建列表，例如：张无忌-¥66
-   2. 每颗星添加5个文件
-   3. 赞助¥100-¥500更新6个文件，添加赞助者至项目共建列表带指定链接，例如：[韦小宝-¥180](https://韦小宝指定链接)
-   4. 赞助¥501-¥2000更新10个文件，添加赞助者至项目共建列表带指定链接和指定图片，例如：<br/>
-   <a href="https://knox.chat" target="_blank" rel="noopener noreferrer">
-    <img width="80" src="./img/logo99.png" alt="名称">
-   </a><br/>
-   5. 赞助¥10,000直接更新所有文件并列入项目合伙人，添加赞助者至项目共建列表带指定链接和指定图片并提供使用和部署支持。
-
-- **赞助者请直接通过以下二维码进行支付宝扫码赞助并微信联系：knoxsale**
-<p align="center">
-   <img width="200" src="./img/ali.png" alt="名称">
+<p align="center" style="display: flex; align-items: center; justify-content: center; gap: 20px;">
+   <img width="246" src="./img/ali.png" alt="Name">
+   <img width="229" src="./img/paypal.png" alt="Name">
 </p>
 
 ## 赞助者列表

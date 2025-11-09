@@ -1,4 +1,4 @@
-import { RETRIEVAL_API_BASE_URL } from '$lib/constants';
+import { RETRIEVAL_API_BASE_URL } from '@/lib/constants';
 
 export const getRAGConfig = async (token: string) => {
 	let error = null;

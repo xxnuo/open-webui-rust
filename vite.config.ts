@@ -1,35 +1,29 @@
-import { sveltekit } from '@sveltejs/kit/vite';
-import { defineConfig } from 'vite';
+import path from "path"
+import tailwindcss from "@tailwindcss/vite"
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
 
-import { viteStaticCopy } from 'vite-plugin-static-copy';
-
+// https://vite.dev/config/
 export default defineConfig({
-	plugins: [
-		sveltekit(),
-		viteStaticCopy({
-			targets: [
-				{
-					src: 'node_modules/onnxruntime-web/dist/*.jsep.*',
-
-					dest: 'wasm'
-				}
-			]
-		})
-	],
-	define: {
-		APP_VERSION: JSON.stringify(process.env.npm_package_version),
-		APP_BUILD_HASH: JSON.stringify(process.env.APP_BUILD_HASH || 'dev-build')
-	},
-	build: {
-		sourcemap: true
-	},
-	worker: {
-		format: 'es'
-	},
-	esbuild: {
-		pure: process.env.ENV === 'dev' ? [] : ['console.log', 'console.debug', 'console.error']
-	},
-	ssr: {
-		noExternal: ['@sveltejs/kit']
-	}
-});
+  plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },
+  server: {
+    port: 5173,
+    host: true,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
+      '/socket.io': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+        ws: true,
+      },
+    },
+  },
+})

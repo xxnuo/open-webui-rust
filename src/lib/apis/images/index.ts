@@ -1,4 +1,4 @@
-import { IMAGES_API_BASE_URL } from '$lib/constants';
+import { IMAGES_API_BASE_URL } from '@/lib/constants';
 
 export const getConfig = async (token: string = '') => {
 	let error = null;
