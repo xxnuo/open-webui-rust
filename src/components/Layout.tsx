@@ -42,6 +42,18 @@ export default function Layout() {
 
   // Setup Socket.IO
   const setupSocket = async (enableWebsocket: boolean) => {
+    // Don't create new socket if one already exists and is connected
+    if (socketRef.current?.connected) {
+      console.log('Socket already connected, reusing existing socket');
+      return;
+    }
+
+    // Disconnect existing socket if any
+    if (socketRef.current) {
+      socketRef.current.removeAllListeners();
+      socketRef.current.disconnect();
+    }
+
     const SOCKETIO_URL = import.meta.env.VITE_SOCKETIO_URL || `http://localhost:8080`;
     
     const _socket = io(SOCKETIO_URL, {
@@ -49,7 +61,7 @@ export default function Layout() {
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       randomizationFactor: 0.5,
-      path: '/socket.io',
+      path: '/socket.io',  // Standard Socket.IO path
       transports: enableWebsocket ? ['websocket'] : ['polling', 'websocket'],
       auth: { token: localStorage.getItem('token') || '' }
     });
@@ -127,33 +139,34 @@ export default function Layout() {
 
   // Initialize socket and auth
   useEffect(() => {
+    let isActive = true;
     const initialize = async () => {
-      if (!config) return;
+      if (!config || !isActive) return;
 
-      // Setup socket
+      // Setup socket only once
       await setupSocket(config.features?.enable_websocket ?? true);
 
       // Check authentication
       const token = localStorage.getItem('token');
-      if (token) {
+      if (token && isActive) {
         try {
           const sessionUser = await getSessionUser(token);
-          if (sessionUser) {
+          if (sessionUser && isActive) {
             setUser(sessionUser);
             
             // Load user settings
             try {
               const userSettings = await getUserSettings(token);
-              if (userSettings && userSettings.ui) {
+              if (userSettings && userSettings.ui && isActive) {
                 setSettings(userSettings.ui);
               } else {
                 // Fallback to localStorage if no settings from backend
                 try {
                   const localSettings = JSON.parse(localStorage.getItem('settings') || '{}');
-                  setSettings(localSettings);
+                  if (isActive) setSettings(localSettings);
                 } catch (e) {
                   console.error('Failed to parse settings from localStorage', e);
-                  setSettings({});
+                  if (isActive) setSettings({});
                 }
               }
             } catch (error) {
@@ -161,15 +174,15 @@ export default function Layout() {
               // Fallback to localStorage
               try {
                 const localSettings = JSON.parse(localStorage.getItem('settings') || '{}');
-                setSettings(localSettings);
+                if (isActive) setSettings(localSettings);
               } catch (e) {
                 console.error('Failed to parse settings from localStorage', e);
-                setSettings({});
+                if (isActive) setSettings({});
               }
             }
           } else {
             localStorage.removeItem('token');
-            if (location.pathname !== '/auth') {
+            if (location.pathname !== '/auth' && isActive) {
               const currentUrl = `${window.location.pathname}${window.location.search}`;
               const encodedUrl = encodeURIComponent(currentUrl);
               navigate(`/auth?redirect=${encodedUrl}`);
@@ -179,12 +192,12 @@ export default function Layout() {
           console.error('Auth error:', error);
           toast.error(`${error}`);
           localStorage.removeItem('token');
-          if (location.pathname !== '/auth') {
+          if (location.pathname !== '/auth' && isActive) {
             navigate('/auth');
           }
         }
       } else {
-        if (location.pathname !== '/auth') {
+        if (location.pathname !== '/auth' && isActive) {
           const currentUrl = `${window.location.pathname}${window.location.search}`;
           const encodedUrl = encodeURIComponent(currentUrl);
           navigate(`/auth?redirect=${encodedUrl}`);
@@ -195,12 +208,11 @@ export default function Layout() {
     initialize();
 
     return () => {
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
+      isActive = false;
       if (tokenTimerRef.current) {
         clearInterval(tokenTimerRef.current);
       }
+      // Don't disconnect socket on unmount, keep it for the app
     };
   }, [config, setUser, setSocket, setSettings, navigate, location]);
 

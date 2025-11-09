@@ -44,21 +44,45 @@ export const generateOpenAIChatCompletion = async (
     },
     credentials: 'include',
     body: JSON.stringify(body)
-  })
-    .then(async (res) => {
-      if (!res.ok) throw await res.json();
-      return res.json();
-    })
-    .catch((err) => {
-      error = err?.detail ?? err;
-      return null;
-    });
+  }).catch((err) => {
+    console.error(err);
+    error = err;
+    return null;
+  });
 
   if (error) {
     throw error;
   }
 
-  return res;
+  if (!res) {
+    throw new Error('No response from server');
+  }
+
+  if (!res.ok) {
+    const errorData = await res.json();
+    throw errorData;
+  }
+
+  // Check content type to determine if it's Socket.IO streaming or regular response
+  const contentType = res.headers.get('content-type');
+  const isJson = contentType && contentType.includes('application/json');
+
+  if (isJson) {
+    const jsonResponse = await res.json();
+    
+    // Check if backend is using Socket.IO for streaming
+    if (jsonResponse.status === 'streaming' && jsonResponse.message?.includes('Socket.IO')) {
+      console.log('Using Socket.IO streaming for chat completion');
+      // Return the streaming status response - Socket.IO will handle actual streaming
+      return jsonResponse;
+    }
+    
+    // Regular JSON response (non-streaming)
+    return jsonResponse;
+  }
+
+  // If not JSON, it might be SSE streaming - shouldn't happen with generateOpenAIChatCompletion
+  throw new Error('Unexpected response format');
 };
 
 export const getOpenAIModels = async (token: string, urlIdx?: number) => {

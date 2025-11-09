@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import { useAppStore } from '@/store';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,11 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import Citations from './Messages/Citations';
+import CodeExecutions from './Messages/CodeExecutions';
+import StatusHistory from './Messages/StatusHistory';
+import WebSearchResults from './Messages/WebSearchResults';
+import FollowUps from './Messages/FollowUps';
 
 interface FileAttachment {
   id: string;
@@ -34,10 +39,13 @@ interface ChatMessage {
   done?: boolean;
   error?: any;
   statusHistory?: any[];
+  status?: any;
   sources?: any[];
   code_executions?: any[];
-  followUps?: any[];
+  followUps?: string[];
   embeds?: any[];
+  info?: any;
+  annotation?: any;
 }
 
 interface MessageProps {
@@ -51,9 +59,11 @@ interface MessageProps {
   onRate?: (rating: number) => void;
   onContinue?: () => void;
   onNavigate?: (direction: 'prev' | 'next') => void;
+  onFollowUpClick?: (followUp: string) => void;
+  onEmbedClick?: (url: string, title: string) => void;
 }
 
-export default function Message({ 
+const Message = memo(function Message({ 
   message, 
   isLast = false, 
   siblings = [],
@@ -63,7 +73,9 @@ export default function Message({
   onDelete,
   onRate,
   onContinue,
-  onNavigate
+  onNavigate,
+  onFollowUpClick,
+  onEmbedClick
 }: MessageProps) {
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -247,55 +259,33 @@ export default function Message({
           )}
         </div>
 
-        {/* Status indicators */}
-        {message.statusHistory && message.statusHistory.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {message.statusHistory.map((status: any, idx: number) => (
-              <Badge key={idx} variant="outline" className="text-xs">
-                {status.action || status.description}
-              </Badge>
-            ))}
-          </div>
-        )}
+        {/* Status History and Web Search Results */}
+        <StatusHistory 
+          statusHistory={message.statusHistory || []} 
+          currentStatus={message.status}
+        />
+        <WebSearchResults statusHistory={message.statusHistory} />
 
-        {/* Sources/Citations */}
-        {message.sources && message.sources.length > 0 && (
-          <div className="mt-2 space-y-1">
-            <p className="text-xs font-semibold text-muted-foreground">Sources:</p>
-            <div className="flex flex-wrap gap-2">
-              {message.sources.map((source: any, idx: number) => (
-                <Badge key={idx} variant="secondary" className="text-xs">
-                  {source.name || source.title || `Source ${idx + 1}`}
-                </Badge>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Code executions */}
+        {/* Code Executions */}
         {message.code_executions && message.code_executions.length > 0 && (
-          <div className="mt-2 space-y-2">
-            {message.code_executions.map((execution: any, idx: number) => (
-              <div key={idx} className="p-2 rounded-md bg-muted text-xs">
-                <div className="font-semibold mb-1">Code Execution {idx + 1}</div>
-                <pre className="overflow-x-auto">{execution.output || execution.result}</pre>
-              </div>
-            ))}
-          </div>
+          <CodeExecutions codeExecutions={message.code_executions} />
+        )}
+
+        {/* Citations/Sources */}
+        {message.sources && message.sources.length > 0 && (
+          <Citations 
+            id={message.id}
+            sources={message.sources} 
+            onEmbedClick={onEmbedClick}
+          />
         )}
 
         {/* Follow-ups */}
-        {message.followUps && message.followUps.length > 0 && (
-          <div className="mt-2 space-y-1">
-            <p className="text-xs font-semibold text-muted-foreground">Suggested follow-ups:</p>
-            <div className="flex flex-wrap gap-2">
-              {message.followUps.map((followUp: any, idx: number) => (
-                <Button key={idx} variant="outline" size="sm" className="text-xs h-7">
-                  {followUp}
-                </Button>
-              ))}
-            </div>
-          </div>
+        {message.followUps && message.followUps.length > 0 && onFollowUpClick && (
+          <FollowUps 
+            followUps={message.followUps}
+            onFollowUpClick={onFollowUpClick}
+          />
         )}
 
         {/* Action buttons */}
@@ -390,4 +380,19 @@ export default function Message({
       </div>
     </div>
   );
-}
+}, (prevProps, nextProps) => {
+  // Custom comparison function for memo - only re-render if message content actually changed
+  return (
+    prevProps.message.id === nextProps.message.id &&
+    prevProps.message.content === nextProps.message.content &&
+    prevProps.message.done === nextProps.message.done &&
+    prevProps.message.error === nextProps.message.error &&
+    prevProps.isLast === nextProps.isLast &&
+    JSON.stringify(prevProps.message.statusHistory) === JSON.stringify(nextProps.message.statusHistory) &&
+    JSON.stringify(prevProps.message.sources) === JSON.stringify(nextProps.message.sources) &&
+    JSON.stringify(prevProps.message.code_executions) === JSON.stringify(nextProps.message.code_executions) &&
+    JSON.stringify(prevProps.message.followUps) === JSON.stringify(nextProps.message.followUps)
+  );
+});
+
+export default Message;

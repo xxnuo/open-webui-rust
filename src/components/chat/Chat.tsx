@@ -65,7 +65,6 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
     currentId: null
   });
   const [isGenerating, setIsGenerating] = useState(false);
-  const [chatFiles, setChatFiles] = useState<FileAttachment[]>([]);
   const [autoScroll, setAutoScroll] = useState(true);
   const [taskIds, setTaskIds] = useState<string[] | null>(null);
   
@@ -88,8 +87,10 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
 
   // Auto-scroll when messages change
   useEffect(() => {
-    scrollToBottom();
-  }, [history, scrollToBottom]);
+    if (autoScroll) {
+      scrollToBottom();
+    }
+  }, [history, autoScroll, scrollToBottom]);
 
   // Handle scroll events to update autoScroll
   const handleScroll = useCallback(() => {
@@ -108,7 +109,7 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
     
     // Traverse back to root
     while (currentId) {
-      const message = history.messages[currentId];
+      const message: ChatMessage = history.messages[currentId];
       if (message) {
         messages.unshift(message);
         currentId = message.parentId;
@@ -122,103 +123,9 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
 
   const messages = getMessages();
 
-  // Socket.IO event handler
-  useEffect(() => {
-    if (!socket || !id) return;
-
-    const handleChatEvent = (event: any) => {
-      console.log('Chat event:', event);
-
-      if (event.chat_id !== id) return;
-
-      setHistory(prevHistory => {
-        const message = prevHistory.messages[event.message_id];
-        if (!message) return prevHistory;
-
-        const newHistory = { ...prevHistory };
-        const newMessage = { ...message };
-        
-        const type = event?.data?.type ?? null;
-        const data = event?.data?.data ?? null;
-
-        if (type === 'status') {
-          if (newMessage.statusHistory) {
-            newMessage.statusHistory.push(data);
-          } else {
-            newMessage.statusHistory = [data];
-          }
-        } else if (type === 'chat:completion') {
-          handleChatCompletion(data, newMessage);
-        } else if (type === 'chat:tasks:cancel') {
-          setTaskIds(null);
-          const responseMessage = newHistory.messages[newHistory.currentId!];
-          if (responseMessage && responseMessage.parentId) {
-            for (const msgId of newHistory.messages[responseMessage.parentId].childrenIds) {
-              newHistory.messages[msgId].done = true;
-            }
-          }
-        } else if (type === 'chat:message:delta' || type === 'message') {
-          newMessage.content += data.content;
-        } else if (type === 'chat:message' || type === 'replace') {
-          newMessage.content = data.content;
-        } else if (type === 'chat:message:files' || type === 'files') {
-          newMessage.files = data.files;
-        } else if (type === 'chat:message:embeds' || type === 'embeds') {
-          newMessage.embeds = data.embeds;
-        } else if (type === 'chat:message:error') {
-          newMessage.error = data.error;
-        } else if (type === 'chat:message:follow_ups') {
-          newMessage.followUps = data.follow_ups;
-        } else if (type === 'source' || type === 'citation') {
-          if (data?.type === 'code_execution') {
-            if (!newMessage.code_executions) {
-              newMessage.code_executions = [];
-            }
-            const existingIndex = newMessage.code_executions.findIndex(
-              (exec: any) => exec.id === data.id
-            );
-            if (existingIndex !== -1) {
-              newMessage.code_executions[existingIndex] = data;
-            } else {
-              newMessage.code_executions.push(data);
-            }
-          } else {
-            if (newMessage.sources) {
-              newMessage.sources.push(data);
-            } else {
-              newMessage.sources = [data];
-            }
-          }
-        } else if (type === 'notification') {
-          const toastType = data?.type ?? 'info';
-          const toastContent = data?.content ?? '';
-          
-          if (toastType === 'success') {
-            toast.success(toastContent);
-          } else if (toastType === 'error') {
-            toast.error(toastContent);
-          } else if (toastType === 'warning') {
-            toast.warning(toastContent);
-          } else {
-            toast.info(toastContent);
-          }
-        }
-
-        newHistory.messages[event.message_id] = newMessage;
-        return newHistory;
-      });
-    };
-
-    socket.on('chat-events', handleChatEvent);
-
-    return () => {
-      socket.off('chat-events', handleChatEvent);
-    };
-  }, [socket, id]);
-
-  // Handle chat completion data
-  const handleChatCompletion = (data: any, message: ChatMessage) => {
-    const { id, done, choices, content, sources, error, usage } = data;
+  // Handle chat completion data - needs to be defined before use in handleChatEvent
+  const handleChatCompletion = useCallback((data: any, message: ChatMessage) => {
+    const { done, choices, content, sources, error, usage } = data;
 
     if (error) {
       handleError(error, message);
@@ -251,10 +158,170 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
       setIsGenerating(false);
     }
 
-    if (usage) {
-      message.info = { ...message.info, usage };
+    if (usage && message) {
+      (message as any).info = { ...(message as any).info, usage };
     }
-  };
+  }, []);
+
+  // Socket.IO event handler with ref to avoid stale closures and batching for smooth streaming
+  const historyRef = useRef(history);
+  const updateTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingUpdatesRef = useRef<Map<string, any>>(new Map());
+  
+  useEffect(() => {
+    historyRef.current = history;
+  }, [history]);
+
+  // Batch updates for smooth streaming (similar to Svelte's approach)
+  const flushPendingUpdates = useCallback(() => {
+    if (pendingUpdatesRef.current.size === 0) return;
+
+    setHistory(prevHistory => {
+      const newHistory = { ...prevHistory };
+      const newMessages = { ...newHistory.messages };
+      let hasChanges = false;
+
+      pendingUpdatesRef.current.forEach((updates, messageId) => {
+        const message = newMessages[messageId];
+        if (!message) return;
+
+        // Apply all pending updates to this message
+        const updatedMessage = { ...message };
+        
+        updates.forEach((update: any) => {
+          const { type, data } = update;
+
+          if (type === 'status') {
+            if (!updatedMessage.statusHistory) {
+              updatedMessage.statusHistory = [];
+            }
+            updatedMessage.statusHistory.push(data);
+          } else if (type === 'chat:completion') {
+            handleChatCompletion(data, updatedMessage);
+          } else if (type === 'chat:message:delta' || type === 'message') {
+            updatedMessage.content = (updatedMessage.content || '') + (data?.content || '');
+          } else if (type === 'chat:message' || type === 'replace') {
+            updatedMessage.content = data?.content || '';
+          } else if (type === 'chat:message:files' || type === 'files') {
+            updatedMessage.files = data?.files;
+          } else if (type === 'chat:message:embeds' || type === 'embeds') {
+            updatedMessage.embeds = data?.embeds;
+          } else if (type === 'chat:message:error') {
+            updatedMessage.error = data?.error;
+            updatedMessage.done = true;
+            setIsGenerating(false);
+          } else if (type === 'chat:message:follow_ups') {
+            updatedMessage.followUps = data?.follow_ups;
+          } else if (type === 'source' || type === 'citation') {
+            if (data?.type === 'code_execution') {
+              if (!updatedMessage.code_executions) {
+                updatedMessage.code_executions = [];
+              }
+              const existingIndex = updatedMessage.code_executions.findIndex(
+                (exec: any) => exec.id === data?.id
+              );
+              if (existingIndex !== -1) {
+                updatedMessage.code_executions[existingIndex] = data;
+              } else {
+                updatedMessage.code_executions.push(data);
+              }
+            } else {
+              if (!updatedMessage.sources) {
+                updatedMessage.sources = [];
+              }
+              updatedMessage.sources.push(data);
+            }
+          }
+        });
+
+        newMessages[messageId] = updatedMessage;
+        hasChanges = true;
+      });
+
+      pendingUpdatesRef.current.clear();
+
+      if (!hasChanges) return prevHistory;
+
+      newHistory.messages = newMessages;
+      return newHistory;
+    });
+  }, [handleChatCompletion]);
+
+  useEffect(() => {
+    if (!socket || !id) return;
+
+    const handleChatEvent = (event: any) => {
+      console.log('Chat event:', event);
+
+      if (event.chat_id !== id) return;
+
+      const type = event?.data?.type ?? null;
+      const data = event?.data?.data ?? null;
+
+      // Handle non-message events immediately
+      if (type === 'chat:tasks:cancel') {
+        setTaskIds(null);
+        setHistory(prevHistory => {
+          const newHistory = { ...prevHistory };
+          const responseMessage = newHistory.messages[newHistory.currentId!];
+          if (responseMessage && responseMessage.parentId) {
+            const newMessages = { ...newHistory.messages };
+            for (const msgId of newMessages[responseMessage.parentId].childrenIds) {
+              newMessages[msgId] = { ...newMessages[msgId], done: true };
+            }
+            newHistory.messages = newMessages;
+          }
+          return newHistory;
+        });
+        return;
+      } else if (type === 'chat:title' || type === 'chat:tags') {
+        console.log(`${type} generated:`, data);
+        return;
+      } else if (type === 'notification') {
+        const toastType = data?.type ?? 'info';
+        const toastContent = data?.content ?? '';
+        
+        if (toastType === 'success') {
+          toast.success(toastContent);
+        } else if (toastType === 'error') {
+          toast.error(toastContent);
+        } else if (toastType === 'warning') {
+          toast.warning(toastContent);
+        } else {
+          toast.info(toastContent);
+        }
+        return;
+      }
+
+      // Batch message updates for smooth streaming
+      const messageId = event.message_id;
+      if (!messageId) return;
+
+      if (!pendingUpdatesRef.current.has(messageId)) {
+        pendingUpdatesRef.current.set(messageId, []);
+      }
+      pendingUpdatesRef.current.get(messageId)!.push({ type, data });
+
+      // Throttle updates - flush every 50ms for smooth streaming
+      if (updateTimerRef.current) {
+        clearTimeout(updateTimerRef.current);
+      }
+      updateTimerRef.current = setTimeout(() => {
+        flushPendingUpdates();
+        updateTimerRef.current = null;
+      }, 50);
+    };
+
+    socket.on('chat-events', handleChatEvent);
+
+    return () => {
+      socket.off('chat-events', handleChatEvent);
+      if (updateTimerRef.current) {
+        clearTimeout(updateTimerRef.current);
+        flushPendingUpdates();
+      }
+    };
+  }, [socket, id, flushPendingUpdates]);
 
   // Handle errors
   const handleError = (error: any, message: ChatMessage) => {
@@ -285,10 +352,28 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
     }));
   };
 
+  // Track if we're in the middle of creating a chat to prevent reload
+  const isCreatingChatRef = useRef(false);
+  const loadedChatIdRef = useRef<string | null>(null);
+
   // Load chat if ID is provided
   useEffect(() => {
     const loadChat = async () => {
       if (!id || !user) return;
+      
+      // Don't reload if we just created this chat
+      if (isCreatingChatRef.current && id) {
+        console.log('Skipping loadChat - just created this chat');
+        isCreatingChatRef.current = false;
+        loadedChatIdRef.current = id;
+        return;
+      }
+
+      // Don't reload if we already loaded this exact chat
+      if (loadedChatIdRef.current === id && Object.keys(history.messages).length > 0) {
+        console.log('Skipping loadChat - already loaded');
+        return;
+      }
 
       try {
         const token = localStorage.getItem('token');
@@ -298,6 +383,7 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
           if (chat.chat.messages) {
             const convertedHistory = convertMessagesToHistory(chat.chat.messages);
             setHistory(convertedHistory);
+            loadedChatIdRef.current = id;
           }
           
           if (chat.chat.models?.[0]) {
@@ -311,7 +397,7 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
     };
 
     loadChat();
-  }, [id, user, onModelChange]);
+  }, [id, user, onModelChange, history.messages]);
 
   // Convert simple messages array to history structure
   const convertMessagesToHistory = (messages: any[]): ChatHistory => {
@@ -363,6 +449,8 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
       });
 
       if (chat?.id) {
+        // Mark that we're creating a chat to prevent reload
+        isCreatingChatRef.current = true;
         navigate(`/c/${chat.id}`, { replace: true });
         return chat.id;
       }
@@ -403,14 +491,14 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
       try {
         const uploadPromises = files.map(async (fileAttachment) => {
           if (fileAttachment.file) {
-            const result = await uploadFile(token || '', fileAttachment.file);
+              const result = await uploadFile(token || '', fileAttachment.file);
             return {
               id: result.id,
               name: result.filename,
               type: fileAttachment.type,
               url: `${WEBUI_BASE_URL}/api/v1/files/${result.id}`,
               status: 'uploaded',
-              collection_name: result?.meta?.collection_name
+              collection_name: (result as any)?.collection_name
             };
           }
           return fileAttachment;
@@ -423,8 +511,6 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
         return;
       }
     }
-
-    setChatFiles(prev => [...prev, ...uploadedFiles]);
 
     const userMessageId = uuidv4();
     const parentMessage = history.currentId ? history.messages[history.currentId] : null;
@@ -488,18 +574,18 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
     const features: any = {};
     
     if (config?.features) {
-      if (config.features.enable_image_generation && 
-          (user?.role === 'admin' || user?.permissions?.features?.image_generation)) {
+      if ((config.features as any).enable_image_generation && 
+          (user?.role === 'admin' || (user?.permissions as any)?.features?.image_generation)) {
         features.image_generation = imageGenerationEnabled;
       }
       
-      if (config.features.enable_code_interpreter && 
-          (user?.role === 'admin' || user?.permissions?.features?.code_interpreter)) {
+      if ((config.features as any).enable_code_interpreter && 
+          (user?.role === 'admin' || (user?.permissions as any)?.features?.code_interpreter)) {
         features.code_interpreter = codeInterpreterEnabled;
       }
       
-      if (config.features.enable_web_search && 
-          (user?.role === 'admin' || user?.permissions?.features?.web_search)) {
+      if ((config.features as any).enable_web_search && 
+          (user?.role === 'admin' || (user?.permissions as any)?.features?.web_search)) {
         features.web_search = webSearchEnabled;
       }
     }
@@ -507,7 +593,7 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
     try {
       const token = localStorage.getItem('token');
       
-      await generateOpenAIChatCompletion(
+      const result = await generateOpenAIChatCompletion(
         token || '',
         {
           stream: true,
@@ -531,8 +617,29 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
       ).catch((error) => {
         console.error('Chat completion error:', error);
         handleError(error, responseMessage);
+        return null;
       });
 
+      // Check if the response indicates Socket.IO streaming
+      if (result?.status === 'streaming') {
+        console.log('Socket.IO streaming initiated, waiting for chat-events...');
+        // Socket.IO will handle the streaming via chat-events
+        // No need to do anything else here
+      } else if (result) {
+        // Non-streaming response - update message directly
+        setHistory(prevHistory => {
+          const newHistory = { ...prevHistory };
+          const msg = newHistory.messages[responseMessageId];
+          if (msg) {
+            msg.content = result.choices?.[0]?.message?.content || '';
+            msg.done = true;
+          }
+          return newHistory;
+        });
+        setIsGenerating(false);
+      }
+
+      // Refresh chat list after completion
       const updatedChats = await getChatList(token || '', 1);
       
     } catch (error) {

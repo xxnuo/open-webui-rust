@@ -6,12 +6,11 @@ import i18n from '@/lib/i18n';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { initI18n, getLanguages, changeLanguage } from '@/lib/i18n';
 import { useAppStore } from '@/store';
-import { getBackendConfig, getModels } from '@/lib/apis';
-import { getSessionUser, userSignOut } from '@/lib/apis/auths';
+import { getBackendConfig } from '@/lib/apis';
+import { userSignOut } from '@/lib/apis/auths';
 import { getChatList, getAllTags } from '@/lib/apis/chats';
 import { chatCompletion } from '@/lib/apis/openai';
 import { executeToolServer } from '@/lib/apis';
-import { io, Socket } from 'socket.io-client';
 import { WEBUI_BASE_URL } from '@/lib/constants';
 
 // Types
@@ -110,82 +109,31 @@ function AppContent() {
   const location = useLocation();
   
   const {
-    config,
     setConfig,
     setWEBUI_NAME,
     user,
     setUser,
-    theme,
     setTheme,
     socket,
-    setSocket,
     setMobile,
     settings,
     setTags,
     setChats,
-    currentChatPage,
     setCurrentChatPage,
     chatId,
     temporaryChatEnabled,
     isLastActiveTab,
     setIsLastActiveTab,
-    playingNotificationSound,
     setPlayingNotificationSound,
-    isApp,
     setIsApp,
     setAppInfo,
-    toolServers,
-    setModels
+    toolServers
   } = useAppStore();
 
   const bcRef = useRef<BroadcastChannel | null>(null);
-  const tokenTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const tokenTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Setup Socket.IO connection
-  const setupSocket = useCallback(async (enableWebsocket: boolean) => {
-    const SOCKETIO_URL = import.meta.env.VITE_SOCKETIO_URL || `http://localhost:8080`;
-    
-    // Match Svelte behavior: use websocket only if enabled, otherwise fallback to polling
-    const newSocket = io(SOCKETIO_URL, {
-      reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      randomizationFactor: 0.5,
-      path: '/socket.io',
-      transports: enableWebsocket ? ['websocket'] : ['polling', 'websocket'],
-      auth: { token: localStorage.token }
-    });
-
-    setSocket(newSocket);
-
-    newSocket.on('connect_error', (err) => {
-      console.log('connect_error', err);
-    });
-
-    newSocket.on('connect', () => {
-      console.log('connected', newSocket.id);
-      if (localStorage.getItem('token')) {
-        newSocket.emit('user-join', { auth: { token: localStorage.token } });
-      } else {
-        console.warn('No token found in localStorage, user-join event not emitted');
-      }
-    });
-
-    newSocket.on('reconnect_attempt', (attempt) => {
-      console.log('reconnect_attempt', attempt);
-    });
-
-    newSocket.on('reconnect_failed', () => {
-      console.log('reconnect_failed');
-    });
-
-    newSocket.on('disconnect', (reason, details) => {
-      console.log(`Socket ${newSocket.id} disconnected due to ${reason}`);
-      if (details) {
-        console.log('Additional details:', details);
-      }
-    });
-  }, [setSocket]);
+  // Socket setup is now handled in Layout.tsx - removed duplicate
 
   // Execute tool function
   const executeTool = useCallback(async (data: ToolExecutionData, cb: (result: unknown) => void) => {
@@ -204,10 +152,10 @@ function AppContent() {
       }
 
       const res = await executeToolServer(
-        toolServerToken,
+        toolServerToken ?? '',
         toolServer.url,
-        data?.name,
-        data?.params,
+        data?.name ?? '',
+        data?.params ?? {},
         toolServerData
       );
 
@@ -230,8 +178,6 @@ function AppContent() {
 
   // Chat event handler
   const chatEventHandler = useCallback(async (event: ChatEventData, cb?: (result: unknown) => void) => {
-    const chat = location.pathname.includes(`/c/${event.chat_id}`);
-
     let isFocused = document.visibilityState !== 'visible';
     if ((window as any).electronAPI) {
       const res = await (window as any).electronAPI.send({
@@ -246,7 +192,7 @@ function AppContent() {
     const data = event?.data?.data ?? null;
 
     if ((event.chat_id !== chatId && !temporaryChatEnabled) || isFocused) {
-      if (type === 'chat:completion') {
+      if (type === 'chat:completion' && data) {
         const { done, content, title } = data;
 
         if (done) {
@@ -285,28 +231,28 @@ function AppContent() {
         const tags = await getAllTags(localStorage.token);
         setTags(tags);
       }
-    } else if (data?.session_id === socket?.id) {
+    } else if (event.data?.session_id === socket?.id && socket) {
       if (type === 'execute:python') {
         console.log('execute:python', data);
         if (cb) {
           cb({ error: 'Python execution not supported. Please configure Jupyter backend.' });
         }
-      } else if (type === 'execute:tool') {
+      } else if (type === 'execute:tool' && data) {
         console.log('execute:tool', data);
-        executeTool(data, cb);
-      } else if (type === 'request:chat:completion') {
-        console.log(data, socket?.id);
-        const { session_id, channel, form_data, model } = data;
+        executeTool(data as ToolExecutionData, cb || (() => {}));
+      } else if (type === 'request:chat:completion' && event.data) {
+        console.log(data, socket.id);
+        const { channel, form_data, model } = event.data as any;
 
         try {
-          const directConnections = settings?.directConnections ?? {};
+          const directConnections = settings?.directConnections as any ?? {};
 
           if (directConnections) {
             const urlIdx = model?.urlIdx;
 
-            const OPENAI_API_URL = directConnections.OPENAI_API_BASE_URLS[urlIdx];
-            const OPENAI_API_KEY = directConnections.OPENAI_API_KEYS[urlIdx];
-            const API_CONFIG = directConnections.OPENAI_API_CONFIGS[urlIdx];
+            const OPENAI_API_URL = directConnections.OPENAI_API_BASE_URLS?.[urlIdx];
+            const OPENAI_API_KEY = directConnections.OPENAI_API_KEYS?.[urlIdx];
+            const API_CONFIG = directConnections.OPENAI_API_CONFIGS?.[urlIdx];
 
             try {
               if (API_CONFIG?.prefix_id) {
@@ -314,7 +260,7 @@ function AppContent() {
                 form_data['model'] = form_data['model'].replace(`${prefixId}.`, ``);
               }
 
-              const [res, controller] = await chatCompletion(
+              const [res] = await chatCompletion(
                 OPENAI_API_KEY,
                 form_data,
                 OPENAI_API_URL
@@ -326,10 +272,10 @@ function AppContent() {
                 }
 
                 if (form_data?.stream ?? false) {
-                  cb({ status: true });
+                  if (cb) cb({ status: true });
                   console.log({ status: true });
 
-                  const reader = res.body.getReader();
+                  const reader = res.body!.getReader();
                   const decoder = new TextDecoder();
 
                   const processStream = async () => {
@@ -344,7 +290,7 @@ function AppContent() {
 
                       for (const line of lines) {
                         console.log(line);
-                        socket?.emit(channel, line);
+                        socket.emit(channel, line);
                       }
                     }
                   };
@@ -352,19 +298,19 @@ function AppContent() {
                   await processStream();
                 } else {
                   const resData = await res.json();
-                  cb(resData);
+                  if (cb) cb(resData);
                 }
               } else {
                 throw new Error('An error occurred while fetching the completion');
               }
             } catch (error) {
               console.error('chatCompletion', error);
-              cb(error);
+              if (cb) cb(error);
             }
           }
         } catch (error) {
           console.error('chatCompletion', error);
-          cb(error);
+          if (cb) cb(error);
         } finally {
           socket.emit(channel, {
             done: true
@@ -434,7 +380,7 @@ function AppContent() {
       setUser(undefined);
       localStorage.removeItem('token');
 
-      location.href = res?.redirect_url ?? '/auth';
+      window.location.href = res?.redirect_url ?? '/auth';
     }
   }, [user, setUser]);
 
@@ -507,7 +453,7 @@ function AppContent() {
           : [navigator.language || (navigator as any).userLanguage];
         const lang = backendConfig?.default_locale
           ? backendConfig.default_locale
-          : bestMatchingLanguage(languages, browserLanguages, 'en-US');
+          : bestMatchingLanguage(languages.map(l => typeof l === 'string' ? l : l.code), Array.from(browserLanguages), 'en-US');
         changeLanguage(lang);
       }
 
@@ -515,45 +461,8 @@ function AppContent() {
         await setConfig(backendConfig);
         await setWEBUI_NAME(backendConfig.name);
 
-        if (backendConfig) {
-          await setupSocket(backendConfig.features?.enable_websocket ?? true);
-
-          const currentUrl = `${window.location.pathname}${window.location.search}`;
-          const encodedUrl = encodeURIComponent(currentUrl);
-
-          if (localStorage.token) {
-            try {
-              const sessionUser = await getSessionUser(localStorage.token);
-
-              if (sessionUser) {
-                await setUser(sessionUser);
-                await setConfig(await getBackendConfig());
-                
-                // Load models after user is set
-                try {
-                  const connections = backendConfig?.features?.enable_direct_connections && (settings?.directConnections ?? null);
-                  const models = await getModels(localStorage.token, connections);
-                  if (models && Array.isArray(models)) {
-                    setModels(models);
-                  }
-                } catch (error) {
-                  console.error('Error loading models:', error);
-                }
-              } else {
-                localStorage.removeItem('token');
-                navigate(`/auth?redirect=${encodedUrl}`);
-              }
-            } catch (error) {
-              toast.error(`${error}`);
-              localStorage.removeItem('token');
-              navigate(`/auth?redirect=${encodedUrl}`);
-            }
-          } else {
-            if (location.pathname !== '/auth') {
-              navigate(`/auth?redirect=${encodedUrl}`);
-            }
-          }
-        }
+        // Socket setup is now handled in Layout.tsx
+        // Authentication and model loading moved to Layout.tsx for better lifecycle management
       } else {
         navigate(`/error`);
       }

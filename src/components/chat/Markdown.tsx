@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { marked } from '@/lib/utils/markdown';
 import DOMPurify from 'dompurify';
 import 'highlight.js/styles/github-dark.css';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import CodeBlock from './CodeBlock';
-import ReactDOM from 'react-dom/client';
 
 interface MarkdownProps {
   content: string;
@@ -13,6 +13,13 @@ interface MarkdownProps {
   id?: string;
   editCodeBlock?: boolean;
   onCodeSave?: (code: string) => void;
+}
+
+interface CodeBlockData {
+  id: string;
+  language: string;
+  code: string;
+  container: HTMLElement;
 }
 
 export default function Markdown({ 
@@ -23,38 +30,31 @@ export default function Markdown({
   onCodeSave
 }: MarkdownProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [codeBlockRoots, setCodeBlockRoots] = useState<Map<string, any>>(new Map());
+  const [codeBlocks, setCodeBlocks] = useState<CodeBlockData[]>([]);
 
-  useEffect(() => {
-    if (!containerRef.current) return;
-
-    // Clean up existing React roots
-    codeBlockRoots.forEach(root => {
-      try {
-        root.unmount();
-      } catch (e) {
-        // Ignore unmount errors
-      }
-    });
-    const newRoots = new Map();
-
-    // Parse markdown to HTML
+  // Parse markdown to HTML (memoized to prevent unnecessary re-parsing)
+  const processedHtml = useMemo(() => {
     const rawHtml = marked.parse(content, {
       breaks: true,
       gfm: true
     }) as string;
 
-    // Sanitize HTML
-    const cleanHtml = DOMPurify.sanitize(rawHtml, {
+    return DOMPurify.sanitize(rawHtml, {
       ADD_TAGS: ['iframe'],
       ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling']
     });
+  }, [content]);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
 
     // Set HTML content
-    containerRef.current.innerHTML = cleanHtml;
+    containerRef.current.innerHTML = processedHtml;
 
-    // Replace code blocks with React CodeBlock components
+    // Process code blocks - create containers for React portals
     const preBlocks = containerRef.current.querySelectorAll('pre');
+    const newCodeBlocks: CodeBlockData[] = [];
+    
     preBlocks.forEach((pre, idx) => {
       const codeElement = pre.querySelector('code');
       if (!codeElement) return;
@@ -71,31 +71,20 @@ export default function Markdown({
         return;
       }
 
-      // Create a container for the React component
+      // Create a container for the CodeBlock portal
       const container = document.createElement('div');
       container.className = 'code-block-container';
       pre.replaceWith(container);
-
-      // Render the CodeBlock component
-      try {
-        const root = ReactDOM.createRoot(container);
-        root.render(
-          <CodeBlock
-            language={language}
-            code={codeText}
-            collapsible={true}
-            editable={editCodeBlock}
-            onSave={onCodeSave}
-            id={`${id}-${idx}`}
-          />
-        );
-        newRoots.set(`${id}-${idx}`, root);
-      } catch (e) {
-        console.error('Error rendering CodeBlock:', e);
-      }
+      
+      newCodeBlocks.push({
+        id: `${id}-${idx}`,
+        language,
+        code: codeText,
+        container
+      });
     });
 
-    setCodeBlockRoots(newRoots);
+    setCodeBlocks(newCodeBlocks);
 
     // Highlight inline code (not in pre blocks)
     const inlineCodeBlocks = containerRef.current.querySelectorAll('p code, li code, td code');
@@ -142,23 +131,29 @@ export default function Markdown({
     taskItems.forEach((checkbox) => {
       (checkbox as HTMLInputElement).disabled = true;
     });
-
-    // Cleanup function
-    return () => {
-      newRoots.forEach(root => {
-        try {
-          root.unmount();
-        } catch (e) {
-          // Ignore unmount errors
-        }
-      });
-    };
-  }, [content, id, editCodeBlock, onCodeSave]);
+  }, [processedHtml, id]);
 
   return (
-    <div
-      ref={containerRef}
-      className={`markdown-content prose prose-sm max-w-none dark:prose-invert ${className}`}
-    />
+    <>
+      <div
+        ref={containerRef}
+        className={`markdown-content prose prose-sm max-w-none dark:prose-invert ${className}`}
+      />
+      {/* Use React portals to render CodeBlock components into their containers */}
+      {codeBlocks.map((block) =>
+        createPortal(
+          <CodeBlock
+            language={block.language}
+            code={block.code}
+            collapsible={true}
+            editable={editCodeBlock}
+            onSave={onCodeSave}
+            id={block.id}
+          />,
+          block.container,
+          block.id
+        )
+      )}
+    </>
   );
 }
