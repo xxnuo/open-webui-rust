@@ -69,6 +69,8 @@ export default function Message({
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
   const user = useAppStore(state => state.user);
+  const settings = useAppStore(state => state.settings);
+  const widescreenMode = settings?.widescreenMode ?? null;
 
   const handleCopy = async () => {
     try {
@@ -99,98 +101,110 @@ export default function Message({
   const isAssistant = message.role === 'assistant';
   const showSiblingNav = siblings.length > 1;
 
-  return (
-    <div className={`group flex gap-3 px-4 py-6 ${isUser ? 'bg-muted/30' : ''} ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
-      {/* Avatar */}
-      <Avatar className="h-8 w-8 shrink-0">
-        {isUser ? (
-          <>
-            <AvatarImage src={user?.profile_image_url} />
-            <AvatarFallback>{user?.name?.charAt(0).toUpperCase() || 'U'}</AvatarFallback>
-          </>
-        ) : (
-          <>
-            <AvatarImage src="/static/favicon.png" />
-            <AvatarFallback>AI</AvatarFallback>
-          </>
-        )}
-      </Avatar>
+  const chatBubble = settings?.chatBubble ?? true;
 
-      <div className={`flex-1 space-y-2 overflow-hidden ${isUser ? 'text-right' : 'text-left'}`}>
-        {/* Header */}
-        <div className={`flex items-center justify-between gap-2 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
-          <div className={`flex items-center gap-2 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
-            <span className="font-semibold text-sm">
-              {isUser ? (user?.name || 'You') : (message.modelName || 'Assistant')}
-            </span>
-            
-            {message.model && !isUser && (
-              <Badge variant="outline" className="text-xs">
-                {message.model}
-              </Badge>
+  return (
+    <div className={`flex flex-col justify-between px-5 mb-3 w-full ${widescreenMode ? 'max-w-full' : 'max-w-5xl'} mx-auto rounded-lg group`}>
+      <div className="flex w-full">
+        {/* Avatar - only show for non-bubble or assistant */}
+        {(!chatBubble || !isUser) && (
+          <div className="shrink-0 mr-3 mt-1">
+            <Avatar className="h-8 w-8">
+              {isUser ? (
+                <>
+                  <AvatarImage src={user?.profile_image_url} />
+                  <AvatarFallback>{user?.name?.charAt(0).toUpperCase() || 'U'}</AvatarFallback>
+                </>
+              ) : (
+                <>
+                  <AvatarImage src="/static/favicon.png" />
+                  <AvatarFallback>AI</AvatarFallback>
+                </>
+              )}
+            </Avatar>
+          </div>
+        )}
+
+        <div className={`flex-1 w-0 max-w-full ${isUser && chatBubble ? 'pl-1' : ''}`}>
+        {/* Header - only show in non-bubble mode or for assistant */}
+        {(!chatBubble || !isUser) && (
+          <div className={`flex items-center justify-between gap-2 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
+            <div className={`flex items-center gap-2 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
+              <span className="font-semibold text-sm">
+                {isUser ? (user?.name || 'You') : (message.modelName || 'Assistant')}
+              </span>
+              
+              {message.model && !isUser && (
+                <Badge variant="outline" className="text-xs">
+                  {message.model}
+                </Badge>
+              )}
+            </div>
+
+            {/* Sibling navigation */}
+            {showSiblingNav && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => onNavigate?.('prev')}
+                  disabled={currentIndex === 0}
+                >
+                  <span>←</span>
+                </Button>
+                <span>{currentIndex + 1} / {siblings.length}</span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => onNavigate?.('next')}
+                  disabled={currentIndex === siblings.length - 1}
+                >
+                  <span>→</span>
+                </Button>
+              </div>
             )}
           </div>
-
-          {/* Sibling navigation */}
-          {showSiblingNav && (
-            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={() => onNavigate?.('prev')}
-                disabled={currentIndex === 0}
-              >
-                <span>←</span>
-              </Button>
-              <span>{currentIndex + 1} / {siblings.length}</span>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={() => onNavigate?.('next')}
-                disabled={currentIndex === siblings.length - 1}
-              >
-                <span>→</span>
-              </Button>
-            </div>
-          )}
-        </div>
+        )}
 
         {/* Files */}
         {message.files && message.files.length > 0 && (
-          <div className="flex flex-wrap gap-2">
+          <div className={`mb-1 w-full flex flex-col gap-1 flex-wrap ${isUser && chatBubble ? 'items-end' : ''}`}>
             {message.files.map((file) => (
-              <Badge key={file.id} variant="secondary" className="gap-1">
-                {file.type === 'image' && file.url && (
+              <div key={file.id} className={isUser && chatBubble ? 'self-end' : ''}>
+                {file.type === 'image' && file.url ? (
                   <img 
                     src={file.url} 
                     alt={file.name}
-                    className="h-4 w-4 rounded object-cover"
+                    className="max-h-96 rounded-lg"
                   />
+                ) : (
+                  <Badge variant="secondary" className="gap-1">
+                    <span className="max-w-[200px] truncate">{file.name}</span>
+                  </Badge>
                 )}
-                <span className="max-w-[200px] truncate">{file.name}</span>
-              </Badge>
+              </div>
             ))}
           </div>
         )}
 
         {/* Content */}
-        <div className={`prose dark:prose-invert max-w-none ${isUser ? 'text-left' : ''}`}>
+        <div className="w-full markdown-prose">
           {!message.done && message.content === '' ? (
             <div className="space-y-2">
               <Skeleton className="h-4 w-full" />
               <Skeleton className="h-4 w-3/4" />
             </div>
           ) : isEditing ? (
-            <div className="space-y-2">
+            <div className="w-full bg-gray-50 dark:bg-gray-800 rounded-3xl px-5 py-3 mb-2">
               <textarea
                 value={editContent}
                 onChange={(e) => setEditContent(e.target.value)}
-                className="w-full min-h-[100px] p-2 border rounded-md bg-background"
+                className="w-full min-h-[100px] bg-transparent outline-none resize-none"
                 autoFocus
               />
-              <div className="flex gap-2">
+              <div className="flex gap-2 mt-2">
                 <Button size="sm" onClick={handleEdit}>
                   Save
                 </Button>
@@ -201,11 +215,25 @@ export default function Message({
             </div>
           ) : (
             <>
-              {isAssistant ? (
-                <Markdown content={message.content} id={`message-${message.id}`} />
-              ) : (
-                <div className={`${isUser ? 'inline-block max-w-[90%] rounded-3xl px-4 py-2 bg-gray-100 dark:bg-gray-800' : ''}`}>
-                  <p className="whitespace-pre-wrap break-words text-left m-0">{message.content}</p>
+              {message.content && (
+                <div className="w-full">
+                  <div className={`flex w-full ${isUser && chatBubble ? 'justify-end pb-1' : ''}`}>
+                    <div className={`${
+                      isUser && chatBubble 
+                        ? 'max-w-[90%] px-4 py-1.5 bg-gray-50 dark:bg-gray-800 rounded-3xl'
+                        : 'w-full'
+                    }`}>
+                      {isAssistant ? (
+                        <div className="prose dark:prose-invert max-w-none">
+                          <Markdown content={message.content} id={`message-${message.id}`} />
+                        </div>
+                      ) : (
+                        <div className="prose dark:prose-invert max-w-none">
+                          <p className="whitespace-pre-wrap break-words m-0">{message.content}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
               
@@ -271,7 +299,7 @@ export default function Message({
         )}
 
         {/* Action buttons */}
-        <div className={`flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ${isUser ? 'justify-end' : 'justify-start'}`}>
+        <div className={`flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity text-gray-600 dark:text-gray-500 ${isUser && chatBubble ? 'justify-end' : 'justify-start'}`}>
           <Button
             variant="ghost"
             size="sm"
@@ -358,6 +386,7 @@ export default function Message({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+      </div>
       </div>
     </div>
   );

@@ -715,6 +715,8 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
     await handleSendMessage(prompt);
   };
 
+  const widescreenMode = settings?.widescreenMode ?? null;
+
   return (
     <div className="flex h-full w-full flex-col">
       {/* Messages area or Placeholder */}
@@ -732,7 +734,7 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
             className="h-full"
             onScrollCapture={handleScroll}
           >
-            <div className="mx-auto max-w-3xl py-8">
+            <div className={`mx-auto py-8 w-full ${widescreenMode ? 'max-w-full' : 'max-w-5xl'}`}>
               {messages.map((message, index) => (
                 <Message
                   key={message.id}

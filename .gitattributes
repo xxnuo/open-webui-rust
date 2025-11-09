@@ -8,9 +8,6 @@
 *.mjs text eol=lf
 *.cjs text eol=lf
 
-# Svelte
-*.svelte text eol=lf
-
 # HTML/CSS
 *.html text eol=lf
 *.css text eol=lf

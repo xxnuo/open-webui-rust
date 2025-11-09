@@ -119,10 +119,13 @@ export default function MessageInput({
     };
   }, [files]);
 
+  const { settings } = useAppStore();
+  const widescreenMode = settings?.widescreenMode ?? null;
+
   return (
     <div className="w-full font-primary">
       <div className="mx-auto inset-x-0 bg-transparent flex justify-center">
-        <div className="flex flex-col px-3 max-w-6xl w-full">
+        <div className={`flex flex-col px-3 w-full ${widescreenMode ? 'max-w-full' : 'max-w-6xl'}`}>
           <div className="bg-transparent">
             <div className="px-2.5 mx-auto inset-x-0">
               {/* Hidden file inputs */}
