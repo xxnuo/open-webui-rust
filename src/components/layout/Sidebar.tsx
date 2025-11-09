@@ -15,6 +15,9 @@ import UserMenu from './Sidebar/UserMenu';
 import ChatItem from './Sidebar/ChatItem';
 import Folder from '@/components/common/Folder';
 import SettingsModal from '@/components/chat/SettingsModal';
+import ChannelItem from './Sidebar/ChannelItem';
+import ChannelModal from './Sidebar/ChannelModal';
+import { createNewChannel, updateChannelById } from '@/lib/apis/channels';
 
 interface ChatItem {
   id: string;
@@ -66,6 +69,7 @@ export default function Sidebar() {
   const [showPinnedChat, setShowPinnedChat] = useState(true);
   const [chatListLoading, setChatListLoading] = useState(false);
   const [allChatsLoaded, setAllChatsLoaded] = useState(false);
+  const [showCreateChannel, setShowCreateChannel] = useState(false);
 
   const isWindows = /Windows/i.test(navigator.userAgent);
 
@@ -165,6 +169,21 @@ export default function Sidebar() {
     navigate(`/c/${chatId}`);
     if (mobile) {
       setShowSidebar(false);
+    }
+  };
+
+  const handleCreateChannel = async (data: { name: string; access_control: any }) => {
+    try {
+      const token = localStorage.getItem('token') || '';
+      const res = await createNewChannel(token, data);
+      
+      if (res) {
+        toast.success('Channel created successfully');
+        await initChannels();
+        setShowCreateChannel(false);
+      }
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to create channel');
     }
   };
 
@@ -313,6 +332,13 @@ export default function Sidebar() {
         <SettingsModal
           show={showSettings}
           onClose={() => setShowSettings(false)}
+        />
+
+        <ChannelModal
+          show={showCreateChannel}
+          onClose={() => setShowCreateChannel(false)}
+          onSubmit={handleCreateChannel}
+          onUpdate={initChannels}
         />
       </>
     );
@@ -492,7 +518,26 @@ export default function Sidebar() {
           </div>
 
           {/* TODO: Add Pinned Models List */}
-          {/* TODO: Add Channels Section */}
+          
+          {/* Channels Section */}
+          {config?.features?.enable_channels && 
+           (user?.role === 'admin' || (channels && channels.length > 0)) && (
+            <Folder
+              className="px-2 mt-0.5"
+              name="Channels"
+              chevron={false}
+              onAdd={user?.role === 'admin' ? () => setShowCreateChannel(true) : undefined}
+              onAddLabel="Create Channel"
+            >
+              {channels && channels.map((channel: any) => (
+                <ChannelItem
+                  key={channel.id}
+                  channel={channel}
+                  onUpdate={initChannels}
+                />
+              ))}
+            </Folder>
+          )}
           
           {/* Folders Section */}
           {folders && folders.length > 0 && (
@@ -619,6 +664,13 @@ export default function Sidebar() {
           show={showSettings}
           onClose={() => setShowSettings(false)}
         />
+
+        <ChannelModal
+          show={showCreateChannel}
+          onClose={() => setShowCreateChannel(false)}
+          onSubmit={handleCreateChannel}
+          onUpdate={initChannels}
+        />
       </>
     );
   }
@@ -635,6 +687,13 @@ export default function Sidebar() {
       <SettingsModal
         show={showSettings}
         onClose={() => setShowSettings(false)}
+      />
+
+      <ChannelModal
+        show={showCreateChannel}
+        onClose={() => setShowCreateChannel(false)}
+        onSubmit={handleCreateChannel}
+        onUpdate={initChannels}
       />
     </>
   );
