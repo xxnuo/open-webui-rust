@@ -10,7 +10,7 @@ import { v4 as uuidv4 } from 'uuid';
 import Message from './Message';
 import MessageInput from './MessageInput';
 import Placeholder from './Placeholder';
-import { ScrollArea } from '@/components/ui/scroll-area';
+// Removed ScrollArea - using native scroll like Svelte for better performance
 import { processDetails } from '@/lib/utils';
 import { WEBUI_BASE_URL } from '@/lib/constants';
 
@@ -22,6 +22,54 @@ interface FileAttachment {
   file?: File;
   status?: string;
   collection_name?: string;
+}
+
+interface StatusHistoryItem {
+  type?: string;
+  description?: string;
+  done?: boolean;
+  [key: string]: unknown;
+}
+
+interface Source {
+  type?: string;
+  id?: string;
+  url?: string;
+  title?: string;
+  content?: string;
+  [key: string]: unknown;
+}
+
+interface CodeExecution {
+  id: string;
+  type?: string;
+  code?: string;
+  result?: string;
+  language?: string;
+  [key: string]: unknown;
+}
+
+// Keep followUps as string[] to match Message component expectations
+
+interface Embed {
+  url?: string;
+  type?: string;
+  [key: string]: unknown;
+}
+
+interface MessageError {
+  content: string;
+  type?: string;
+  [key: string]: unknown;
+}
+
+interface MessageInfo {
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
+  [key: string]: unknown;
 }
 
 interface ChatMessage {
@@ -37,12 +85,13 @@ interface ChatMessage {
   modelName?: string;
   modelIdx?: number;
   done?: boolean;
-  error?: any;
-  statusHistory?: any[];
-  sources?: any[];
-  code_executions?: any[];
-  followUps?: any[];
-  embeds?: any[];
+  error?: MessageError;
+  statusHistory?: StatusHistoryItem[];
+  sources?: Source[];
+  code_executions?: CodeExecution[];
+  followUps?: string[];
+  embeds?: Embed[];
+  info?: MessageInfo;
 }
 
 interface ChatHistory {
@@ -74,29 +123,35 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
   const [codeInterpreterEnabled, setCodeInterpreterEnabled] = useState(false);
   const [selectedToolIds, setSelectedToolIds] = useState<string[]>([]);
   
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const messagesContentRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
 
-  // Scroll to bottom function
-  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
-    if (messagesEndRef.current && autoScroll) {
-      messagesEndRef.current.scrollIntoView({ behavior });
+  // Scroll to bottom function - direct DOM manipulation like Svelte
+  const scrollToBottom = useCallback(() => {
+    if (messagesContainerRef.current && autoScroll) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
     }
   }, [autoScroll]);
 
-  // Auto-scroll when messages change
+  // Auto-scroll when messages change - like Svelte with tick
   useEffect(() => {
     if (autoScroll) {
-      scrollToBottom();
+      // Use setTimeout(0) to defer scroll until after DOM updates (like Svelte's tick)
+      setTimeout(() => {
+        scrollToBottom();
+      }, 0);
     }
   }, [history, autoScroll, scrollToBottom]);
 
-  // Handle scroll events to update autoScroll
+  // Handle scroll events to update autoScroll state - like Svelte
   const handleScroll = useCallback(() => {
     if (messagesContainerRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
-      setAutoScroll(scrollHeight - scrollTop <= clientHeight + 50);
+      // Use 5px threshold like Svelte implementation for more accurate detection
+      const isAtBottom = scrollHeight - scrollTop <= clientHeight + 5;
+      setAutoScroll(isAtBottom);
     }
   }, []);
 
@@ -124,7 +179,21 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
   const messages = getMessages();
 
   // Handle chat completion data - needs to be defined before use in handleChatEvent
-  const handleChatCompletion = useCallback((data: any, message: ChatMessage) => {
+  const handleChatCompletion = useCallback((data: {
+    done?: boolean;
+    choices?: Array<{
+      message?: { content?: string };
+      delta?: { content?: string };
+    }>;
+    content?: string;
+    sources?: Source[];
+    error?: MessageError;
+    usage?: {
+      prompt_tokens?: number;
+      completion_tokens?: number;
+      total_tokens?: number;
+    };
+  }, message: ChatMessage) => {
     const { done, choices, content, sources, error, usage } = data;
 
     if (error) {
@@ -140,7 +209,7 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
       if (choices[0]?.message?.content) {
         message.content += choices[0].message.content;
       } else {
-        let value = choices[0]?.delta?.content ?? '';
+        const value = choices[0]?.delta?.content ?? '';
         if (message.content === '' && value === '\n') {
           console.log('Empty response');
         } else {
@@ -159,18 +228,47 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
     }
 
     if (usage && message) {
-      (message as any).info = { ...(message as any).info, usage };
+      message.info = { ...message.info, usage };
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Socket.IO event handler with ref to avoid stale closures and batching for smooth streaming
   const historyRef = useRef(history);
   const updateTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const pendingUpdatesRef = useRef<Map<string, any>>(new Map());
+  
+  interface PendingUpdate {
+    type: string;
+    data: Record<string, unknown>;
+  }
+  const pendingUpdatesRef = useRef<Map<string, PendingUpdate[]>>(new Map());
   
   useEffect(() => {
     historyRef.current = history;
   }, [history]);
+
+  // Watch for content height changes (code blocks, images, etc.) and auto-scroll
+  // This is crucial for smooth scrolling during incremental rendering
+  useEffect(() => {
+    const contentElement = messagesContentRef.current;
+    if (!contentElement) return;
+
+    // Use ResizeObserver to watch for height changes in the content
+    resizeObserverRef.current = new ResizeObserver(() => {
+      if (autoScroll && isGenerating) {
+        // Scroll immediately when content height changes during generation
+        scrollToBottom();
+      }
+    });
+
+    resizeObserverRef.current.observe(contentElement);
+
+    return () => {
+      if (resizeObserverRef.current) {
+        resizeObserverRef.current.disconnect();
+      }
+    };
+  }, [autoScroll, isGenerating, scrollToBottom]);
 
   // Batch updates for smooth streaming (similar to Svelte's approach)
   const flushPendingUpdates = useCallback(() => {
@@ -188,48 +286,49 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
         // Apply all pending updates to this message
         const updatedMessage = { ...message };
         
-        updates.forEach((update: any) => {
+        updates.forEach((update) => {
           const { type, data } = update;
 
           if (type === 'status') {
             if (!updatedMessage.statusHistory) {
               updatedMessage.statusHistory = [];
             }
-            updatedMessage.statusHistory.push(data);
+            updatedMessage.statusHistory.push(data as StatusHistoryItem);
           } else if (type === 'chat:completion') {
-            handleChatCompletion(data, updatedMessage);
+            handleChatCompletion(data as Parameters<typeof handleChatCompletion>[0], updatedMessage);
           } else if (type === 'chat:message:delta' || type === 'message') {
-            updatedMessage.content = (updatedMessage.content || '') + (data?.content || '');
+            updatedMessage.content = (updatedMessage.content || '') + ((data?.content as string) || '');
           } else if (type === 'chat:message' || type === 'replace') {
-            updatedMessage.content = data?.content || '';
+            updatedMessage.content = (data?.content as string) || '';
           } else if (type === 'chat:message:files' || type === 'files') {
-            updatedMessage.files = data?.files;
+            updatedMessage.files = data?.files as FileAttachment[] | undefined;
           } else if (type === 'chat:message:embeds' || type === 'embeds') {
-            updatedMessage.embeds = data?.embeds;
+            updatedMessage.embeds = data?.embeds as Embed[] | undefined;
           } else if (type === 'chat:message:error') {
-            updatedMessage.error = data?.error;
+            updatedMessage.error = data?.error as MessageError | undefined;
             updatedMessage.done = true;
             setIsGenerating(false);
           } else if (type === 'chat:message:follow_ups') {
-            updatedMessage.followUps = data?.follow_ups;
+            updatedMessage.followUps = data?.follow_ups as string[] | undefined;
           } else if (type === 'source' || type === 'citation') {
             if (data?.type === 'code_execution') {
               if (!updatedMessage.code_executions) {
                 updatedMessage.code_executions = [];
               }
+              const codeExec = data as CodeExecution;
               const existingIndex = updatedMessage.code_executions.findIndex(
-                (exec: any) => exec.id === data?.id
+                (exec) => exec.id === codeExec?.id
               );
               if (existingIndex !== -1) {
-                updatedMessage.code_executions[existingIndex] = data;
+                updatedMessage.code_executions[existingIndex] = codeExec;
               } else {
-                updatedMessage.code_executions.push(data);
+                updatedMessage.code_executions.push(codeExec);
               }
             } else {
               if (!updatedMessage.sources) {
                 updatedMessage.sources = [];
               }
-              updatedMessage.sources.push(data);
+              updatedMessage.sources.push(data as Source);
             }
           }
         });
@@ -245,12 +344,28 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
       newHistory.messages = newMessages;
       return newHistory;
     });
-  }, [handleChatCompletion]);
+
+    // Trigger auto-scroll after batch update if enabled (like Svelte's tick)
+    if (autoScroll) {
+      setTimeout(() => {
+        scrollToBottom();
+      }, 0);
+    }
+  }, [handleChatCompletion, autoScroll, scrollToBottom]);
 
   useEffect(() => {
     if (!socket || !id) return;
 
-    const handleChatEvent = (event: any) => {
+    interface ChatEvent {
+      chat_id: string;
+      message_id?: string;
+      data?: {
+        type?: string;
+        data?: Record<string, unknown>;
+      };
+    }
+
+    const handleChatEvent = (event: ChatEvent) => {
       console.log('Chat event:', event);
 
       if (event.chat_id !== id) return;
@@ -278,8 +393,8 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
         console.log(`${type} generated:`, data);
         return;
       } else if (type === 'notification') {
-        const toastType = data?.type ?? 'info';
-        const toastContent = data?.content ?? '';
+        const toastType = (data?.type as string) ?? 'info';
+        const toastContent = String(data?.content ?? '');
         
         if (toastType === 'success') {
           toast.success(toastContent);
@@ -300,7 +415,7 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
       if (!pendingUpdatesRef.current.has(messageId)) {
         pendingUpdatesRef.current.set(messageId, []);
       }
-      pendingUpdatesRef.current.get(messageId)!.push({ type, data });
+      pendingUpdatesRef.current.get(messageId)!.push({ type: type || '', data: data || {} });
 
       // Throttle updates - flush every 50ms for smooth streaming
       if (updateTimerRef.current) {
@@ -324,18 +439,29 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
   }, [socket, id, flushPendingUpdates]);
 
   // Handle errors
-  const handleError = (error: any, message: ChatMessage) => {
+  type ErrorType = MessageError | { 
+    detail?: string; 
+    error?: { message?: string }; 
+    message?: string 
+  } | Record<string, unknown>;
+  
+  const handleError = (error: ErrorType, message: ChatMessage) => {
     let errorMessage = '';
     
-    if (error.detail) {
-      toast.error(error.detail);
-      errorMessage = error.detail;
-    } else if (error.error?.message) {
-      toast.error(error.error.message);
-      errorMessage = error.error.message;
-    } else if (error.message) {
-      toast.error(error.message);
-      errorMessage = error.message;
+    if (typeof error === 'object' && error !== null) {
+      if ('detail' in error && typeof error.detail === 'string') {
+        toast.error(error.detail);
+        errorMessage = error.detail;
+      } else if ('error' in error && typeof error.error === 'object' && error.error !== null && 'message' in error.error && typeof error.error.message === 'string') {
+        toast.error(error.error.message);
+        errorMessage = error.error.message;
+      } else if ('message' in error && typeof error.message === 'string') {
+        toast.error(error.message);
+        errorMessage = error.message;
+      } else if ('content' in error && typeof error.content === 'string') {
+        toast.error(error.content);
+        errorMessage = error.content;
+      }
     }
 
     message.error = {
@@ -400,7 +526,7 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
   }, [id, user, onModelChange, history.messages]);
 
   // Convert simple messages array to history structure
-  const convertMessagesToHistory = (messages: any[]): ChatHistory => {
+  const convertMessagesToHistory = (messages: Array<Partial<ChatMessage> & { role: ChatMessage['role'] }>): ChatHistory => {
     const history: ChatHistory = {
       messages: {},
       currentId: null
@@ -411,12 +537,13 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i];
       const messageId = msg.id || uuidv4();
-      const parentId = i > 0 ? messages[i - 1].id : null;
+      const parentId = i > 0 ? (messages[i - 1].id ?? null) : null;
+      const nextMsgId = i < messages.length - 1 ? messages[i + 1].id : undefined;
       
       history.messages[messageId] = {
         id: messageId,
-        parentId,
-        childrenIds: i < messages.length - 1 ? [messages[i + 1].id] : [],
+        parentId: parentId || null,
+        childrenIds: nextMsgId ? [nextMsgId] : [],
         role: msg.role,
         content: msg.content || '',
         timestamp: msg.timestamp || Date.now(),
@@ -427,8 +554,9 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
       };
     }
 
-    if (messages.length > 0) {
-      history.currentId = messages[messages.length - 1].id;
+    const lastMsg = messages[messages.length - 1];
+    if (messages.length > 0 && lastMsg?.id) {
+      history.currentId = lastMsg.id;
     }
 
     return history;
@@ -498,7 +626,7 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
               type: fileAttachment.type,
               url: `${WEBUI_BASE_URL}/api/v1/files/${result.id}`,
               status: 'uploaded',
-              collection_name: (result as any)?.collection_name
+              collection_name: (result as { collection_name?: string })?.collection_name
             };
           }
           return fileAttachment;
@@ -571,21 +699,44 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
 
     const apiMessages = getMessagesForAPI(newHistory, responseMessageId);
 
-    const features: any = {};
+    interface Features {
+      image_generation?: boolean;
+      code_interpreter?: boolean;
+      web_search?: boolean;
+    }
+    
+    const features: Features = {};
+    
+    interface ConfigFeatures {
+      enable_image_generation?: boolean;
+      enable_code_interpreter?: boolean;
+      enable_web_search?: boolean;
+    }
+    
+    interface UserPermissions {
+      features?: {
+        image_generation?: boolean;
+        code_interpreter?: boolean;
+        web_search?: boolean;
+      };
+    }
     
     if (config?.features) {
-      if ((config.features as any).enable_image_generation && 
-          (user?.role === 'admin' || (user?.permissions as any)?.features?.image_generation)) {
+      const configFeatures = config.features as ConfigFeatures;
+      const userPermissions = user?.permissions as UserPermissions | undefined;
+      
+      if (configFeatures.enable_image_generation && 
+          (user?.role === 'admin' || userPermissions?.features?.image_generation)) {
         features.image_generation = imageGenerationEnabled;
       }
       
-      if ((config.features as any).enable_code_interpreter && 
-          (user?.role === 'admin' || (user?.permissions as any)?.features?.code_interpreter)) {
+      if (configFeatures.enable_code_interpreter && 
+          (user?.role === 'admin' || userPermissions?.features?.code_interpreter)) {
         features.code_interpreter = codeInterpreterEnabled;
       }
       
-      if ((config.features as any).enable_web_search && 
-          (user?.role === 'admin' || (user?.permissions as any)?.features?.web_search)) {
+      if (configFeatures.enable_web_search && 
+          (user?.role === 'admin' || userPermissions?.features?.web_search)) {
         features.web_search = webSearchEnabled;
       }
     }
@@ -640,7 +791,7 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
       }
 
       // Refresh chat list after completion
-      const updatedChats = await getChatList(token || '', 1);
+      await getChatList(token || '', 1);
       
     } catch (error) {
       console.error('Failed to send message:', error);
@@ -650,8 +801,14 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
   };
 
   // Get messages for API call
-  const getMessagesForAPI = (history: ChatHistory, messageId: string) => {
-    const messages: any[] = [];
+  interface APIMessage {
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+    files?: FileAttachment[];
+  }
+  
+  const getMessagesForAPI = (history: ChatHistory, messageId: string): APIMessage[] => {
+    const messages: APIMessage[] = [];
     let currentId: string | null = messageId;
     
     const responseMsg = history.messages[messageId];
@@ -659,16 +816,16 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
       currentId = responseMsg.parentId;
       
       while (currentId) {
-        const message = history.messages[currentId];
-        if (message && message.role !== 'assistant') {
+        const currentMessage: ChatMessage | undefined = history.messages[currentId];
+        if (currentMessage && currentMessage.role !== 'assistant') {
           messages.unshift({
-            role: message.role,
-            content: processDetails(message.content),
-            ...(message.files && message.files.length > 0 && {
-              files: message.files
+            role: currentMessage.role,
+            content: processDetails(currentMessage.content),
+            ...(currentMessage.files && currentMessage.files.length > 0 && {
+              files: currentMessage.files
             })
           });
-          currentId = message.parentId;
+          currentId = currentMessage.parentId;
         } else {
           break;
         }
@@ -814,7 +971,7 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
     toast.success('Message deleted');
   };
 
-  const handleRateMessage = async (messageId: string, rating: number) => {
+  const handleRateMessage = async (_messageId: string, rating: number) => {
     toast.info(`Message rated: ${rating > 0 ? 'Good' : 'Bad'}`);
   };
 
@@ -836,12 +993,15 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
             />
           </div>
         ) : (
-          <ScrollArea 
+          <div
             ref={messagesContainerRef}
-            className="h-full"
-            onScrollCapture={handleScroll}
+            onScroll={handleScroll}
+            className="h-full w-full overflow-y-auto overflow-x-hidden"
           >
-            <div className={`mx-auto py-8 w-full ${widescreenMode ? 'max-w-full' : 'max-w-5xl'}`}>
+            <div 
+              ref={messagesContentRef}
+              className={`mx-auto py-8 w-full ${widescreenMode ? 'max-w-full' : 'max-w-5xl'}`}
+            >
               {messages.map((message, index) => (
                 <Message
                   key={message.id}
@@ -854,9 +1014,10 @@ export default function Chat({ selectedModel, onModelChange }: ChatProps) {
                   onRate={(rating) => handleRateMessage(message.id, rating)}
                 />
               ))}
-              <div ref={messagesEndRef} />
+              {/* Bottom padding for better scrolling */}
+              <div className="pb-20" />
             </div>
-          </ScrollArea>
+          </div>
         )}
       </div>
 
