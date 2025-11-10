@@ -298,11 +298,13 @@ impl ModelService {
                 arr.iter()
                     .filter_map(|v| {
                         let id = v.get("id")?.as_str()?;
+                        let name = v
+                            .get("name")
+                            .and_then(|n| n.as_str().map(|s| s.to_string()))
+                            .or_else(|| Some(id.to_string()));
                         Some(Model {
                             id: id.to_string(),
-                            name: v
-                                .get("name")
-                                .and_then(|n| n.as_str().map(|s| s.to_string())),
+                            name,
                             object: v
                                 .get("object")
                                 .and_then(|o| o.as_str())
