@@ -46,26 +46,30 @@ impl ConfigService {
     /// Save entire configuration to database
     pub async fn save_to_db(db: &Database, config: &Config) -> Result<(), AppError> {
         let config_json = Self::config_to_json(config);
+        let config_json_str =
+            serde_json::to_string(&config_json).unwrap_or_else(|_| "{}".to_string());
 
         // Try to update existing config, or insert new one
         let existing = Self::get_latest_config(db).await?;
+        let now = crate::utils::time::current_timestamp_seconds();
 
         if let Some(existing_config) = existing {
             // Update existing config
-            sqlx::query(
-                "UPDATE config SET data = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
-            )
-            .bind(&config_json)
-            .bind(existing_config.id)
-            .execute(db.pool())
-            .await
-            .map_err(|e| AppError::Database(e))?;
+            sqlx::query("UPDATE config SET data = $1, updated_at = $2 WHERE id = $3")
+                .bind(&config_json_str)
+                .bind(now)
+                .bind(existing_config.id)
+                .execute(db.pool())
+                .await
+                .map_err(|e| AppError::Database(e))?;
         } else {
             // Insert new config
             sqlx::query(
-                "INSERT INTO config (data, version, created_at, updated_at) VALUES ($1, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                "INSERT INTO config (data, version, created_at, updated_at) VALUES ($1, 0, $2, $3)",
             )
-            .bind(&config_json)
+            .bind(&config_json_str)
+            .bind(now)
+            .bind(now)
             .execute(db.pool())
             .await
             .map_err(|e| AppError::Database(e))?;
@@ -98,19 +102,24 @@ impl ConfigService {
 
         // Upsert the config
         if let Ok(Some(existing_config)) = Self::get_latest_config(db).await {
-            sqlx::query(
-                "UPDATE config SET data = data || $1::jsonb, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
-            )
-            .bind(&json!({ section: value }))
-            .bind(existing_config.id)
-            .execute(db.pool())
-            .await
-            .map_err(|e| AppError::Database(e))?;
+            let now = crate::utils::time::current_timestamp_seconds();
+            let data_str = serde_json::to_string(&config_json).unwrap_or_else(|_| "{}".to_string());
+            sqlx::query("UPDATE config SET data = $1, updated_at = $2 WHERE id = $3")
+                .bind(&data_str)
+                .bind(now)
+                .bind(existing_config.id)
+                .execute(db.pool())
+                .await
+                .map_err(|e| AppError::Database(e))?;
         } else {
+            let now = crate::utils::time::current_timestamp_seconds();
+            let data_str = serde_json::to_string(&config_json).unwrap_or_else(|_| "{}".to_string());
             sqlx::query(
-                "INSERT INTO config (data, version, created_at, updated_at) VALUES ($1, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                "INSERT INTO config (data, version, created_at, updated_at) VALUES ($1, 0, $2, $3)",
             )
-            .bind(&config_json)
+            .bind(&data_str)
+            .bind(now)
+            .bind(now)
             .execute(db.pool())
             .await
             .map_err(|e| AppError::Database(e))?;

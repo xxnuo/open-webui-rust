@@ -34,7 +34,7 @@ impl<'a> FolderService<'a> {
         sqlx::query(
             r#"
             INSERT INTO folder (id, user_id, name, parent_id, data, meta, is_expanded, created_at, updated_at)
-            VALUES ($1, $2, $3, NULL, $4::jsonb, $5::jsonb, false, $6, $7)
+            VALUES ($1, $2, $3, NULL, $4, $5, false, $6, $7)
             "#,
         )
         .bind(&id)
@@ -62,7 +62,7 @@ impl<'a> FolderService<'a> {
             SELECT id, user_id, name, 
                    NULLIF(parent_id, '') as parent_id, 
                    is_expanded, 
-                   NULL::text as items_str,
+                   NULL as items_str,
                    CAST(meta AS TEXT) as meta_str,
                    CAST(data AS TEXT) as data_str,
                    created_at, updated_at
@@ -77,14 +77,13 @@ impl<'a> FolderService<'a> {
 
         Ok(result)
     }
-
     pub async fn get_folders_by_user_id(&self, user_id: &str) -> AppResult<Vec<Folder>> {
         let folders = sqlx::query_as::<_, Folder>(
             r#"
             SELECT id, user_id, name, 
                    NULLIF(parent_id, '') as parent_id, 
                    is_expanded,
-                   NULL::text as items_str,
+                   NULL as items_str,
                    CAST(meta AS TEXT) as meta_str,
                    CAST(data AS TEXT) as data_str,
                    created_at, updated_at
@@ -99,7 +98,6 @@ impl<'a> FolderService<'a> {
 
         Ok(folders)
     }
-
     pub async fn get_folder_by_parent_id_and_user_id_and_name(
         &self,
         parent_id: Option<&str>,
@@ -112,7 +110,7 @@ impl<'a> FolderService<'a> {
                 SELECT id, user_id, name, 
                        NULLIF(parent_id, '') as parent_id, 
                        is_expanded,
-                       NULL::text as items_str,
+                       NULL as items_str,
                        CAST(meta AS TEXT) as meta_str,
                        CAST(data AS TEXT) as data_str,
                        created_at, updated_at
@@ -131,7 +129,7 @@ impl<'a> FolderService<'a> {
                 SELECT id, user_id, name, 
                        NULLIF(parent_id, '') as parent_id, 
                        is_expanded,
-                       NULL::text as items_str,
+                       NULL as items_str,
                        CAST(meta AS TEXT) as meta_str,
                        CAST(data AS TEXT) as data_str,
                        created_at, updated_at
@@ -191,7 +189,7 @@ impl<'a> FolderService<'a> {
         sqlx::query(
             r#"
             UPDATE folder
-            SET name = $1, data = $2::jsonb, meta = $3::jsonb, updated_at = $4
+            SET name = $1, data = $2, meta = $3, updated_at = $4
             WHERE id = $5 AND user_id = $6
             "#,
         )
@@ -283,10 +281,20 @@ impl<'a> FolderService<'a> {
             .await?;
 
         // Delete the folder and all its children
-        sqlx::query("DELETE FROM folder WHERE id = ANY($1)")
-            .bind(&folder_ids)
-            .execute(&self.db.pool)
-            .await?;
+        // Build IN clause for SQLite
+        let placeholders = folder_ids
+            .iter()
+            .enumerate()
+            .map(|(i, _)| format!("${}", i + 1))
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let query = format!("DELETE FROM folder WHERE id IN ({})", placeholders);
+        let mut q = sqlx::query(&query);
+        for id in &folder_ids {
+            q = q.bind(id);
+        }
+        q.execute(&self.db.pool).await?;
 
         Ok(folder_ids)
     }
@@ -303,7 +311,7 @@ impl<'a> FolderService<'a> {
                 SELECT id, user_id, name, 
                        NULLIF(parent_id, '') as parent_id, 
                        is_expanded,
-                       NULL::text as items_str,
+                       NULL as items_str,
                        CAST(meta AS TEXT) as meta_str,
                        CAST(data AS TEXT) as data_str,
                        created_at, updated_at

@@ -4,7 +4,6 @@
 //! the application for consistent caching behavior.
 
 use crate::utils::cache::*;
-use deadpool_redis::Pool as RedisPool;
 use once_cell::sync::OnceCell;
 use std::sync::Arc;
 use std::time::Duration;
@@ -14,25 +13,25 @@ static CACHE_MANAGER: OnceCell<CacheManager> = OnceCell::new();
 
 /// Cache manager that holds different cache instances for different purposes
 pub struct CacheManager {
-    /// Main application cache (multi-tier)
-    pub app_cache: Arc<MultiTierCache>,
+    /// Main application cache (memory-based)
+    pub app_cache: Arc<MemoryCache<String, Vec<u8>>>,
 
     /// Session cache (in-memory only, short TTL)
     pub session_cache: Arc<MemoryCache<String, Vec<u8>>>,
 
     /// Model cache (for AI model responses, longer TTL)
-    pub model_cache: Arc<MultiTierCache>,
+    pub model_cache: Arc<MemoryCache<String, Vec<u8>>>,
 
     /// API response cache
-    pub api_cache: Arc<MultiTierCache>,
+    pub api_cache: Arc<MemoryCache<String, Vec<u8>>>,
 
     /// Stampede guard for preventing cache stampedes
     pub stampede_guard: Arc<StampedeGuard>,
 }
 
 impl CacheManager {
-    /// Initialize the cache manager with optional Redis support
-    pub fn init(redis_pool: Option<RedisPool>) -> &'static CacheManager {
+    /// Initialize the cache manager with memory-only caches
+    pub fn init() -> &'static CacheManager {
         CACHE_MANAGER.get_or_init(|| {
             // App cache configuration
             let app_config = CacheConfig {
@@ -67,10 +66,10 @@ impl CacheManager {
             };
 
             CacheManager {
-                app_cache: Arc::new(MultiTierCache::new(app_config, redis_pool.clone())),
+                app_cache: Arc::new(MemoryCache::new(app_config)),
                 session_cache: Arc::new(MemoryCache::new(session_config)),
-                model_cache: Arc::new(MultiTierCache::new(model_config, redis_pool.clone())),
-                api_cache: Arc::new(MultiTierCache::new(api_config, redis_pool)),
+                model_cache: Arc::new(MemoryCache::new(model_config)),
+                api_cache: Arc::new(MemoryCache::new(api_config)),
                 stampede_guard: Arc::new(StampedeGuard::new()),
             }
         })
@@ -83,7 +82,7 @@ impl CacheManager {
 
     /// Get or create the global cache manager (uses memory-only if not initialized)
     pub fn get_or_init() -> &'static CacheManager {
-        Self::init(None)
+        Self::init()
     }
 
     /// Start background cleanup tasks

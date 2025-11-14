@@ -156,7 +156,7 @@ impl<'a> ModelService<'a> {
         sqlx::query(
             r#"
             UPDATE model
-            SET is_active = CASE WHEN is_active = true THEN false ELSE true END, updated_at = $2
+            SET is_active = CASE WHEN is_active = 1 THEN 0 ELSE 1 END, updated_at = $2
             WHERE id = $1
             "#,
         )

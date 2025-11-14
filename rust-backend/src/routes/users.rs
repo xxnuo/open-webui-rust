@@ -225,17 +225,28 @@ async fn get_user_profile_image(
     }
 
     // Return default user avatar
-    let static_dir = std::path::Path::new("../svelte-frontend/static/static");
-    let user_avatar_path = static_dir.join("user.png");
-
-    match std::fs::read(user_avatar_path) {
-        Ok(image_data) => Ok(HttpResponse::Ok()
+    let config = state.config.read().unwrap();
+    let static_dir = &config.static_dir;
+    let user_avatar_path = std::path::Path::new(static_dir).join("user.png");
+    
+    // Try external file first
+    if let Ok(image_data) = std::fs::read(&user_avatar_path) {
+        return Ok(HttpResponse::Ok()
             .content_type("image/png")
-            .body(image_data)),
-        Err(_) => Err(crate::error::AppError::NotFound(
-            "Default avatar not found".to_string(),
-        )),
+            .body(image_data));
     }
+    
+    // Fall back to embedded file
+    use crate::static_files::FrontendAssets;
+    if let Some(content) = FrontendAssets::get("static/user.png") {
+        return Ok(HttpResponse::Ok()
+            .content_type("image/png")
+            .body(content.data.into_owned()));
+    }
+    
+    Err(crate::error::AppError::NotFound(
+        "Default avatar not found".to_string(),
+    ))
 }
 
 // Get user active status

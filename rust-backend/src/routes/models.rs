@@ -341,15 +341,26 @@ async fn get_model_profile_image(
     }
 
     // Return default favicon
-    let static_dir = std::path::Path::new("../svelte-frontend/static/static");
-    let favicon_path = static_dir.join("favicon.png");
-
-    match std::fs::read(favicon_path) {
-        Ok(image_data) => Ok(HttpResponse::Ok()
+    let config = state.config.read().unwrap();
+    let static_dir = &config.static_dir;
+    let favicon_path = std::path::Path::new(static_dir).join("favicon.png");
+    
+    // Try external file first
+    if let Ok(image_data) = std::fs::read(&favicon_path) {
+        return Ok(HttpResponse::Ok()
             .content_type("image/png")
-            .body(image_data)),
-        Err(_) => Err(AppError::NotFound("Default image not found".to_string())),
+            .body(image_data));
     }
+    
+    // Fall back to embedded file
+    use crate::static_files::FrontendAssets;
+    if let Some(content) = FrontendAssets::get("static/favicon.png") {
+        return Ok(HttpResponse::Ok()
+            .content_type("image/png")
+            .body(content.data.into_owned()));
+    }
+    
+    Err(AppError::NotFound("Default image not found".to_string()))
 }
 
 // POST /model/toggle?id= - Toggle model visibility

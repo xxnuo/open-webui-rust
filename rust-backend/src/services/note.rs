@@ -38,7 +38,7 @@ impl<'a> NoteService<'a> {
         sqlx::query(
             r#"
             INSERT INTO note (id, user_id, title, data, meta, access_control, created_at, updated_at)
-            VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7, $8)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             "#,
         )
         .bind(&id)
@@ -218,8 +218,8 @@ impl<'a> NoteService<'a> {
         sqlx::query(
             r#"
             UPDATE note
-            SET title = $1, data = $2::jsonb, meta = $3::jsonb, 
-                access_control = $4::jsonb, updated_at = $5
+            SET title = $1, data = $2, meta = $3, 
+                access_control = $4, updated_at = $5
             WHERE id = $6
             "#,
         )

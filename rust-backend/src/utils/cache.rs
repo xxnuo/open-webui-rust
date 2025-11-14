@@ -13,8 +13,6 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use deadpool_redis::{Connection, Pool as RedisPool};
-use redis::AsyncCommands;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -55,6 +53,8 @@ pub enum CacheError {
     InvalidTtl(String),
 }
 
+// Redis error conversions disabled for SQLite compatibility
+/*
 impl From<redis::RedisError> for CacheError {
     fn from(err: redis::RedisError) -> Self {
         CacheError::Redis(err.to_string())
@@ -66,6 +66,7 @@ impl From<deadpool_redis::PoolError> for CacheError {
         CacheError::Redis(err.to_string())
     }
 }
+*/
 
 /// Cache entry with metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -516,9 +517,13 @@ impl Cache for MemoryCache<String, Vec<u8>> {
 }
 
 // ============================================================================
-// Redis Cache Implementation
+// Redis Cache Implementation (Disabled for SQLite compatibility)
 // ============================================================================
 
+// Redis cache is disabled to avoid Redis dependency when using SQLite
+// Uncomment and enable the "redis" feature to use Redis caching
+
+/*
 /// Redis-backed cache implementation
 pub struct RedisCache {
     pool: RedisPool,
@@ -722,11 +727,16 @@ impl Cache for RedisCache {
         Ok(deleted)
     }
 }
+*/
 
 // ============================================================================
-// Multi-Tier Cache Implementation
+// Multi-Tier Cache Implementation (Disabled for SQLite compatibility)
 // ============================================================================
 
+// Multi-tier cache with Redis is disabled to avoid Redis dependency
+// Use MemoryCache directly for SQLite-only deployments
+
+/*
 /// Multi-tier cache that uses both in-memory and Redis caches
 /// Provides L1 (memory) and L2 (Redis) caching with automatic promotion
 pub struct MultiTierCache {
@@ -864,6 +874,7 @@ impl Cache for MultiTierCache {
         combined_stats
     }
 }
+*/
 
 // ============================================================================
 // Cache Stampede Prevention

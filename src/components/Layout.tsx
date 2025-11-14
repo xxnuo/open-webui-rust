@@ -54,7 +54,14 @@ export default function Layout() {
       socketRef.current.disconnect();
     }
 
-    const SOCKETIO_URL = import.meta.env.VITE_SOCKETIO_URL || `http://localhost:8080`;
+    const SOCKETIO_URL = window.location.origin;
+    
+    // Skip socket initialization if we're not on a valid HTTP URL
+    // This prevents connection attempts before Tauri navigates to the backend URL
+    if (!SOCKETIO_URL.startsWith('http://') && !SOCKETIO_URL.startsWith('https://')) {
+      console.log('Skipping socket initialization - not on HTTP(S) URL:', SOCKETIO_URL);
+      return;
+    }
     
     const _socket = io(SOCKETIO_URL, {
       reconnection: true,
@@ -63,6 +70,7 @@ export default function Layout() {
       randomizationFactor: 0.5,
       path: '/socket.io',  // Standard Socket.IO path
       transports: enableWebsocket ? ['websocket'] : ['polling', 'websocket'],
+      withCredentials: true,  // 关键：允许跨域发送 Cookie
       auth: { token: localStorage.getItem('token') || '' }
     });
 

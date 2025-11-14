@@ -44,7 +44,6 @@ impl<'a> KnowledgeService<'a> {
             .await?
             .ok_or_else(|| AppError::InternalServerError("Failed to create knowledge".to_string()))
     }
-
     pub async fn get_knowledge_by_id(&self, id: &str) -> AppResult<Option<Knowledge>> {
         let mut result = sqlx::query_as::<_, Knowledge>(
             r#"

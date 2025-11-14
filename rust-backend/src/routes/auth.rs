@@ -18,7 +18,8 @@ use crate::AppState;
 fn create_clear_cookie() -> Cookie<'static> {
     let mut token_cookie = Cookie::new("token", "");
     token_cookie.set_http_only(true);
-    token_cookie.set_same_site(SameSite::Lax);
+    token_cookie.set_same_site(SameSite::None);
+    token_cookie.set_secure(true);
     token_cookie.set_path("/");
     token_cookie.set_max_age(time::Duration::seconds(-1));
     token_cookie
@@ -190,7 +191,8 @@ async fn get_session_user(
     // Create/refresh cookie with token
     let mut cookie = Cookie::new("token", token.clone());
     cookie.set_http_only(true);
-    cookie.set_same_site(SameSite::Lax);
+    cookie.set_same_site(SameSite::None);
+    cookie.set_secure(true);
     cookie.set_path("/");
 
     // Set expiration if available
@@ -252,7 +254,8 @@ async fn signin(
     // Create cookie with token
     let mut cookie = Cookie::new("token", token);
     cookie.set_http_only(true);
-    cookie.set_same_site(SameSite::Lax);
+    cookie.set_same_site(SameSite::None);
+    cookie.set_secure(true);
     cookie.set_path("/");
 
     // Set expiration if available
@@ -349,7 +352,8 @@ async fn signup(
     // Create cookie with token
     let mut cookie = Cookie::new("token", token);
     cookie.set_http_only(true);
-    cookie.set_same_site(SameSite::Lax);
+    cookie.set_same_site(SameSite::None);
+    cookie.set_secure(true);
     cookie.set_path("/");
 
     // Set expiration if available
@@ -367,7 +371,8 @@ async fn signout(_state: web::Data<AppState>) -> HttpResponse {
     // Clear the token cookie by setting an expired cookie
     let mut cookie = Cookie::new("token", "");
     cookie.set_http_only(true);
-    cookie.set_same_site(SameSite::Lax);
+    cookie.set_same_site(SameSite::None);
+    cookie.set_secure(true);
     cookie.set_path("/");
     cookie.set_max_age(time::Duration::seconds(-1));
 

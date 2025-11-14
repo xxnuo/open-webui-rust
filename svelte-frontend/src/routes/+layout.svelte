@@ -69,8 +69,8 @@
 	const BREAKPOINT = 768;
 
 	const setupSocket = async (enableWebsocket) => {
-		// Native Rust Socket.IO on main backend port (8080)
-		const SOCKETIO_URL = import.meta.env.VITE_SOCKETIO_URL || `http://localhost:8080`;
+		// Native Rust Socket.IO on main backend port (use current origin for dynamic port support)
+		const SOCKETIO_URL = window.location.origin;
 		const _socket = io(SOCKETIO_URL, {
 			reconnection: true,
 			reconnectionDelay: 1000,
@@ -78,6 +78,7 @@
 			randomizationFactor: 0.5,
 			path: '/socket.io',  // Standard Socket.IO path
 			transports: enableWebsocket ? ['websocket'] : ['polling', 'websocket'],
+			withCredentials: true,  // 关键：允许跨域发送 Cookie
 			auth: { token: localStorage.token }
 		});
 

@@ -173,7 +173,8 @@ impl ResponseError for AppError {
         ) {
             let mut token_cookie = Cookie::new("token", "");
             token_cookie.set_http_only(true);
-            token_cookie.set_same_site(SameSite::Lax);
+            token_cookie.set_same_site(SameSite::None);
+            token_cookie.set_secure(true);
             token_cookie.set_path("/");
             token_cookie.set_max_age(time::Duration::seconds(-1));
 

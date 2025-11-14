@@ -9,6 +9,7 @@ mod routes;
 mod services;
 mod socket;
 mod socketio;
+mod static_files;
 mod utils;
 mod websocket_chat;
 
@@ -98,8 +99,8 @@ async fn main() -> anyhow::Result<()> {
         None
     };
 
-    // Initialize cache manager
-    let cache_manager = cache_manager::CacheManager::init(redis.clone());
+    // Initialize cache manager (memory-only, no Redis required)
+    let cache_manager = cache_manager::CacheManager::init();
     cache_manager.start_cleanup_tasks();
     info!("Cache manager initialized and cleanup tasks started");
 
@@ -499,10 +500,25 @@ async fn main() -> anyhow::Result<()> {
     // Start server
     let addr = SocketAddr::from((config.host.parse::<std::net::IpAddr>()?, config.port));
     let cors_allow_origin = config.cors_allow_origin.clone();
+    let enable_random_port = config.enable_random_port;
+    
+    // Check if static directory exists
+    let static_dir = config.static_dir.clone();
+    let static_dir_exists = std::path::Path::new(&static_dir).exists();
+    
+    if static_dir_exists {
+        info!("📁 Using external static files directory: {}", static_dir);
+    } else {
+        info!("📁 External static directory not found ({}), using embedded static files", static_dir);
+    }
 
-    info!("🚀 Server running at http://{}", addr);
+    if enable_random_port {
+        info!("🚀 Starting server with random port on host: {}", config.host);
+    } else {
+        info!("🚀 Server running at http://{}", addr);
+    }
 
-    HttpServer::new(move || {
+    let server = HttpServer::new(move || {
         // Create CORS middleware
         // NOTE: When credentials are needed (cookies/auth), we cannot use allow_any_origin()
         // Instead, we need to allow specific origins or use allowed_origin_fn to dynamically allow
@@ -613,34 +629,92 @@ async fn main() -> anyhow::Result<()> {
             .route("/cache/{path:.*}", web::get().to(serve_cache_file))
             // Serve default user avatar at root (for backward compatibility)
             .route("/user.png", web::get().to(serve_user_avatar))
-            // Serve static files from static directory
-            .service(Files::new("/static", "../svelte-frontend/static/static"))
+            // Conditionally serve static files from external directory if it exists
+            .configure({
+                let static_dir = static_dir.clone();
+                move |cfg| {
+                    if static_dir_exists {
+                        // Use external static directory if it exists
+                        cfg.service(Files::new("/static", static_dir.clone()));
+                    }
+                }
+            })
+            // Serve embedded frontend static files as default service (SPA fallback)
+            // This catches all unmatched routes and serves frontend or index.html
+            .default_service(web::get().to(static_files::serve))
     })
     // CRITICAL: Disable keep-alive buffering for real-time streaming
     .keep_alive(actix_web::http::KeepAlive::Timeout(
         std::time::Duration::from_secs(75),
     ))
     // CRITICAL: Set client timeout high for long-running streams
-    .client_request_timeout(std::time::Duration::from_secs(300))
-    .bind(addr)?
-    .run()
-    .await?;
+    .client_request_timeout(std::time::Duration::from_secs(300));
+
+    let server = server.bind(addr)?;
+    
+    // If random port is enabled, get the actual assigned port
+    if enable_random_port {
+        let addrs = server.addrs();
+        let actual_addr = addrs.first()
+            .ok_or_else(|| anyhow::anyhow!("Failed to get server address"))?;
+        info!("🚀 Server running at http://{}", actual_addr);
+    }
+    
+    server.run().await?;
 
     Ok(())
 }
 
 // Serve default user avatar
-async fn serve_user_avatar() -> Result<actix_files::NamedFile, crate::error::AppError> {
-    let path = std::path::Path::new("../svelte-frontend/static/static/user.png");
-    actix_files::NamedFile::open(path)
-        .map_err(|_| crate::error::AppError::NotFound("User avatar not found".to_string()))
+async fn serve_user_avatar(state: web::Data<AppState>) -> Result<HttpResponse, crate::error::AppError> {
+    let config = state.config.read().unwrap();
+    let static_dir = &config.static_dir;
+    let user_avatar_path = std::path::Path::new(static_dir).join("user.png");
+    
+    // Try external file first
+    if user_avatar_path.exists() {
+        if let Ok(image_data) = std::fs::read(&user_avatar_path) {
+            return Ok(HttpResponse::Ok()
+                .content_type("image/png")
+                .body(image_data));
+        }
+    }
+    
+    // Fall back to embedded file
+    use crate::static_files::FrontendAssets;
+    if let Some(content) = FrontendAssets::get("static/user.png") {
+        return Ok(HttpResponse::Ok()
+            .content_type("image/png")
+            .body(content.data.into_owned()));
+    }
+    
+    Err(crate::error::AppError::NotFound("User avatar not found".to_string()))
 }
 
 // Serve favicon
-async fn serve_favicon() -> Result<actix_files::NamedFile, crate::error::AppError> {
-    let path = std::path::Path::new("../svelte-frontend/static/static/favicon.png");
-    actix_files::NamedFile::open(path)
-        .map_err(|_| crate::error::AppError::NotFound("Favicon not found".to_string()))
+async fn serve_favicon(state: web::Data<AppState>) -> Result<HttpResponse, crate::error::AppError> {
+    let config = state.config.read().unwrap();
+    let static_dir = &config.static_dir;
+    let favicon_path = std::path::Path::new(static_dir).join("favicon.png");
+    
+    // Try external file first
+    if favicon_path.exists() {
+        if let Ok(image_data) = std::fs::read(&favicon_path) {
+            return Ok(HttpResponse::Ok()
+                .content_type("image/png")
+                .body(image_data));
+        }
+    }
+    
+    // Fall back to embedded file
+    use crate::static_files::FrontendAssets;
+    if let Some(content) = FrontendAssets::get("static/favicon.png") {
+        return Ok(HttpResponse::Ok()
+            .content_type("image/png")
+            .body(content.data.into_owned()));
+    }
+    
+    Err(crate::error::AppError::NotFound("Favicon not found".to_string()))
 }
 
 // Health check endpoints
@@ -956,6 +1030,11 @@ fn configure_socketio_routes(cfg: &mut web::ServiceConfig) {
         // Without trailing slash (after normalization)
         .route("/socket.io", web::get().to(socketio_connection_get))
         .route("/socket.io", web::post().to(socketio_connection_post))
+        // Alternative path with /ws prefix (for compatibility)
+        .route("/ws/socket.io/", web::get().to(socketio_connection_get))
+        .route("/ws/socket.io/", web::post().to(socketio_connection_post))
+        .route("/ws/socket.io", web::get().to(socketio_connection_get))
+        .route("/ws/socket.io", web::post().to(socketio_connection_post))
         // Other endpoints
         .route("/api/socketio/emit", web::post().to(socketio_native_emit))
         .route("/api/socketio/health", web::get().to(socketio_health))

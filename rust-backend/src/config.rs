@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::env;
+use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -7,8 +8,12 @@ pub struct Config {
     // Server
     pub host: String,
     pub port: u16,
+    pub enable_random_port: bool,
     pub env: String,
     pub webui_secret_key: String,
+
+    // Configuration Directory
+    pub config_dir: String,
 
     // Database
     pub database_url: String,
@@ -254,14 +259,54 @@ pub struct Config {
 pub type MutableConfig = Arc<RwLock<Config>>;
 
 impl Config {
+    /// Expand tilde (~) to home directory in path
+    fn expand_home_dir(path: &str) -> String {
+        if path.starts_with("~/") {
+            if let Ok(home) = env::var("HOME") {
+                return path.replacen("~", &home, 1);
+            }
+        }
+        path.to_string()
+    }
+
+    /// Get default database path
+    fn get_default_database_url(config_dir: &str) -> String {
+        let expanded_config_dir = Self::expand_home_dir(config_dir);
+        let db_path = PathBuf::from(&expanded_config_dir).join("data.sqlite3");
+
+        // Ensure config directory exists
+        let _ = std::fs::create_dir_all(&expanded_config_dir);
+
+        format!("sqlite://{}", db_path.to_string_lossy())
+    }
+
     pub fn from_env() -> anyhow::Result<Self> {
+        // Get config directory first
+        let config_dir =
+            env::var("CONFIG_DIR").unwrap_or_else(|_| "~/.config/open-webui-lite".to_string());
+
+        // Check if random port is enabled
+        let enable_random_port = env::var("ENABLE_RANDOM_PORT")
+            .unwrap_or_else(|_| "false".to_string())
+            .to_lowercase()
+            .parse()
+            .unwrap_or(false);
+
+        // If random port is enabled, use 0 (OS will assign a random available port)
+        let port = if enable_random_port {
+            0
+        } else {
+            env::var("PORT")
+                .unwrap_or_else(|_| "8080".to_string())
+                .parse()
+                .unwrap_or(8080)
+        };
+
         Ok(Config {
             // Server
             host: env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
-            port: env::var("PORT")
-                .unwrap_or_else(|_| "8080".to_string())
-                .parse()
-                .unwrap_or(8080),
+            port,
+            enable_random_port,
             env: env::var("ENV").unwrap_or_else(|_| "production".to_string()),
             webui_secret_key: env::var("WEBUI_SECRET_KEY").unwrap_or_else(|_| {
                 let key = uuid::Uuid::new_v4().to_string();
@@ -272,10 +317,12 @@ impl Config {
                 key
             }),
 
+            // Configuration Directory
+            config_dir: config_dir.clone(),
+
             // Database
-            database_url: env::var("DATABASE_URL").unwrap_or_else(|_| {
-                "postgresql://postgres:postgres@localhost:5432/openwebui".to_string()
-            }),
+            database_url: env::var("DATABASE_URL")
+                .unwrap_or_else(|_| Self::get_default_database_url(&config_dir)),
             database_pool_size: env::var("DATABASE_POOL_SIZE")
                 .unwrap_or_else(|_| "10".to_string())
                 .parse()
@@ -430,7 +477,14 @@ impl Config {
             // Storage
             upload_dir: env::var("UPLOAD_DIR").unwrap_or_else(|_| "/app/data/uploads".to_string()),
             cache_dir: env::var("CACHE_DIR").unwrap_or_else(|_| "/app/data/cache".to_string()),
-            static_dir: env::var("STATIC_DIR").unwrap_or_else(|_| "./static".to_string()),
+            static_dir: env::var("STATIC_DIR").unwrap_or_else(|_| {
+                // Default to config_dir/build
+                let expanded_config_dir = Self::expand_home_dir(&config_dir);
+                PathBuf::from(&expanded_config_dir)
+                    .join("build")
+                    .to_string_lossy()
+                    .to_string()
+            }),
 
             // Logging
             global_log_level: env::var("GLOBAL_LOG_LEVEL").unwrap_or_else(|_| "INFO".to_string()),

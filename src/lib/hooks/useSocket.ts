@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:8080';
+const SOCKET_URL = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080';
 
 export function useSocket(token?: string) {
   const [socket, setSocket] = useState<Socket | null>(null);
@@ -14,6 +14,7 @@ export function useSocket(token?: string) {
       auth: {
         token: token
       },
+      withCredentials: true,  // 关键：允许跨域发送 Cookie
       transports: ['websocket', 'polling']
     });
 

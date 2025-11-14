@@ -88,6 +88,11 @@ impl EventHandler {
         &self.recovery_manager
     }
 
+    /// Get auth endpoint
+    pub fn auth_endpoint(&self) -> &str {
+        &self.auth_endpoint
+    }
+
     /// Register a connection
     pub async fn register_connection(
         &self,
@@ -290,7 +295,7 @@ impl EventHandler {
     }
 
     /// Auto-join user to all their accessible channels
-    async fn auto_join_user_channels(&self, sid: &str, user_id: &str) -> Result<(), String> {
+    pub async fn auto_join_user_channels(&self, sid: &str, user_id: &str) -> Result<(), String> {
         use crate::services::channel::ChannelService;
 
         let channel_service = ChannelService::new(&self.db);
