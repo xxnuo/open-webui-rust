@@ -19,6 +19,7 @@ pub mod models;
 pub mod note;
 pub mod oauth;
 pub mod oauth_client;
+pub mod pipeline;
 pub mod prompt;
 pub mod rag;
 pub mod sandbox_executor;
@@ -30,4 +31,7 @@ pub mod user;
 pub use auth::*;
 pub use config::*;
 pub use feedback::*;
+pub use pipeline::{
+    get_sorted_filters, process_pipeline_inlet_filter, process_pipeline_outlet_filter,
+};
 pub use user::*;
