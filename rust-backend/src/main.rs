@@ -542,6 +542,7 @@ async fn main() -> anyhow::Result<()> {
             .wrap(Compress::default())
             .wrap(Logger::default())
             .wrap(NormalizePath::trim())
+            .wrap(middleware::SecurityHeaders) // Security headers middleware
             // Health checks
             .route("/health", web::get().to(health_check))
             .route("/health/db", web::get().to(health_check_db))
