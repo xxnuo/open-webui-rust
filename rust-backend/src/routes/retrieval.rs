@@ -37,11 +37,26 @@ struct RetrievalConfigResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+struct OpenAIConfig {
+    url: String,
+    key: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct AzureOpenAIConfig {
+    url: String,
+    key: String,
+    version: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 struct EmbeddingConfigResponse {
-    #[serde(rename = "RAG_EMBEDDING_ENGINE")]
-    rag_embedding_engine: String,
-    #[serde(rename = "RAG_EMBEDDING_MODEL")]
-    rag_embedding_model: String,
+    status: bool,
+    embedding_engine: String,
+    embedding_model: String,
+    embedding_batch_size: i32,
+    openai_config: OpenAIConfig,
+    azure_openai_config: AzureOpenAIConfig,
 }
 
 #[derive(Debug, Deserialize)]
@@ -141,20 +156,41 @@ async fn get_rag_config(
 
     let config = state.config.read().unwrap();
 
-    Ok(HttpResponse::Ok().json(RetrievalConfigResponse {
-        rag_template: config.rag_template.clone(),
-        top_k: config.rag_top_k,
-        bypass_embedding_and_retrieval: config.bypass_embedding_and_retrieval,
-        rag_full_context: config.rag_full_context,
-        enable_rag_hybrid_search: config.enable_rag_hybrid_search,
-        top_k_reranker: config.top_k_reranker,
-        relevance_threshold: config.relevance_threshold,
-        hybrid_bm25_weight: config.hybrid_bm25_weight,
-        content_extraction_engine: config.content_extraction_engine.clone(),
-        pdf_extract_images: config.pdf_extract_images,
-        chunk_size: config.chunk_size,
-        chunk_overlap: config.chunk_overlap,
-    }))
+    Ok(HttpResponse::Ok().json(json!({
+        "status": true,
+        // RAG settings
+        "RAG_TEMPLATE": config.rag_template,
+        "TOP_K": config.rag_top_k,
+        "BYPASS_EMBEDDING_AND_RETRIEVAL": config.bypass_embedding_and_retrieval,
+        "RAG_FULL_CONTEXT": config.rag_full_context,
+        // Hybrid search settings
+        "ENABLE_RAG_HYBRID_SEARCH": config.enable_rag_hybrid_search,
+        "TOP_K_RERANKER": config.top_k_reranker,
+        "RELEVANCE_THRESHOLD": config.relevance_threshold,
+        "HYBRID_BM25_WEIGHT": config.hybrid_bm25_weight,
+        // Content extraction settings
+        "CONTENT_EXTRACTION_ENGINE": config.content_extraction_engine,
+        "PDF_EXTRACT_IMAGES": config.pdf_extract_images,
+        // Chunking settings
+        "TEXT_SPLITTER": "RecursiveCharacterTextSplitter",
+        "CHUNK_SIZE": config.chunk_size,
+        "CHUNK_OVERLAP": config.chunk_overlap,
+        // File upload settings
+        "FILE_MAX_SIZE": 25,
+        "FILE_MAX_COUNT": 10,
+        // Reranking settings
+        "RAG_RERANKING_MODEL": "",
+        "RAG_RERANKING_ENGINE": "",
+        // Web search settings - nested object
+        "web": {
+            "ENABLE_WEB_SEARCH": config.enable_web_search,
+            "WEB_SEARCH_ENGINE": "",
+            "WEB_SEARCH_RESULT_COUNT": 3,
+            "YOUTUBE_LOADER_LANGUAGE": vec!["en"],
+            "YOUTUBE_LOADER_PROXY_URL": "",
+            "YOUTUBE_LOADER_TRANSLATION": "",
+        },
+    })))
 }
 
 async fn update_rag_config(
@@ -213,8 +249,19 @@ async fn get_embedding_config(
     let config = state.config.read().unwrap();
 
     Ok(HttpResponse::Ok().json(EmbeddingConfigResponse {
-        rag_embedding_engine: config.rag_embedding_engine.clone(),
-        rag_embedding_model: config.rag_embedding_model.clone(),
+        status: true,
+        embedding_engine: config.rag_embedding_engine.clone(),
+        embedding_model: config.rag_embedding_model.clone(),
+        embedding_batch_size: 1,
+        openai_config: OpenAIConfig {
+            url: config.rag_openai_api_base_url.clone(),
+            key: config.rag_openai_api_key.clone(),
+        },
+        azure_openai_config: AzureOpenAIConfig {
+            url: String::new(),
+            key: String::new(),
+            version: String::new(),
+        },
     }))
 }
 
@@ -230,16 +277,49 @@ async fn update_embedding_config(
 
     let mut config = state.config.write().unwrap();
 
-    config.rag_embedding_engine = form_data.rag_embedding_engine.clone();
-    config.rag_embedding_model = form_data.rag_embedding_model.clone();
+    config.rag_embedding_engine = form_data.embedding_engine.clone();
+    config.rag_embedding_model = form_data.embedding_model.clone();
+    config.rag_openai_api_base_url = form_data.openai_config.url.clone();
+    config.rag_openai_api_key = form_data.openai_config.key.clone();
 
-    // TODO: Persist to database
+    // Persist to database
+    let embedding_config_json = serde_json::json!({
+        "engine": config.rag_embedding_engine,
+        "model": config.rag_embedding_model,
+        "batch_size": form_data.embedding_batch_size,
+        "openai_url": config.rag_openai_api_base_url,
+        "openai_key": config.rag_openai_api_key,
+        "azure_url": form_data.azure_openai_config.url,
+        "azure_key": form_data.azure_openai_config.key,
+        "azure_version": form_data.azure_openai_config.version,
+    });
 
-    Ok(HttpResponse::Ok().json(json!({
-        "status": true,
-        "RAG_EMBEDDING_ENGINE": config.rag_embedding_engine,
-        "RAG_EMBEDDING_MODEL": config.rag_embedding_model,
-    })))
+    drop(config);
+
+    let _ = crate::services::ConfigService::update_section(
+        &state.db,
+        "rag_embedding",
+        embedding_config_json,
+    )
+    .await;
+
+    let config = state.config.read().unwrap();
+
+    Ok(HttpResponse::Ok().json(EmbeddingConfigResponse {
+        status: true,
+        embedding_engine: config.rag_embedding_engine.clone(),
+        embedding_model: config.rag_embedding_model.clone(),
+        embedding_batch_size: form_data.embedding_batch_size,
+        openai_config: OpenAIConfig {
+            url: config.rag_openai_api_base_url.clone(),
+            key: config.rag_openai_api_key.clone(),
+        },
+        azure_openai_config: AzureOpenAIConfig {
+            url: form_data.azure_openai_config.url.clone(),
+            key: form_data.azure_openai_config.key.clone(),
+            version: form_data.azure_openai_config.version.clone(),
+        },
+    }))
 }
 
 async fn process_file(

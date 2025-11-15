@@ -68,6 +68,8 @@ pub fn create_routes(cfg: &mut web::ServiceConfig) {
             .wrap(AuthMiddleware)
             .route("/config", web::get().to(get_config))
             .route("/config/update", web::post().to(update_config))
+            .route("/image/config", web::get().to(get_image_config))
+            .route("/image/config/update", web::post().to(update_image_config))
             .route("/generations", web::post().to(generate_image))
             .route("/models", web::get().to(get_models)),
     );
@@ -178,6 +180,61 @@ async fn get_config(
             gemini_api_key: config.images_gemini_api_key.clone(),
         },
     }))
+}
+
+async fn get_image_config(
+    state: web::Data<AppState>,
+    auth_user: AuthUser,
+) -> Result<HttpResponse, AppError> {
+    // Only admins can access this
+    if auth_user.user.role != "admin" {
+        return Err(AppError::Forbidden("Admin access required".to_string()));
+    }
+
+    let _config = state.config.read().unwrap();
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "MODEL": "dall-e-2",
+        "IMAGE_SIZE": "512x512",
+        "IMAGE_STEPS": 50,
+    })))
+}
+
+#[derive(Debug, Deserialize)]
+struct ImageConfigForm {
+    #[serde(rename = "MODEL")]
+    model: String,
+    #[serde(rename = "IMAGE_SIZE")]
+    image_size: String,
+    #[serde(rename = "IMAGE_STEPS")]
+    image_steps: i32,
+}
+
+async fn update_image_config(
+    state: web::Data<AppState>,
+    auth_user: AuthUser,
+    form_data: web::Json<ImageConfigForm>,
+) -> Result<HttpResponse, AppError> {
+    // Only admins can update this
+    if auth_user.user.role != "admin" {
+        return Err(AppError::Forbidden("Admin access required".to_string()));
+    }
+
+    // Persist to database
+    let image_config_json = serde_json::json!({
+        "model": form_data.model,
+        "size": form_data.image_size,
+        "steps": form_data.image_steps,
+    });
+
+    let _ =
+        crate::services::ConfigService::update_section(&state.db, "image", image_config_json).await;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "MODEL": form_data.model,
+        "IMAGE_SIZE": form_data.image_size,
+        "IMAGE_STEPS": form_data.image_steps,
+    })))
 }
 
 async fn update_config(

@@ -179,7 +179,42 @@ async fn update_audio_config(
     config.audio_stt_azure_base_url = form_data.stt.azure_base_url.clone();
     config.audio_stt_azure_max_speakers = form_data.stt.azure_max_speakers.clone();
 
-    // TODO: Persist to database
+    // Persist to database
+    let audio_config_json = serde_json::json!({
+        "tts": {
+            "openai_api_base_url": config.tts_openai_api_base_url,
+            "openai_api_key": config.tts_openai_api_key,
+            "api_key": config.tts_api_key,
+            "engine": config.tts_engine,
+            "model": config.tts_model,
+            "voice": config.tts_voice,
+            "split_on": config.tts_split_on,
+            "azure_speech_region": config.tts_azure_speech_region,
+            "azure_speech_base_url": config.tts_azure_speech_base_url,
+            "azure_speech_output_format": config.tts_azure_speech_output_format,
+        },
+        "stt": {
+            "openai_api_base_url": config.stt_openai_api_base_url,
+            "openai_api_key": config.stt_openai_api_key,
+            "engine": config.stt_engine,
+            "model": config.stt_model,
+            "supported_content_types": config.stt_supported_content_types,
+            "whisper_model": config.whisper_model,
+            "deepgram_api_key": config.deepgram_api_key,
+            "azure_api_key": config.audio_stt_azure_api_key,
+            "azure_region": config.audio_stt_azure_region,
+            "azure_locales": config.audio_stt_azure_locales,
+            "azure_base_url": config.audio_stt_azure_base_url,
+            "azure_max_speakers": config.audio_stt_azure_max_speakers,
+        },
+    });
+
+    drop(config);
+
+    let _ =
+        crate::services::ConfigService::update_section(&state.db, "audio", audio_config_json).await;
+
+    let config = state.config.read().unwrap();
 
     Ok(HttpResponse::Ok().json(AudioConfigResponse {
         tts: TTSConfigForm {
