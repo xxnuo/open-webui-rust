@@ -39,6 +39,27 @@ services:
     networks:
       - open-webui-network
 
+  # ChromaDB (vector database for RAG)
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: open-webui-chromadb
+    environment:
+      IS_PERSISTENT: "TRUE"
+      ANONYMIZED_TELEMETRY: "${CHROMA_TELEMETRY:-FALSE}"
+    volumes:
+      - chromadb_data:/chroma/chroma
+    ports:
+      - "${CHROMA_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 5 bash -c '</dev/tcp/localhost/8000' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - open-webui-network
+
   # Rust Backend
   rust-backend:
     image: public.ecr.aws/o3p7x2f5/knoxchat/open-webui-rust-backend:latest
@@ -61,6 +82,19 @@ services:
       # Redis
       ENABLE_REDIS: ${ENABLE_REDIS:-true}
       REDIS_URL: redis://redis:6379
+      
+      # ChromaDB
+      CHROMA_URL: ${CHROMA_URL:-http://chromadb:8000}
+      ENABLE_CHROMA: ${ENABLE_CHROMA:-true}
+      
+      # RAG & Embeddings
+      RAG_EMBEDDING_ENGINE: ${RAG_EMBEDDING_ENGINE:-openai}
+      RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-text-embedding-3-small}
+      RAG_OPENAI_API_KEY: ${RAG_OPENAI_API_KEY:-${OPENAI_API_KEY}}
+      RAG_OPENAI_API_BASE_URL: ${RAG_OPENAI_API_BASE_URL:-${OPENAI_API_BASE_URL}}
+      RAG_RERANKING_MODEL: ${RAG_RERANKING_MODEL:-}
+      CHUNK_SIZE: ${CHUNK_SIZE:-1500}
+      CHUNK_OVERLAP: ${CHUNK_OVERLAP:-100}
       
       # Authentication
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-30d}
@@ -116,6 +150,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      chromadb:
         condition: service_healthy
       sandbox-executor:
         condition: service_healthy
@@ -237,6 +273,9 @@ services:
       # Redis
       REDIS_URL: redis://redis:6379
       
+      # ChromaDB
+      CHROMA_URL: ${CHROMA_URL:-http://chromadb:8000}
+      
       # Features
       ENABLE_RAG_WEB_SEARCH: ${ENABLE_RAG_WEB_SEARCH:-false}
       ENABLE_RAG_HYBRID_SEARCH: ${ENABLE_RAG_HYBRID_SEARCH:-false}
@@ -257,6 +296,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      chromadb:
+        condition: service_healthy
       sandbox-executor:
         condition: service_healthy
     healthcheck:
@@ -273,6 +314,8 @@ volumes:
   postgres_data:
     driver: local
   redis_data:
+    driver: local
+  chromadb_data:
     driver: local
   rust_backend_data:
     driver: local
