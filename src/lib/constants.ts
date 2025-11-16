@@ -4,7 +4,7 @@ export const APP_NAME = 'Open WebUI';
 const isDev = import.meta.env.DEV;
 const hostname = window?.location?.hostname || 'localhost';
 const port = window?.location?.port || '';
-const WEBUI_HOSTNAME = isDev && port ? `${hostname}:${port}` : (isDev ? `${hostname}:8080` : '');
+const WEBUI_HOSTNAME = isDev && port ? `${hostname}:${port}` : (isDev ? `${hostname}:8168` : '');
 export const WEBUI_BASE_URL = isDev && port ? `${window.location.protocol}//${hostname}:${port}` : (isDev ? `http://${WEBUI_HOSTNAME}` : '');
 export const WEBUI_API_BASE_URL = `${WEBUI_BASE_URL}/api/v1`;
 

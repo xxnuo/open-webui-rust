@@ -1494,7 +1494,7 @@ async fn get_manifest(_state: web::Data<AppState>) -> HttpResponse {
 // OpenSearch XML
 async fn get_opensearch() -> HttpResponse {
     let webui_name = "Open WebUI";
-    let webui_url = "http://localhost:8080"; // TODO: Get from config
+    let webui_url = "http://localhost:8168"; // TODO: Get from config
 
     let xml = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>

@@ -283,7 +283,7 @@ impl Config {
     pub fn from_env() -> anyhow::Result<Self> {
         // Get config directory first
         let config_dir =
-            env::var("CONFIG_DIR").unwrap_or_else(|_| "~/.config/open-webui-lite".to_string());
+            env::var("CONFIG_DIR").unwrap_or_else(|_| "~/.config/open-coreui".to_string());
 
         // Check if random port is enabled
         let enable_random_port = env::var("ENABLE_RANDOM_PORT")
@@ -297,9 +297,9 @@ impl Config {
             0
         } else {
             env::var("PORT")
-                .unwrap_or_else(|_| "8080".to_string())
+                .unwrap_or_else(|_| "8168".to_string())
                 .parse()
-                .unwrap_or(8080)
+                .unwrap_or(8168)
         };
 
         Ok(Config {
@@ -374,7 +374,7 @@ impl Config {
                 .parse()
                 .unwrap_or(true),
             webui_url: env::var("WEBUI_URL")
-                .unwrap_or_else(|_| "http://localhost:8080".to_string()),
+                .unwrap_or_else(|_| "http://localhost:8168".to_string()),
             pending_user_overlay_title: env::var("PENDING_USER_OVERLAY_TITLE").ok(),
             pending_user_overlay_content: env::var("PENDING_USER_OVERLAY_CONTENT").ok(),
             response_watermark: env::var("RESPONSE_WATERMARK").ok(),

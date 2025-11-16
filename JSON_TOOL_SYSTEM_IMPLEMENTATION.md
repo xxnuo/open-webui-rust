@@ -833,7 +833,7 @@ This JSON-based tool system is **fully implemented and functional** for the Rust
 Test a tool with sample parameters before deploying:
 
 ```bash
-curl -X POST http://localhost:8080/api/tools/id/my_tool/test \
+curl -X POST http://localhost:8168/api/tools/id/my_tool/test \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -867,7 +867,7 @@ curl -X POST http://localhost:8080/api/tools/id/my_tool/test \
 Batch import tools from a JSON file:
 
 ```bash
-curl -X POST http://localhost:8080/api/tools/import \
+curl -X POST http://localhost:8168/api/tools/import \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -917,11 +917,11 @@ Browse and install pre-built tools:
 
 ```bash
 # Get available tools
-curl http://localhost:8080/api/tools/library \
+curl http://localhost:8168/api/tools/library \
   -H "Authorization: Bearer $TOKEN"
 
 # Install a tool from library
-curl -X POST http://localhost:8080/api/tools/library/weather_tools \
+curl -X POST http://localhost:8168/api/tools/library/weather_tools \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -943,7 +943,7 @@ curl -X POST http://localhost:8080/api/tools/library/weather_tools \
 
 1. **Get the schema:**
 ```bash
-curl http://localhost:8080/api/tools/schema \
+curl http://localhost:8168/api/tools/schema \
   -H "Authorization: Bearer $TOKEN" \
   > tool-schema.json
 ```
@@ -970,13 +970,13 @@ Now you get **auto-completion**, **validation**, and **inline documentation**!
 
 1. **Get available templates:**
 ```bash
-curl http://localhost:8080/api/tools/builder/templates \
+curl http://localhost:8168/api/tools/builder/templates \
   -H "Authorization: Bearer $TOKEN"
 ```
 
 2. **Generate tool from template:**
 ```bash
-curl -X POST http://localhost:8080/api/tools/builder/generate \
+curl -X POST http://localhost:8168/api/tools/builder/generate \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -1004,7 +1004,7 @@ curl -X POST http://localhost:8080/api/tools/builder/generate \
 3. **Use generated content to create tool:**
 ```bash
 # Copy the "content" field from response
-curl -X POST http://localhost:8080/api/tools/create \
+curl -X POST http://localhost:8168/api/tools/create \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -1066,7 +1066,7 @@ const response = await fetch('/api/chat/completions', {
   "json.schemas": [
     {
       "fileMatch": ["tools/*.json", "examples/*.json"],
-      "url": "http://localhost:8080/api/tools/schema"
+      "url": "http://localhost:8168/api/tools/schema"
     }
   ],
   "json.format.enable": true,
@@ -1078,7 +1078,7 @@ const response = await fetch('/api/chat/completions', {
 
 1. Settings → Languages & Frameworks → Schemas and DTDs → JSON Schema Mappings
 2. Click **+** to add new mapping
-3. Schema URL: `http://localhost:8080/api/tools/schema`
+3. Schema URL: `http://localhost:8168/api/tools/schema`
 4. File path pattern: `tools/*.json`
 
 ### Emacs
@@ -1088,7 +1088,7 @@ Add to your config:
 (use-package json-mode
   :mode "\\.json\\'"
   :config
-  (setq json-schema-file "http://localhost:8080/api/tools/schema"))
+  (setq json-schema-file "http://localhost:8168/api/tools/schema"))
 ```
 
 ### Vim/NeoVim
@@ -1099,7 +1099,7 @@ With **coc.nvim**:
   "json.schemas": [
     {
       "fileMatch": ["tools/*.json"],
-      "url": "http://localhost:8080/api/tools/schema"
+      "url": "http://localhost:8168/api/tools/schema"
     }
   ]
 }
@@ -1243,7 +1243,7 @@ class Tools:
 
 **Solution:**
 1. Ensure backend is running
-2. Verify schema URL: `http://localhost:8080/api/tools/schema`
+2. Verify schema URL: `http://localhost:8168/api/tools/schema`
 3. Reload IDE window: `Ctrl+Shift+P` → "Reload Window"
 4. Check file matches pattern (e.g., `tools/*.json`)
 

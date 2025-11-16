@@ -20,7 +20,7 @@ Create `.env` file in `rust-backend/` directory:
 ```bash
 # Server Configuration
 HOST=0.0.0.0
-PORT=8080
+PORT=8168
 ENV=development
 RUST_LOG=info
 

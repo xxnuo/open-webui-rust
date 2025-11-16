@@ -1,7 +1,7 @@
 {
   "name": "react-frontend",
   "private": true,
-  "version": "0.6.32-0.9.4",
+  "version": "0.6.32",
   "type": "module",
   "scripts": {
     "dev": "vite",

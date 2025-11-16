@@ -62,7 +62,7 @@ echo "Executing binary..."\n\
 /app/open-webui-rust 2>&1 || { echo "Binary exited with code $?"; exit $?; }' > /app/start.sh && chmod +x /app/start.sh
 
 # Expose port
-EXPOSE 8080
+EXPOSE 8168
 
 # Run the wrapper script
 CMD ["/app/start.sh"]

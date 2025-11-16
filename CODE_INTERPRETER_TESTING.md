@@ -30,8 +30,8 @@ cargo run --release
 cd rust-backend
 cargo run
 ```
-- Running at: `http://localhost:8080`
-- Verify: `curl http://localhost:8080/health`
+- Running at: `http://localhost:8168`
+- Verify: `curl http://localhost:8168/health`
 
 ### 3. Start Frontend
 ```bash
@@ -323,7 +323,7 @@ Some operations may fail due to these restrictions.
 For comparison, you can test the direct execution endpoint:
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/utils/code/execute \
+curl -X POST http://localhost:8168/api/v1/utils/code/execute \
   -H 'Content-Type: application/json' \
   -H 'Authorization: Bearer YOUR_TOKEN' \
   -d '{

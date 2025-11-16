@@ -68,7 +68,7 @@ services:
     environment:
       # Server
       HOST: ${HOST:-0.0.0.0}
-      PORT: ${RUST_PORT:-8080}
+      PORT: ${RUST_PORT:-8168}
       ENV: ${ENV:-prod}
       WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY:-}
       
@@ -145,7 +145,7 @@ services:
     volumes:
       - rust_backend_data:/app/data
     ports:
-      - "${RUST_PORT:-8080}:8080"
+      - "${RUST_PORT:-8168}:8168"
     depends_on:
       postgres:
         condition: service_healthy
@@ -156,7 +156,7 @@ services:
       sandbox-executor:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8168/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -245,14 +245,14 @@ services:
     container_name: open-webui-frontend
     environment:
       # Backend URLs (Socket.IO now served by Rust backend)
-      BACKEND_URL: ${BACKEND_URL:-http://rust-backend:8080}
+      BACKEND_URL: ${BACKEND_URL:-http://rust-backend:8168}
       
       # Sandbox Executor URL
       SANDBOX_EXECUTOR_URL: ${SANDBOX_EXECUTOR_URL:-http://sandbox-executor:8090}
       
       # Python Backend (for backward compatibility features)
       ENV: ${ENV:-prod}
-      PORT: 8080
+      PORT: 8168
       WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY:-}
       
       # Database (Python backend may need it for certain features)
@@ -288,7 +288,7 @@ services:
     volumes:
       - frontend_data:/app/backend/data
     ports:
-      - "${OPEN_WEBUI_PORT:-3000}:8080"
+      - "${OPEN_WEBUI_PORT:-3000}:8168"
     depends_on:
       rust-backend:
         condition: service_healthy
@@ -301,7 +301,7 @@ services:
       sandbox-executor:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8168/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

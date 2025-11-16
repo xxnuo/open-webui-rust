@@ -28,7 +28,7 @@ ENV NGINX_PROXY_TIMEOUT=300s
 
 # Create nginx configuration for SPA with backend proxy
 RUN echo 'server { \
-    listen 8080; \
+    listen 8168; \
     server_name localhost; \
     root /usr/share/nginx/html; \
     index index.html; \
@@ -36,7 +36,7 @@ RUN echo 'server { \
     \
     # Proxy API requests to Rust backend \
     location /api/ { \
-        proxy_pass http://rust-backend:8080/api/; \
+        proxy_pass http://rust-backend:8168/api/; \
         proxy_http_version 1.1; \
         proxy_set_header Host $host; \
         proxy_set_header X-Real-IP $remote_addr; \
@@ -51,7 +51,7 @@ RUN echo 'server { \
     \
     # Proxy OpenAI API requests to Rust backend \
     location /openai/ { \
-        proxy_pass http://rust-backend:8080/openai/; \
+        proxy_pass http://rust-backend:8168/openai/; \
         proxy_http_version 1.1; \
         proxy_set_header Host $host; \
         proxy_set_header X-Real-IP $remote_addr; \
@@ -63,7 +63,7 @@ RUN echo 'server { \
     \
     # Proxy OAuth requests to Rust backend \
     location /oauth/ { \
-        proxy_pass http://rust-backend:8080/oauth/; \
+        proxy_pass http://rust-backend:8168/oauth/; \
         proxy_http_version 1.1; \
         proxy_set_header Host $host; \
         proxy_set_header X-Real-IP $remote_addr; \
@@ -73,7 +73,7 @@ RUN echo 'server { \
     \
     # Proxy cache files to Rust backend \
     location /cache/ { \
-        proxy_pass http://rust-backend:8080/cache/; \
+        proxy_pass http://rust-backend:8168/cache/; \
         proxy_http_version 1.1; \
         proxy_set_header Host $host; \
         proxy_set_header X-Real-IP $remote_addr; \
@@ -83,7 +83,7 @@ RUN echo 'server { \
     \
     # Socket.IO WebSocket proxy (native Rust implementation) \
     location /socket.io/ { \
-        proxy_pass http://rust-backend:8080/socket.io/; \
+        proxy_pass http://rust-backend:8168/socket.io/; \
         proxy_http_version 1.1; \
         proxy_set_header Upgrade $http_upgrade; \
         proxy_set_header Connection "upgrade"; \
@@ -108,12 +108,12 @@ RUN echo 'server { \
     } \
 }' > /etc/nginx/conf.d/default.conf
 
-# Expose port 8080
-EXPOSE 8080
+# Expose port 8168
+EXPOSE 8168
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8168/health || exit 1
 
 # Start nginx
 CMD ["nginx", "-g", "daemon off;"]

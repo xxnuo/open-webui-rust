@@ -1,6 +1,6 @@
 [package]
 name = "open-webui-rust"
-version = "0.6.32-0.9.4"
+version = "0.9.6"
 edition = "2021"
 authors = ["OpenWebUI Contributors"]
 
