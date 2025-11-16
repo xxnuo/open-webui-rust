@@ -29,6 +29,7 @@ pub fn create_routes(cfg: &mut web::ServiceConfig) {
     cfg.route("/signin", web::post().to(signin))
         .route("/signup", web::post().to(signup))
         .route("/signout", web::get().to(signout))
+        .route("/ldap", web::post().to(ldap_auth))
         .service(
             web::resource("")
                 .wrap(AuthMiddleware)
@@ -918,7 +919,7 @@ async fn update_ldap_server(
         || form_data.app_dn_password.is_empty()
         || form_data.search_base.is_empty()
     {
-        return Err(crate::error::AppError::BadRequest(
+        return Err(crate::error::AppError::Forbidden(
             "Required fields cannot be empty".to_string(),
         ));
     }
@@ -957,4 +958,134 @@ async fn update_ldap_server(
         validate_cert: config.ldap_validate_cert,
         ciphers: config.ldap_ciphers.clone(),
     }))
+}
+
+// LDAP Authentication Request
+#[derive(Debug, Deserialize, Validate)]
+struct LdapAuthRequest {
+    #[validate(length(min = 1))]
+    user: String,
+    #[validate(length(min = 1))]
+    password: String,
+}
+
+async fn ldap_auth(
+    state: web::Data<AppState>,
+    req: web::Json<LdapAuthRequest>,
+) -> AppResult<HttpResponse> {
+    req.validate()
+        .map_err(|e| crate::error::AppError::Validation(e.to_string()))?;
+
+    let config = state.config.read().unwrap();
+
+    // Check if LDAP is enabled
+    if !config.enable_ldap {
+        return Err(crate::error::AppError::BadRequest(
+            "LDAP authentication is not enabled".to_string(),
+        ));
+    }
+
+    // Build LDAP configuration from application config
+    let ldap_config = crate::services::ldap::LdapConfig {
+        server_url: format!(
+            "ldap://{}:{}",
+            config.ldap_server_host,
+            config.ldap_server_port.unwrap_or(389)
+        ),
+        bind_dn: config.ldap_app_dn.clone(),
+        bind_password: config.ldap_app_password.clone(),
+        search_base: config.ldap_search_base.clone(),
+        user_filter: format!(
+            "(&({}={}){})",
+            config.ldap_attribute_for_username, "{username}", config.ldap_search_filters
+        ),
+        group_filter: None,
+        user_attributes: crate::services::ldap::LdapUserAttributes {
+            username: config.ldap_attribute_for_username.clone(),
+            email: config.ldap_attribute_for_mail.clone(),
+            display_name: "cn".to_string(),
+            first_name: Some("givenName".to_string()),
+            last_name: Some("sn".to_string()),
+            member_of: Some("memberOf".to_string()),
+        },
+        enable_tls: config.ldap_use_tls,
+        verify_cert: config.ldap_validate_cert,
+    };
+
+    let ldap_client = crate::services::ldap::LdapClient::new(ldap_config);
+
+    // Authenticate user via LDAP
+    let ldap_user = ldap_client
+        .authenticate(&req.user.to_lowercase(), &req.password)
+        .await
+        .map_err(|_| crate::error::AppError::InvalidCredentials)?;
+
+    // Find or create user in local database
+    let user_service = crate::services::user::UserService::new(&state.db);
+    let mut user = user_service.get_user_by_email(&ldap_user.email).await?;
+
+    if user.is_none() {
+        // Create new user from LDAP
+        let user_id = uuid::Uuid::new_v4().to_string();
+        let profile_image_url = "/user.png".to_string();
+
+        // Determine role based on LDAP groups
+        let roles = ldap_client.map_groups_to_roles(&ldap_user.groups);
+        let role = if roles.contains(&"admin".to_string()) {
+            "admin"
+        } else {
+            "user"
+        };
+
+        user = Some(
+            user_service
+                .create_user(
+                    &user_id,
+                    &ldap_user.display_name,
+                    &ldap_user.email,
+                    role,
+                    &profile_image_url,
+                )
+                .await?,
+        );
+    }
+
+    let user = user.ok_or(crate::error::AppError::NotFound(
+        "Failed to create user".to_string(),
+    ))?;
+
+    // Generate JWT token
+    let token = create_jwt(&user.id, &config.webui_secret_key, &config.jwt_expires_in)?;
+
+    let expires_at = chrono::Utc::now()
+        .checked_add_signed(crate::utils::auth::parse_duration(&config.jwt_expires_in)?)
+        .map(|dt| dt.timestamp());
+
+    let session_response = SessionResponse {
+        token: token.clone(),
+        token_type: "Bearer".to_string(),
+        expires_at,
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        profile_image_url: user.profile_image_url,
+        permissions: json!({}),
+    };
+
+    // Create cookie with token
+    let mut cookie = Cookie::new("token", token);
+    cookie.set_http_only(true);
+    cookie.set_same_site(SameSite::Lax);
+    cookie.set_path("/");
+
+    // Set expiration if available
+    if let Some(exp) = expires_at {
+        cookie.set_expires(time::OffsetDateTime::from_unix_timestamp(exp).ok());
+    }
+
+    // Return response with Set-Cookie header
+    Ok(HttpResponse::Ok()
+        .append_header((header::SET_COOKIE, cookie.to_string()))
+        .json(session_response))
 }
