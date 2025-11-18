@@ -87,6 +87,9 @@ pub fn create_sse_stream(response: reqwest::Response) -> Result<HttpResponse, Ap
         .append_header(("Connection", "keep-alive"))
         .insert_header(("Transfer-Encoding", "chunked"))
         .insert_header(("X-Content-Type-Options", "nosniff"))
+        // CRITICAL: Disable compression for streaming on Windows
+        // Compress middleware buffers responses, causing delays in real-time streaming
+        .insert_header(("Content-Encoding", "identity"))
         .streaming(stream))
 }
 
