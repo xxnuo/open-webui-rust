@@ -2,6 +2,8 @@
 
 High‑Performance Rust Implementation of Open WebUI
 
+## This is the legacy version repository; the latest version has been merged into the main repository: [xxnuo/open-coreui](https://github.com/xxnuo/open-coreui)
+
 ## Overview
 
 The Rust backend is a drop-in replacement for the Python backend, offering:
